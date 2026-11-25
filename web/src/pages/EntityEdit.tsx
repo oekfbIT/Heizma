@@ -1,27 +1,43 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
 import { SeverityPill } from '@/components/ui/IssueBadge';
 import { ErrorBox, Loading } from '@/components/ui/PageState';
-import { useApi, type Stammdaten } from '@/lib/api';
+import { apiSend, useApi, type LocalDb, type Stammdaten } from '@/lib/api';
 import { entityBySlug } from '@/lib/entities';
-import type { Issue } from '@/lib/types';
+import type { EntityKind, Issue } from '@/lib/types';
 
 const FIELD_STYLE: Record<string, string> = {
   error: 'border-red-400 bg-red-50/50 focus:border-red-500 focus:ring-red-100',
   warning: 'border-amber-400 bg-amber-50/50 focus:border-amber-500 focus:ring-amber-100',
 };
 
+const ENTITY_KEY: Partial<Record<EntityKind, 'requests' | 'technicians' | 'appointments'>> = {
+  request: 'requests',
+  technician: 'technicians',
+  appointment: 'appointments',
+};
+
 /**
- * Detail-/Bearbeitungsansicht. Die Case-Study-API ist read-only:
- * Felder mit Befund werden markiert, Speichern ist bewusst deaktiviert.
+ * Detail-/Bearbeitungsansicht.
+ * Die Case-Study-API ist read-only → Korrekturen gehen per PATCH an die eigene API
+ * und werden lokal gespeichert (api/data/local-db.json). Validierung & Tourenplan
+ * laufen danach auf den korrigierten Daten.
  */
 export default function EntityEdit() {
   const { entity: slug, id: rawId } = useParams();
   const id = decodeURIComponent(rawId ?? '');
   const { data, error, reload } = useApi<Stammdaten>('/api/stammdaten');
+  const localDb = useApi<LocalDb>('/api/local-db');
   const def = entityBySlug(slug);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setDraft({});
+    setMessage(null);
+  }, [slug, id]);
 
   if (!def) return <Navigate to="/stammdaten" replace />;
   if (error) return <ErrorBox message={error} onRetry={reload} />;
@@ -30,29 +46,86 @@ export default function EntityEdit() {
   const record = def.find(data, id) as Record<string, unknown> | undefined;
   if (!record) return <ErrorBox message={`${id} nicht gefunden`} />;
 
+  const entityKey = ENTITY_KEY[def.kind];
+  const editable = new Set(entityKey ? localDb.data?.editableFields?.[entityKey] ?? [] : []);
+  const isOverridden = !!entityKey && (data.overridden?.[entityKey] ?? []).includes(id);
+  const override = entityKey ? (localDb.data?.overrides?.[entityKey]?.[id] ?? {}) : {};
+
   const issues = data.issues.filter((i) => i.entity === def.kind && i.entityId === id);
   const issuesFor = (field: string) => issues.filter((i) => i.field === field && i.severity !== 'info');
   const unplacedIssues = issues.filter((i) => !def.fields.some((f) => f.key === i.field));
+  const changes = Object.fromEntries(Object.entries(draft).filter(([k]) => editable.has(k)));
+  const dirty = Object.keys(changes).length > 0;
+
+  async function save() {
+    if (!entityKey || !dirty) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      await apiSend(`/api/stammdaten/${entityKey}/${encodeURIComponent(id)}`, 'PATCH', changes);
+      setDraft({});
+      reload();
+      localDb.reload();
+      setMessage({ tone: 'ok', text: 'Gespeichert – Prüfung und Tourenplan wurden mit der Korrektur neu berechnet.' });
+    } catch (e) {
+      setMessage({ tone: 'error', text: (e as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetToOriginal() {
+    if (!entityKey) return;
+    setSaving(true);
+    try {
+      await apiSend(`/api/stammdaten/${entityKey}/${encodeURIComponent(id)}`, 'DELETE');
+      setDraft({});
+      reload();
+      localDb.reload();
+      setMessage({ tone: 'ok', text: 'Auf Originaldaten der Heizma-API zurückgesetzt.' });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-8">
       <Link to={`/stammdaten/${def.slug}`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-600">
         <Icon name="back" className="h-4 w-4" /> {def.title}
       </Link>
-      <div className="mt-2 flex items-center gap-3">
+      <div className="mt-2 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{id}</h1>
         {issues.filter((i) => i.severity !== 'info').length === 0 && (
           <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-200">✓ Daten vollständig</span>
+        )}
+        {isOverridden && (
+          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200">Lokal korrigiert</span>
         )}
       </div>
 
       <div className="mt-4 flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
         <Icon name="lock" className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          Die Case-Study-API ist <strong>read-only</strong>. Problematische Felder werden hier markiert – Korrekturen
-          würden in Produktion zurück ins CRM geschrieben.
+          Die Case-Study-API ist <strong>read-only</strong>. Korrekturen werden per <code>PATCH</code> an die eigene API
+          gesendet und lokal gespeichert – Prüfung und Tourenplan nutzen sofort die korrigierten Daten. In Produktion
+          würde derselbe Endpunkt ins CRM zurückschreiben.
         </p>
       </div>
+
+      {message && (
+        <div
+          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+            message.tone === 'ok' ? 'border-brand-200 bg-brand-50 text-brand-800' : 'border-red-200 bg-red-50 text-red-700'
+          }`}
+        >
+          {message.text}
+          {message.tone === 'ok' && (
+            <Link to="/planer" className="ml-2 font-semibold underline">
+              Zum Tourenplan
+            </Link>
+          )}
+        </div>
+      )}
 
       {issues.length > 0 && (
         <div className="card mt-4 divide-y divide-gray-100">
@@ -65,23 +138,46 @@ export default function EntityEdit() {
         </div>
       )}
 
-      <form className="card mt-6 space-y-5 p-6" onSubmit={(e) => e.preventDefault()}>
+      <form
+        className="card mt-6 space-y-5 p-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
         {def.fields.map((field) => {
           const fieldIssues: Issue[] =
             field.key === 'availability' ? unplacedIssues.filter((i) => i.severity !== 'info') : issuesFor(field.key);
           const severity = fieldIssues[0]?.severity;
+          const canEdit = editable.has(field.key);
+          const changed = field.key in override;
           const value = draft[field.key] ?? field.value(record);
-          const cls = `input ${severity ? FIELD_STYLE[severity] ?? '' : ''}`;
+          const cls = `input ${severity ? FIELD_STYLE[severity] ?? '' : ''} ${canEdit ? '' : 'cursor-not-allowed bg-gray-50 text-gray-500'}`;
           return (
             <label key={field.key} className="block">
               <span className="mb-1.5 flex items-center gap-2 text-sm font-medium">
                 {field.label}
                 {severity && <SeverityPill severity={severity} />}
+                {changed && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-700">geändert</span>}
+                {!canEdit && <Icon name="lock" className="h-3.5 w-3.5 text-gray-300" />}
               </span>
               {field.multiline ? (
-                <textarea rows={3} className={cls} value={value} placeholder="— fehlt —" onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })} />
+                <textarea
+                  rows={3}
+                  className={cls}
+                  value={value === '—' ? '' : value}
+                  placeholder={field.key === 'region' ? 'Eine Zeile pro Eckpunkt: 48.20, 16.30' : '— fehlt —'}
+                  readOnly={!canEdit}
+                  onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
+                />
               ) : (
-                <input className={cls} value={value === '—' ? '' : value} placeholder="— fehlt —" onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })} />
+                <input
+                  className={cls}
+                  value={value === '—' ? '' : value}
+                  placeholder="— fehlt —"
+                  readOnly={!canEdit}
+                  onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
+                />
               )}
               {fieldIssues.map((i) => (
                 <span key={i.code} className={`mt-1 block text-xs ${i.severity === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
@@ -92,12 +188,17 @@ export default function EntityEdit() {
           );
         })}
 
-        <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-5">
-          <button type="button" className="btn-secondary" onClick={() => setDraft({})}>
-            Zurücksetzen
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-5">
+          {isOverridden && (
+            <button type="button" className="btn-secondary mr-auto" onClick={() => void resetToOriginal()} disabled={saving}>
+              Original wiederherstellen
+            </button>
+          )}
+          <button type="button" className="btn-secondary" onClick={() => setDraft({})} disabled={!dirty}>
+            Verwerfen
           </button>
-          <button type="submit" className="btn-primary" disabled title="Read-only API – Speichern nicht möglich">
-            Speichern
+          <button type="submit" className="btn-primary" disabled={!entityKey || !dirty || saving}>
+            {saving ? 'Speichert …' : 'Speichern'}
           </button>
         </div>
       </form>

@@ -6,6 +6,12 @@ import { buildPlan } from './planner.js';
 import type { Dataset, Plan } from './types.js';
 import { validateDataset } from './validation.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
+import { applyOverrides, dumpDb, editableFields, resetAll, resetEntity, updateEntity, ValidationError, type EntityKey } from './localStore.js';
+
+/** Arbeitsdaten = Heizma-API + lokale Korrekturen */
+async function loadWorkingDataset() {
+  return applyOverrides(await loadDataset());
+}
 
 const app = express();
 app.use(cors());
@@ -37,19 +43,19 @@ app.get('/api/config', (_req, res) => {
 });
 
 app.get('/api/meta', route(async (_req, res) => {
-  const data = await loadDataset();
+  const data = await loadWorkingDataset();
   res.json({ source: data.source, range: data.range, loadedAt: data.loadedAt, office: config.office });
 }));
 
 /** Stammdaten + Validierungsergebnis */
 app.get('/api/stammdaten', route(async (_req, res) => {
-  const data = await loadDataset();
+  const data = await loadWorkingDataset();
   res.json({ ...data, issues: validateDataset(data) });
 }));
 
 /** Übersichtszahlen für die Kacheln */
 app.get('/api/overview', route(async (_req, res) => {
-  const data = await loadDataset();
+  const data = await loadWorkingDataset();
   const issues = validateDataset(data);
   const plan = getPlan(data);
   const actionable = issues.filter((i) => i.severity !== 'info');
@@ -77,13 +83,13 @@ app.get('/api/overview', route(async (_req, res) => {
 
 /** Tourenplan (Entwurf) */
 app.get('/api/plan', route(async (_req, res) => {
-  const data = await loadDataset();
+  const data = await loadWorkingDataset();
   res.json(getPlan(data));
 }));
 
 /** Straßengeometrie einer Tagesroute (Polylines aus /travel/path, gecacht) */
 app.get('/api/plan/:technicianId/:date/geometry', route(async (req, res) => {
-  const data = await loadDataset();
+  const data = await loadWorkingDataset();
   const plan = getPlan(data);
   const dayRoute = plan.routes.find((r) => r.technicianId === req.params.technicianId && r.date === req.params.date);
   const tech = data.technicians.find((t) => t.id === req.params.technicianId);
@@ -92,6 +98,43 @@ app.get('/api/plan/:technicianId/:date/geometry', route(async (req, res) => {
   const legs = await travelPath(points);
   res.json({ points, legs });
 }));
+
+
+// ---- Lokale Korrekturen (simulierte Schreib-API, siehe README „Lokale Korrekturen“) ----
+const ENTITY_KEYS: EntityKey[] = ['requests', 'technicians', 'appointments'];
+const entityParam = (req: Request) => {
+  const e = req.params.entity as EntityKey;
+  if (!ENTITY_KEYS.includes(e)) throw new ValidationError(`Unbekannter Bereich ${req.params.entity}`);
+  return e;
+};
+
+app.patch('/api/stammdaten/:entity/:id', route(async (req, res) => {
+  const entity = entityParam(req);
+  const data = await loadDataset();
+  const exists = (data[entity] as { id: string }[]).some((x) => x.id === req.params.id);
+  if (!exists) return res.status(404).json({ error: `${req.params.id} nicht gefunden` });
+  const override = updateEntity(entity, req.params.id, req.body ?? {});
+  res.json({ ok: true, id: req.params.id, override });
+}));
+
+app.delete('/api/stammdaten/:entity/:id', route(async (req, res) => {
+  resetEntity(entityParam(req), req.params.id);
+  res.json({ ok: true });
+}));
+
+app.get('/api/local-db', (_req, res) => {
+  res.json({ ...dumpDb(), editableFields: editableFields() });
+});
+
+app.post('/api/local-db/reset', (_req, res) => {
+  resetAll();
+  res.json({ ok: true });
+});
+
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof ValidationError) return res.status(400).json({ error: err.message });
+  next(err);
+});
 
 /** Cache leeren und neu laden */
 app.post('/api/reload', (_req, res) => {

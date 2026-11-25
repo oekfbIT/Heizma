@@ -13,6 +13,16 @@ export interface Stammdaten {
   range: { from: string; to: string };
   source: 'live' | 'mock';
   loadedAt: string;
+  /** IDs mit lokalen Korrekturen */
+  overridden?: Record<'requests' | 'technicians' | 'appointments', string[]>;
+}
+
+export interface LocalDb {
+  updatedAt: string | null;
+  path: string;
+  overrides: Record<string, Record<string, Record<string, unknown>>>;
+  log: { at: string; entity: string; id: string; action: string; changes?: Record<string, unknown> }[];
+  editableFields: Record<'requests' | 'technicians' | 'appointments', string[]>;
 }
 
 export interface Overview {
@@ -78,6 +88,19 @@ export async function apiGet<T>(path: string): Promise<T> {
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   cache.set(path, body);
   return body as T;
+}
+
+/** Schreibende Requests (PATCH/DELETE/POST) – leert danach den Cache, damit Plan & Prüfungen neu laden */
+export async function apiSend<T>(path: string, method: 'PATCH' | 'DELETE' | 'POST', body?: unknown): Promise<T> {
+  const res = await authFetch(path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((json as { error?: string }).error ?? `HTTP ${res.status}`);
+  cache.clear();
+  return json as T;
 }
 
 export async function reloadData() {

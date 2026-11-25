@@ -100,7 +100,7 @@ Die App ist durch einen fest hinterlegten Mock-Login geschützt – keine extern
 - **KPI-Kacheln:** eingeplante vs. offene Anfragen, Handlungsbedarf (Techniker / Anfragen / Termine), fixe Termine, verfügbare Techniker & Einsatztage.
 - **Index-Karten** je Bereich: Anfragen, Außendienst, fixe Termine, Verfügbarkeiten, Handlungsbedarf – jeweils mit Anzahl der zu prüfenden Datensätze.
 - **Listen** mit Suche, Filter „Nur Probleme“ und Status-Spalte (OK / Warnung / Fehler).
-- **Detail-/Bearbeitungsansicht:** fehlerhafte Felder sind rot bzw. gelb markiert, inkl. Begründung. Speichern ist bewusst deaktiviert – die Case-Study-API ist read-only.
+- **Detail-/Bearbeitungsansicht:** fehlerhafte Felder sind rot bzw. gelb markiert, inkl. Begründung. Korrekturen werden per `PATCH` gespeichert und fließen sofort in Prüfung & Tourenplan ein (siehe „Lokale Korrekturen“).
 
 ### 2. Routenplanung (`/planer`, grüner Button oben rechts)
 
@@ -148,6 +148,72 @@ Umgesetzt in `api/src/validation.ts`. Befunde haben drei Stufen: **Fehler** (blo
 | Techniker ohne Verfügbarkeit | Fehler · wird nicht eingeplant |
 | Fixer Termin an gesperrtem Tag / Überschneidung | Fehler · muss umgeplant werden |
 | Freitext-Notizen | Hinweis · zur Durchsicht |
+
+---
+
+## Lokale Korrekturen (simulierte Schreib-API)
+
+Die Case-Study-API ist **read-only** – trotzdem lassen sich Datenprobleme direkt in der App beheben:
+
+1. In der Detailansicht (z. B. `/stammdaten/anfragen/req_1008`) Feld korrigieren → **Speichern**.
+2. Das Frontend sendet einen echten `PATCH /api/stammdaten/:bereich/:id` an die eigene API.
+3. Die API prüft die Eingabe (Zahlen, Bereich Österreich, `HH:MM`, gültiger Typ …) und speichert sie als **Override** in `api/data/local-db.json`.
+4. Bei jedem Abruf werden die Heizma-Daten + Overrides zusammengeführt → **Validierung und Tourenplan werden sofort neu berechnet**. Die Originaldaten bleiben unverändert; „Original wiederherstellen“ entfernt den Override.
+
+In Produktion würde derselbe Endpunkt ins CRM zurückschreiben – Frontend und Planung bleiben gleich.
+
+**Bearbeitbare Felder**
+
+| Bereich | Felder |
+|---|---|
+| Anfragen | `address`, `lat`, `lng`, `visitationType`, `durationMinutes`, `customerAvailableFrom`, `notes` |
+| Techniker | `name`, `region` (eine Zeile pro Eckpunkt `lat, lng`) |
+| Fixe Termine | `technicianId` (z. B. Umplanung bei gesperrtem Techniker) |
+
+**Endpunkte**
+
+| Methode | Pfad | Beschreibung |
+|---|---|---|
+| PATCH | `/api/stammdaten/:entity/:id` | Korrektur speichern (`entity` = `requests` · `technicians` · `appointments`) |
+| DELETE | `/api/stammdaten/:entity/:id` | Korrektur entfernen (Original wiederherstellen) |
+| GET | `/api/local-db` | Aktuellen DB-Dump + bearbeitbare Felder anzeigen |
+| POST | `/api/local-db/reset` | Alle Korrekturen löschen |
+
+**Beispiel-Dump: fehlende Koordinaten nachtragen**
+
+`api/data/local-db.example.json` trägt für die 8 Anfragen ohne Koordinaten Werte nach (Ortsmitte der PLZ, genügt für die Planung):
+
+```json
+{
+  "version": 1,
+  "overrides": {
+    "requests": {
+      "req_1008": { "lat": 48.3858, "lng": 16.2111 },
+      "req_1027": { "lat": 47.567, "lng": 14.2398 },
+      "req_1046": { "lat": 48.6626, "lng": 15.6566 },
+      "req_1065": { "lat": 47.1107, "lng": 14.1717 },
+      "req_1084": { "lat": 48.3453, "lng": 16.3331 },
+      "req_1103": { "lat": 47.7376, "lng": 16.3963 },
+      "req_1122": { "lat": 47.2692, "lng": 11.4041 },
+      "req_1141": { "lat": 46.815, "lng": 15.2153 }
+    },
+    "technicians": {},
+    "appointments": {}
+  }
+}
+```
+
+Aktivieren und API neu starten:
+
+```bash
+cp api/data/local-db.example.json api/data/local-db.json
+```
+
+Ergebnis: Die Anfragen werden nicht mehr als „Keine Koordinaten“ blockiert, sondern normal geprüft – liegen sie in einem Einsatzgebiet, landen sie in den Touren (oder auf der Warteliste, wenn die Kapazität nicht reicht). `req_1122` (Innsbruck) bleibt bewusst **nicht zuordenbar** – Tirol liegt in keinem Einsatzgebiet und > 15 km von jedem Wohnort. So zeigt der Dump beide Fälle: Datenfehler beheben ✓, echte Geschäftsregel bleibt bestehen ✓.
+
+Hinweise:
+- `api/data/local-db.json` ist in `.gitignore` – jede Umgebung hat ihre eigenen Korrekturen.
+- Speicherort per `LOCAL_DB_PATH` änderbar. Auf **Vercel** liegt die Datei unter `/tmp` und ist **nicht dauerhaft** (wird bei neuen Instanzen zurückgesetzt) – für die Demo ausreichend, in Produktion käme eine Datenbank bzw. das CRM.
 
 ---
 
@@ -201,6 +267,7 @@ Umgesetzt in `api/src/validation.ts`. Befunde haben drei Stufen: **Fehler** (blo
 - **Greedy statt Solver:** schnell, nachvollziehbar und regelkonform, aber nicht global optimal. Verplant tendenziell die frühen Tage zuerst (passt zur Regel „ältere Anfragen zuerst“).
 - **Mittagspause** wird vor der Weiterfahrt eingeplant, wenn sie ins Fenster fällt – nicht über alle möglichen Positionen optimiert.
 - **Freigaben & Checkboxen** sind aktuell nur im Browser-State.
+- **Korrekturen** werden lokal als JSON gespeichert statt in einer Datenbank (siehe „Lokale Korrekturen“).
 
 ## Nächste Schritte
 
