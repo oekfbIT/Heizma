@@ -27,6 +27,8 @@ export default function Planner() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [approved, setApproved] = useState<Set<string>>(new Set()); // key: techId@date
   const [region, setRegion] = useRegion();
+  // Mobil: Liste und Karte im Wechsel (Karte bleibt gemountet, damit sie sauber rendert)
+  const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
 
   const days = useMemo(() => [...new Set(stamm.data?.availability.map((a) => a.date) ?? [])].sort(), [stamm.data]);
   useEffect(() => {
@@ -71,10 +73,12 @@ export default function Planner() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-72px)] overflow-hidden">
-      {/* ---------- Sidebar ---------- */}
-      <aside className="flex w-[400px] shrink-0 flex-col border-r border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-5 pb-4 pt-5">
+    <div className="relative flex h-[calc(100dvh-60px)] overflow-hidden md:h-[calc(100vh-72px)]">
+      {/* ---------- Sidebar (mobil: Vollbild über der Karte) ---------- */}
+      <aside
+        className={`${mobileView === 'list' ? 'flex' : 'hidden'} absolute inset-0 z-[850] w-full flex-col bg-white md:relative md:z-auto md:flex md:w-[400px] md:shrink-0 md:border-r md:border-gray-200`}
+      >
+        <div className="border-b border-gray-100 px-4 pb-3 pt-4 md:px-5 md:pb-4 md:pt-5">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold">Routenplanung</h1>
             <button
@@ -130,7 +134,7 @@ export default function Planner() {
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-24 pt-4 md:px-5 md:pb-4">
           {selectedRoute && selectedTech ? (
             <>
               <button onClick={() => setSelectedId(null)} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-600">
@@ -202,7 +206,7 @@ export default function Planner() {
       </aside>
 
       {/* ---------- Karte ---------- */}
-      <section className="relative flex-1">
+      <section className="absolute inset-0 md:relative md:inset-auto md:flex-1">
         <RouteMap
           routes={dayRoutes}
           technicians={visibleTechs}
@@ -214,11 +218,37 @@ export default function Planner() {
           onSelect={setSelectedId}
           onHoverStop={setHoveredStopId}
         />
-        <div className="pointer-events-none absolute left-4 top-4 z-[500] rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md">
+        {/* Mobil: gewählte Tour als Karte unten, Tipp öffnet den Tagesablauf */}
+        {selectedTech && selectedRoute && mobileView === 'map' && (
+          <button
+            onClick={() => setMobileView('list')}
+            className="absolute inset-x-3 bottom-20 z-[500] flex items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-xl md:hidden"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-semibold text-white" style={{ background: colors[selectedTech.id] }}>
+              {selectedRoute.stops.length}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">{selectedTech.name}</span>
+              <span className="block text-xs text-gray-500">
+                {selectedRoute.departure}–{selectedRoute.returnHome} · 🚗 {formatMinutes(selectedRoute.driveMinutes)}
+              </span>
+            </span>
+            <span className="text-xs font-semibold text-brand-600">Ablauf ›</span>
+          </button>
+        )}
+        <div className="pointer-events-none absolute left-3 top-3 z-[500] max-w-[calc(100%-1.5rem)] truncate rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md md:left-4 md:top-4">
           {formatDay(day)} · {selectedTech ? selectedTech.name : `${dayRoutes.length} Touren`}
           {region && !selectedTech && ` · ${region === NO_REGION ? 'Ohne Zuständigkeit' : `Region ${regionLabel(d.technicians.find((t) => t.id === region)!)}`}`}
         </div>
       </section>
+      {/* Mobil: Umschalter Liste ⇄ Karte */}
+      <button
+        onClick={() => setMobileView(mobileView === 'list' ? 'map' : 'list')}
+        className="absolute bottom-5 left-1/2 z-[900] flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white shadow-xl md:hidden"
+      >
+        <Icon name={mobileView === 'list' ? 'route' : 'inbox'} className="h-4 w-4" />
+        {mobileView === 'list' ? 'Karte' : 'Liste'}
+      </button>
     </div>
   );
 }

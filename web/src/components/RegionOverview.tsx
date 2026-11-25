@@ -24,15 +24,15 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
   return (
     <section className="mt-8">
       <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Regionen · Auslastung der Woche</h2>
-      <div className="card mt-3 overflow-hidden">
+      <div className="card mt-3 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
             <tr>
               <th className="px-4 py-3 font-medium">Region</th>
-              <th className="px-4 py-3 font-medium">Einsatztage</th>
+              <th className="hidden px-4 py-3 font-medium sm:table-cell">Einsatztage</th>
               <th className="px-4 py-3 font-medium">Eingeplant</th>
               <th className="px-4 py-3 font-medium">Offen</th>
-              <th className="w-64 px-4 py-3 font-medium">Auslastung</th>
+              <th className="w-40 px-4 py-3 font-medium md:w-64">Auslastung</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -45,10 +45,10 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
                     <Link to={`/planer?region=${r.t.id}`} className="flex items-center gap-2 font-medium hover:text-brand-600">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: technicianColor(r.t.id, techIds) }} />
                       {regionLabel(r.t)}
-                      <span className="font-normal text-gray-400">· {r.t.home.label}</span>
+                      <span className="hidden font-normal text-gray-400 sm:inline">· {r.t.home.label}</span>
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{r.days || <span className="text-amber-600">keine</span>}</td>
+                  <td className="hidden px-4 py-3 text-gray-600 sm:table-cell">{r.days || <span className="text-amber-600">keine</span>}</td>
                   <td className="px-4 py-3 text-gray-600">
                     {r.planned} / {r.responsible}
                   </td>
@@ -59,7 +59,7 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
                           <div className={`h-full ${bar}`} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
                         </div>
-                        <span className="w-24 text-right text-xs text-gray-500">{formatMinutes(Math.max(0, r.free))} frei</span>
+                        <span className="w-16 text-right text-xs text-gray-500 md:w-24">{formatMinutes(Math.max(0, r.free))} frei</span>
                       </div>
                     ) : (
                       <span className="text-xs text-gray-400">nicht verfügbar</span>
@@ -75,7 +75,7 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
                     Ohne Zuständigkeit
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-gray-400">–</td>
+                <td className="hidden px-4 py-3 text-gray-400 sm:table-cell">–</td>
                 <td className="px-4 py-3 text-gray-400">–</td>
                 <td className="px-4 py-3 font-medium text-red-600">{unassigned}</td>
                 <td className="px-4 py-3 text-xs text-gray-500">kein Gebiet & &gt; 15 km vom Wohnort</td>

@@ -29,7 +29,7 @@ export default function StammdatenIndex() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-6 py-8 lg:px-10">
+    <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Stammdaten</h1>
@@ -46,7 +46,7 @@ export default function StammdatenIndex() {
       </div>
 
       {/* KPI-Kacheln */}
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-6 grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
         <StatCard
           label="Anfragen eingeplant"
           value={

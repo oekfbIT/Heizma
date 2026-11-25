@@ -66,8 +66,8 @@ export default function EscalationDialog({ request, reason, type, suggestedDate,
   }
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="card w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/30 sm:items-center sm:p-4" onClick={onClose}>
+      <div className="card max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-b-none p-5 sm:rounded-b-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           {type === 'customer_delay' ? 'Kund:in über Verschiebung informieren' : 'Intern eskalieren'}
         </p>
@@ -109,7 +109,7 @@ export default function EscalationDialog({ request, reason, type, suggestedDate,
         <p className="mt-2 text-xs text-gray-400">Prototyp: Die Nachricht wird gespeichert und markiert, nicht versendet.</p>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
-        <div className="mt-5 flex justify-end gap-3">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
           <button className="btn-secondary" onClick={onClose}>
             Abbrechen
           </button>

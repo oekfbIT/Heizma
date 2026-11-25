@@ -10,6 +10,9 @@ import { SEVERITY_ORDER, technicianColor } from '@/lib/format';
 import { NO_REGION, requestInRegion, useRegion } from '@/lib/regions';
 import type { Issue } from '@/lib/types';
 
+/** Auf Mobil sichtbare Spalten (Rest ab md) */
+const MOBILE = new Set(['customer', 'address', 'name', 'tech', 'date', 'window', 'start']);
+
 /** Liste eines Stammdaten-Bereichs mit Validierungsstatus pro Zeile */
 export default function EntityList() {
   const { entity: slug } = useParams();
@@ -71,7 +74,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
   const problemCount = def.rows(data).filter((r) => (issuesById.get(r.id) ?? []).some((i) => i.severity !== 'info')).length;
 
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-6 py-8 lg:px-10">
+    <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
       <PageHead title={def.title} subtitle={def.description} />
 
       <div className="mt-6">
@@ -79,7 +82,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <div className="relative w-72">
+        <div className="relative w-full sm:w-72">
           <Icon name="search" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
           <input className="input pl-9" placeholder="Suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
@@ -99,16 +102,16 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
         </div>
       </div>
 
-      <div className="card mt-4 overflow-hidden">
+      <div className="card mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
             <tr>
               {def.columns.map((c) => (
-                <th key={c.key} className={`px-4 py-3 font-medium ${c.className ?? ''}`}>
+                <th key={c.key} className={`px-3 py-3 font-medium md:px-4 ${c.className ?? ''} ${MOBILE.has(c.key) ? '' : 'hidden md:table-cell'}`}>
                   {c.label}
                 </th>
               ))}
-              <th className="w-36 px-4 py-3 font-medium">Status</th>
+              <th className="w-28 px-3 py-3 font-medium md:w-36 md:px-4">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -122,11 +125,11 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
                   className={`cursor-pointer transition hover:bg-brand-50/50 ${hasError ? 'bg-red-50/40' : ''}`}
                 >
                   {def.columns.map((c) => (
-                    <td key={c.key} className={`px-4 py-3 ${c.key === 'id' ? 'font-mono text-xs text-gray-500' : ''}`}>
+                    <td key={c.key} className={`px-3 py-3 md:px-4 ${c.key === 'id' ? 'font-mono text-xs text-gray-500' : ''} ${MOBILE.has(c.key) ? '' : 'hidden md:table-cell'}`}>
                       {row.cells[c.key]}
                     </td>
                   ))}
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3 md:px-4">
                     <IssueBadge issues={issues} />
                   </td>
                 </tr>
@@ -152,7 +155,7 @@ function IssueList({ data }: { data: Stammdaten }) {
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.entity.localeCompare(b.entity));
 
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-6 py-8 lg:px-10">
+    <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
       <PageHead title="Handlungsbedarf" subtitle="Datensätze mit fehlenden oder ungültigen Angaben – Klick öffnet die Detailansicht" />
       <div className="card mt-6 divide-y divide-gray-100">
         {issues.map((issue, idx) => {
@@ -161,12 +164,12 @@ function IssueList({ data }: { data: Stammdaten }) {
             <Link
               key={`${issue.entityId}-${issue.code}-${idx}`}
               to={`/stammdaten/${def.slug}/${encodeURIComponent(issue.entityId)}`}
-              className="flex items-center gap-4 px-5 py-3.5 transition hover:bg-gray-50"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3.5 transition hover:bg-gray-50 md:flex-nowrap md:px-5"
             >
               <SeverityPill severity={issue.severity} />
-              <span className="w-40 shrink-0 text-xs font-medium uppercase tracking-wider text-gray-400">{def.title}</span>
-              <span className="w-28 shrink-0 font-mono text-xs text-gray-500">{issue.entityId}</span>
-              <span className="flex-1 text-sm">{issue.message}</span>
+              <span className="shrink-0 text-xs font-medium uppercase tracking-wider text-gray-400 md:w-40">{def.title}</span>
+              <span className="shrink-0 font-mono text-xs text-gray-500 md:w-28">{issue.entityId}</span>
+              <span className="w-full text-sm md:w-auto md:flex-1">{issue.message}</span>
               <Icon name="chevron" className="h-4 w-4 text-gray-300" />
             </Link>
           );

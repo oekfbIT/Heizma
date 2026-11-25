@@ -89,7 +89,7 @@ export default function EntityEdit() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-8">
+    <main className="mx-auto w-full max-w-4xl px-4 py-6 md:px-6 md:py-8">
       <Link to={`/stammdaten/${def.slug}`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-600">
         <Icon name="back" className="h-4 w-4" /> {def.title}
       </Link>
@@ -139,7 +139,7 @@ export default function EntityEdit() {
       )}
 
       <form
-        className="card mt-6 space-y-5 p-6"
+        className="card mt-6 space-y-5 p-4 md:p-6"
         onSubmit={(e) => {
           e.preventDefault();
           void save();

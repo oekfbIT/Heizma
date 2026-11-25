@@ -67,7 +67,7 @@ export default function Waitlist({ items, requests, escalations, nextWorkday, on
                     if (!r) return null;
                     const esc = escalations[item.requestId];
                     return (
-                      <li key={item.requestId} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-xs shadow-sm">
+                      <li key={item.requestId} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2.5 text-xs shadow-sm">
                         <Link to={`/stammdaten/anfragen/${item.requestId}`} className="min-w-0 flex-1 hover:text-brand-600">
                           <span className="block truncate font-medium">{r.address}</span>
                           <span className="block truncate text-gray-400">
