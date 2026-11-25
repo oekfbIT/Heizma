@@ -1,15 +1,18 @@
 import { Link } from 'react-router-dom';
+import RegionOverview from '@/components/RegionOverview';
 import Icon from '@/components/ui/Icon';
 import { ErrorBox, Loading } from '@/components/ui/PageState';
 import StatCard from '@/components/ui/StatCard';
 import { useApi, type Overview, type Stammdaten } from '@/lib/api';
 import { ENTITIES } from '@/lib/entities';
 import { formatDay, formatMinutes } from '@/lib/format';
+import type { Plan } from '@/lib/types';
 
 /** Stammdaten-Übersicht: KPI-Kacheln oben, darunter die Bereiche als Index-Karten */
 export default function StammdatenIndex() {
   const overview = useApi<Overview>('/api/overview');
   const stamm = useApi<Stammdaten>('/api/stammdaten');
+  const plan = useApi<Plan>('/api/plan');
 
   if (overview.error || stamm.error) return <ErrorBox message={(overview.error ?? stamm.error)!} onRetry={() => { overview.reload(); stamm.reload(); }} />;
   if (!overview.data || !stamm.data) return <Loading />;
@@ -82,6 +85,8 @@ export default function StammdatenIndex() {
           to="/stammdaten/techniker"
         />
       </section>
+
+      {plan.data && <RegionOverview data={d} plan={plan.data} />}
 
       {/* Index-Karten */}
       <section className="mt-8">

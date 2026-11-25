@@ -162,6 +162,17 @@ Die Case-Study-API ist **read-only** – trotzdem lassen sich Datenprobleme dire
 
 In Produktion würde derselbe Endpunkt ins CRM zurückschreiben – Frontend und Planung bleiben gleich.
 
+### Regionen, Auslastung & Eskalation
+
+- **Regionsfilter** (Stammdaten-Listen und Planer, `?region=tech_01` in der URL): ein Techniker = ein Einsatzgebiet. „Ohne Zuständigkeit“ zeigt Anfragen außerhalb aller Gebiete (> 15 km vom Wohnort).
+- **Auslastung**: Balken je Techniker und Tag (vor Ort · Fahrt · Pause/Warten · frei) und eine Wochenübersicht je Region auf der Startseite. Heimfahrt bis +60 min wird als „erlaubt“ angezeigt, darüber als Regelverstoß.
+- **Nicht eingeplant** – je Grund genau eine Aktion:
+  - *Kapazität erschöpft* → **Kunde informieren**: Nachrichtenentwurf mit neuem Terminvorschlag (erster Werktag nach der Planungswoche, änderbar)
+  - *Keine Koordinaten* → **Korrigieren** (Detailansicht)
+  - *Nicht zuordenbar / Techniker ohne Verfügbarkeit* → **Intern eskalieren**
+  
+  Eskalationen sind simuliert: `POST /api/escalations/:requestId` speichert die Nachricht in `local-db.json` (`escalations`), es wird nichts versendet. `DELETE` nimmt sie zurück.
+
 **Bearbeitbare Felder**
 
 | Bereich | Felder |

@@ -4,9 +4,17 @@ import { config } from './config.js';
 import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
 import { buildPlan } from './planner.js';
 import type { Dataset, Plan } from './types.js';
-import { validateDataset } from './validation.js';
+import { eligibleTechnicians, validateDataset } from './validation.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
-import { applyOverrides, dumpDb, editableFields, resetAll, resetEntity, updateEntity, ValidationError, type EntityKey } from './localStore.js';
+import { applyOverrides, dumpDb, editableFields, escalate, listEscalations, resetAll, resetEntity, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+
+/** Erster Werktag nach dem Planungszeitraum – Vorschlag für verschobene Termine */
+function nextWorkday(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  do d.setUTCDate(d.getUTCDate() + 1);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
 
 /** Arbeitsdaten = Heizma-API + lokale Korrekturen */
 async function loadWorkingDataset() {
@@ -44,13 +52,15 @@ app.get('/api/config', (_req, res) => {
 
 app.get('/api/meta', route(async (_req, res) => {
   const data = await loadWorkingDataset();
-  res.json({ source: data.source, range: data.range, loadedAt: data.loadedAt, office: config.office });
+  res.json({ source: data.source, range: data.range, loadedAt: data.loadedAt, office: config.office, nextWorkday: nextWorkday(data.range.to) });
 }));
 
 /** Stammdaten + Validierungsergebnis */
 app.get('/api/stammdaten', route(async (_req, res) => {
   const data = await loadWorkingDataset();
-  res.json({ ...data, issues: validateDataset(data) });
+  // Zuständigkeit je Anfrage (Gebiet → sonst ≤ 15 km) – Basis für den Regionsfilter
+  const responsibility = Object.fromEntries(data.requests.map((r) => [r.id, eligibleTechnicians(r, data.technicians).map((t) => t.id)]));
+  res.json({ ...data, issues: validateDataset(data), responsibility, escalations: listEscalations() });
 }));
 
 /** Übersichtszahlen für die Kacheln */
@@ -121,6 +131,18 @@ app.delete('/api/stammdaten/:entity/:id', route(async (req, res) => {
   resetEntity(entityParam(req), req.params.id);
   res.json({ ok: true });
 }));
+
+// ---- Eskalationen (simuliert: Nachricht wird gespeichert, nicht versendet) ----
+app.post('/api/escalations/:requestId', route(async (req, res) => {
+  const data = await loadDataset();
+  if (!data.requests.some((r) => r.id === req.params.requestId)) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
+  res.json({ ok: true, escalation: escalate(req.params.requestId, req.body ?? {}, data.range.to) });
+}));
+
+app.delete('/api/escalations/:requestId', (req, res) => {
+  withdrawEscalation(req.params.requestId);
+  res.json({ ok: true });
+});
 
 app.get('/api/local-db', (_req, res) => {
   res.json({ ...dumpDb(), editableFields: editableFields() });

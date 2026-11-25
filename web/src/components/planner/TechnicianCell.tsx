@@ -1,4 +1,6 @@
 import { formatMinutes } from '@/lib/format';
+import { regionLabel } from '@/lib/regions';
+import CapacityBar from './CapacityBar';
 import type { DayRoute, Technician } from '@/lib/types';
 
 interface Props {
@@ -33,7 +35,9 @@ export default function TechnicianCell({ technician, route, status, color, selec
           <span className="truncate font-semibold">{technician.name}</span>
           {approved && <span className="rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">FREIGEGEBEN</span>}
         </span>
-        <span className="block truncate text-xs text-gray-500">{technician.home.label}</span>
+        <span className="block truncate text-xs text-gray-500">
+          Region {regionLabel(technician)} · {technician.home.label}
+        </span>
         {status === 'available' && route ? (
           <span className="mt-1 flex flex-wrap gap-x-3 text-xs text-gray-600">
             <span>{requests} neu</span>
@@ -43,6 +47,9 @@ export default function TechnicianCell({ technician, route, status, color, selec
               {route.window.start}–{route.window.end}
             </span>
           </span>
+        ) : null}
+        {status === 'available' && route ? (
+          <CapacityBar route={route} />
         ) : (
           <span className="mt-1 block text-xs font-medium text-amber-600">
             {status === 'blocked' ? 'Gesperrt (Urlaub/Krank)' : 'Keine Verfügbarkeit'}

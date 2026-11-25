@@ -4,9 +4,11 @@ import StopTimeline from '@/components/planner/StopTimeline';
 import TechnicianCell from '@/components/planner/TechnicianCell';
 import Waitlist from '@/components/planner/Waitlist';
 import Icon from '@/components/ui/Icon';
+import RegionFilter from '@/components/ui/RegionFilter';
 import { ErrorBox, Loading } from '@/components/ui/PageState';
 import { apiGet, reloadData, useApi, type Meta, type RouteGeometry, type Stammdaten } from '@/lib/api';
 import { formatDay, formatMinutes, technicianColor } from '@/lib/format';
+import { NO_REGION, regionLabel, requestInRegion, useRegion } from '@/lib/regions';
 import type { Plan } from '@/lib/types';
 
 /**
@@ -24,6 +26,7 @@ export default function Planner() {
   const [geometry, setGeometry] = useState<RouteGeometry | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [approved, setApproved] = useState<Set<string>>(new Set()); // key: techId@date
+  const [region, setRegion] = useRegion();
 
   const days = useMemo(() => [...new Set(stamm.data?.availability.map((a) => a.date) ?? [])].sort(), [stamm.data]);
   useEffect(() => {
@@ -44,7 +47,11 @@ export default function Planner() {
   const d = stamm.data;
   const techIds = d.technicians.map((t) => t.id);
   const colors = Object.fromEntries(techIds.map((id) => [id, technicianColor(id, techIds)]));
-  const dayRoutes = p.routes.filter((r) => r.date === day);
+  // Regionsfilter: ein Techniker = ein Einsatzgebiet
+  const inRegion = (techId: string) => !region || (region !== NO_REGION && techId === region);
+  const visibleTechs = d.technicians.filter((t) => inRegion(t.id));
+  const dayRoutes = p.routes.filter((r) => r.date === day && inRegion(r.technicianId));
+  const waitlist = p.unassigned.filter((u) => requestInRegion(d, u.requestId, region));
   const selectedRoute = dayRoutes.find((r) => r.technicianId === selectedId);
   const selectedTech = d.technicians.find((t) => t.id === selectedId);
   const dayStops = dayRoutes.reduce((n, r) => n + r.stops.length, 0);
@@ -89,7 +96,7 @@ export default function Planner() {
           {/* Tage */}
           <div className="mt-4 flex gap-1.5 overflow-x-auto">
             {days.map((date) => {
-              const stops = p.routes.filter((r) => r.date === date).reduce((n, r) => n + r.stops.length, 0);
+              const stops = p.routes.filter((r) => r.date === date && inRegion(r.technicianId)).reduce((n, r) => n + r.stops.length, 0);
               return (
                 <button
                   key={date}
@@ -106,6 +113,20 @@ export default function Planner() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Regionen */}
+          <div className="mt-3">
+            <RegionFilter
+              compact
+              technicians={d.technicians}
+              colors={colors}
+              value={region}
+              onChange={(v) => {
+                setRegion(v);
+                setSelectedId(null);
+              }}
+            />
           </div>
         </div>
 
@@ -150,7 +171,7 @@ export default function Planner() {
                 <span>{approved.size ? `${[...approved].filter((k) => k.endsWith(day)).length} freigegeben` : ''}</span>
               </div>
               <div className="space-y-2">
-                {d.technicians.map((t) => (
+                {visibleTechs.map((t) => (
                   <TechnicianCell
                     key={t.id}
                     technician={t}
@@ -163,7 +184,18 @@ export default function Planner() {
                   />
                 ))}
               </div>
-              {p.unassigned.length > 0 && <Waitlist items={p.unassigned} requests={d.requests} />}
+              {region === NO_REGION && (
+                <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                  Anfragen ohne zuständigen Techniker (kein Gebiet, &gt; 15 km vom Wohnort) – nur intern lösbar.
+                </p>
+              )}
+              <Waitlist
+                items={waitlist}
+                requests={d.requests}
+                escalations={d.escalations ?? {}}
+                nextWorkday={meta.data?.nextWorkday ?? d.range.to}
+                onChanged={() => stamm.reload()}
+              />
             </>
           )}
         </div>
@@ -173,7 +205,7 @@ export default function Planner() {
       <section className="relative flex-1">
         <RouteMap
           routes={dayRoutes}
-          technicians={d.technicians}
+          technicians={visibleTechs}
           colors={colors}
           selectedId={selectedId}
           geometry={geometry}
@@ -184,6 +216,7 @@ export default function Planner() {
         />
         <div className="pointer-events-none absolute left-4 top-4 z-[500] rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md">
           {formatDay(day)} · {selectedTech ? selectedTech.name : `${dayRoutes.length} Touren`}
+          {region && !selectedTech && ` · ${region === NO_REGION ? 'Ohne Zuständigkeit' : `Region ${regionLabel(d.technicians.find((t) => t.id === region)!)}`}`}
         </div>
       </section>
     </div>

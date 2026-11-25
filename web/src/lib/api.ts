@@ -15,6 +15,18 @@ export interface Stammdaten {
   loadedAt: string;
   /** IDs mit lokalen Korrekturen */
   overridden?: Record<'requests' | 'technicians' | 'appointments', string[]>;
+  /** Zuständige Techniker je Anfrage (Gebiet → sonst ≤ 15 km) */
+  responsibility: Record<string, string[]>;
+  /** Eskalationen je Anfrage (simuliert) */
+  escalations: Record<string, Escalation>;
+}
+
+export interface Escalation {
+  type: 'customer_delay' | 'internal';
+  at: string;
+  newDate?: string;
+  recipient: string;
+  message: string;
 }
 
 export interface LocalDb {
@@ -46,6 +58,8 @@ export interface Meta {
   range: { from: string; to: string };
   loadedAt: string;
   office: { label: string; lat: number; lng: number };
+  /** Erster Werktag nach dem Planungszeitraum */
+  nextWorkday: string;
 }
 
 export interface MapConfig {

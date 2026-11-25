@@ -49,6 +49,7 @@ export const ENTITIES: EntityDef[] = [
       { key: 'address', label: 'Adresse' },
       { key: 'type', label: 'Typ', className: 'w-20' },
       { key: 'from', label: 'Ab', className: 'w-16' },
+      { key: 'region', label: 'Zuständig', className: 'w-32' },
       { key: 'createdAt', label: 'Eingang', className: 'w-40' },
     ],
     rows: (d) =>
@@ -62,6 +63,10 @@ export const ENTITIES: EntityDef[] = [
             address: r.address,
             type: dash(r.visitationType),
             from: dash(r.customerAvailableFrom),
+            region:
+              (d.responsibility?.[r.id] ?? [])
+                .map((id) => d.technicians.find((t) => t.id === id)?.name.replace(/^Techniker\s+/i, '') ?? id)
+                .join(', ') || '—',
             createdAt: formatDateTime(r.createdAt),
           },
         })),

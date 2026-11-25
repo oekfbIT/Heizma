@@ -12,18 +12,31 @@ import type { Appointment, Dataset, ServiceRequest, Technician } from './types.j
 export type EntityKey = 'requests' | 'technicians' | 'appointments';
 type Patch = Record<string, unknown>;
 
+export type EscalationType = 'customer_delay' | 'internal';
+
+export interface Escalation {
+  type: EscalationType;
+  at: string;
+  /** Neuer Terminvorschlag (nur bei Kundenbenachrichtigung) */
+  newDate?: string;
+  recipient: string;
+  message: string;
+}
+
 export interface LocalDb {
   version: 1;
   updatedAt: string | null;
   overrides: Record<EntityKey, Record<string, Patch>>;
-  log: { at: string; entity: EntityKey; id: string; action: 'update' | 'reset'; changes?: Patch }[];
+  /** Eskalationen zu nicht eingeplanten Anfragen (simuliert – es wird nichts versendet) */
+  escalations: Record<string, Escalation>;
+  log: { at: string; entity: EntityKey | 'escalations'; id: string; action: 'update' | 'reset' | 'escalate'; changes?: Patch }[];
 }
 
 const DB_PATH = resolve(
   process.env.LOCAL_DB_PATH ?? (process.env.VERCEL ? '/tmp/heizma-local-db.json' : resolve(process.cwd(), 'data/local-db.json')),
 );
 
-const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, log: [] });
+const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, log: [] });
 
 let db: LocalDb | null = null;
 let revision = 0;
@@ -37,6 +50,7 @@ function load(): LocalDb {
   }
   db.overrides = { ...empty().overrides, ...db.overrides };
   db.log ??= [];
+  db.escalations ??= {};
   return db;
 }
 
@@ -156,4 +170,41 @@ export function applyOverrides(data: Dataset): Dataset & { overridden: Record<En
     loadedAt: `${data.loadedAt}#r${revision}`,
     overridden: { requests: Object.keys(o.requests), technicians: Object.keys(o.technicians), appointments: Object.keys(o.appointments) },
   };
+}
+
+// ---- Eskalationen ----
+
+export function escalate(requestId: string, input: { type?: string; newDate?: string; recipient?: string; message?: string }, planTo: string): Escalation {
+  const type = input.type as EscalationType;
+  if (!['customer_delay', 'internal'].includes(type)) throw new ValidationError('type muss customer_delay oder internal sein');
+  const message = String(input.message ?? '').trim();
+  if (message.length < 10) throw new ValidationError('Nachricht fehlt');
+  let newDate: string | undefined;
+  if (type === 'customer_delay') {
+    newDate = String(input.newDate ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new ValidationError('Neuer Termin im Format YYYY-MM-DD');
+    if (newDate <= planTo) throw new ValidationError(`Neuer Termin muss nach dem Planungszeitraum (${planTo}) liegen`);
+  }
+  const escalation: Escalation = {
+    type,
+    at: new Date().toISOString(),
+    newDate,
+    recipient: String(input.recipient ?? (type === 'customer_delay' ? 'Kunde' : 'Disposition')),
+    message,
+  };
+  const d = load();
+  d.escalations[requestId] = escalation;
+  d.log.push({ at: escalation.at, entity: 'escalations', id: requestId, action: 'escalate', changes: { type, newDate } });
+  persist();
+  return escalation;
+}
+
+export function withdrawEscalation(requestId: string) {
+  const d = load();
+  delete d.escalations[requestId];
+  persist();
+}
+
+export function listEscalations(): Record<string, Escalation> {
+  return load().escalations;
 }
