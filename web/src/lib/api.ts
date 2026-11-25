@@ -22,7 +22,8 @@ export interface Stammdaten {
 }
 
 export interface Escalation {
-  type: 'customer_delay' | 'internal';
+  type: 'customer_delay' | 'internal' | 'technician_request';
+  affectedRequests?: string[];
   at: string;
   newDate?: string;
   recipient: string;

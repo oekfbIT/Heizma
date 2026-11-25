@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
+import AvailabilityWeek from '@/components/ui/AvailabilityWeek';
+import PolygonEditor from '@/components/ui/PolygonEditor';
 import { SeverityPill } from '@/components/ui/IssueBadge';
 import { ErrorBox, Loading } from '@/components/ui/PageState';
 import { apiSend, useApi, type LocalDb, type Stammdaten } from '@/lib/api';
+import TechnicianEscalation from '@/components/TechnicianEscalation';
 import { entityBySlug } from '@/lib/entities';
-import type { EntityKind, Issue } from '@/lib/types';
+import type { EntityKind, Issue, Technician } from '@/lib/types';
 
 const FIELD_STYLE: Record<string, string> = {
   error: 'border-red-400 bg-red-50/50 focus:border-red-500 focus:ring-red-100',
@@ -38,6 +41,13 @@ export default function EntityEdit() {
     setDraft({});
     setMessage(null);
   }, [slug, id]);
+
+  // Eskalationen o. Ä. ändern Daten außerhalb des Formulars → neu laden
+  useEffect(() => {
+    const onChange = () => reload();
+    window.addEventListener('heizma:data-changed', onChange);
+    return () => window.removeEventListener('heizma:data-changed', onChange);
+  }, [reload]);
 
   if (!def) return <Navigate to="/stammdaten" replace />;
   if (error) return <ErrorBox message={error} onRetry={reload} />;
@@ -138,6 +148,8 @@ export default function EntityEdit() {
         </div>
       )}
 
+      {def.kind === 'technician' && <TechnicianEscalation technician={record as unknown as Technician} issues={issues} data={data} />}
+
       <form
         className="card mt-6 space-y-5 p-4 md:p-6"
         onSubmit={(e) => {
@@ -154,14 +166,24 @@ export default function EntityEdit() {
           const value = draft[field.key] ?? field.value(record);
           const cls = `input ${severity ? FIELD_STYLE[severity] ?? '' : ''} ${canEdit ? '' : 'cursor-not-allowed bg-gray-50 text-gray-500'}`;
           return (
-            <label key={field.key} className="block">
+            <div key={field.key} className="block">
               <span className="mb-1.5 flex items-center gap-2 text-sm font-medium">
                 {field.label}
                 {severity && <SeverityPill severity={severity} />}
                 {changed && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-700">geändert</span>}
                 {!canEdit && <Icon name="lock" className="h-3.5 w-3.5 text-gray-300" />}
               </span>
-              {field.multiline ? (
+              {field.key === 'availability' && def.kind === 'technician' ? (
+                <AvailabilityWeek data={data} technicianId={id} />
+              ) : field.key === 'region' && def.kind === 'technician' ? (
+                <PolygonEditor
+                  value={value === '—' ? '' : value}
+                  data={data}
+                  readOnly={!canEdit}
+                  className={severity ? FIELD_STYLE[severity] ?? '' : ''}
+                  onChange={(v) => setDraft({ ...draft, [field.key]: v })}
+                />
+              ) : field.multiline ? (
                 <textarea
                   rows={3}
                   className={cls}
@@ -184,7 +206,7 @@ export default function EntityEdit() {
                   {i.message}
                 </span>
               ))}
-            </label>
+            </div>
           );
         })}
 

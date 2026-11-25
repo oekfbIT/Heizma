@@ -2,6 +2,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { config } from './config.js';
 import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
+import { geocode, reverseGeocode } from './geocode.js';
 import { buildPlan } from './planner.js';
 import type { Dataset, Plan } from './types.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
@@ -133,6 +134,22 @@ app.delete('/api/stammdaten/:entity/:id', route(async (req, res) => {
 }));
 
 // ---- Eskalationen (simuliert: Nachricht wird gespeichert, nicht versendet) ----
+// Techniker-Eskalation: ziel = "techniker" (Verfügbarkeit/Gebiet anfragen) oder "vertrieb" (Lösung nötig)
+const TECH_TARGETS = { techniker: 'technician_request', vertrieb: 'internal' } as const;
+app.post('/api/escalations/technicians/:id/:target', route(async (req, res) => {
+  const target = req.params.target as keyof typeof TECH_TARGETS;
+  if (!TECH_TARGETS[target]) return res.status(400).json({ error: 'Ziel muss techniker oder vertrieb sein' });
+  const data = await loadDataset();
+  if (!data.technicians.some((t) => t.id === req.params.id)) return res.status(404).json({ error: 'Techniker nicht gefunden' });
+  const escalation = escalate(`technicians:${req.params.id}:${target}`, { ...(req.body ?? {}), type: TECH_TARGETS[target] }, data.range.to);
+  res.json({ ok: true, escalation });
+}));
+
+app.delete('/api/escalations/technicians/:id/:target', (req, res) => {
+  withdrawEscalation(`technicians:${req.params.id}:${req.params.target}`);
+  res.json({ ok: true });
+});
+
 app.post('/api/escalations/:requestId', route(async (req, res) => {
   const data = await loadDataset();
   if (!data.requests.some((r) => r.id === req.params.requestId)) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
@@ -143,6 +160,22 @@ app.delete('/api/escalations/:requestId', (req, res) => {
   withdrawEscalation(req.params.requestId);
   res.json({ ok: true });
 });
+
+app.get('/api/geocode', route(async (req, res) => {
+  const address = String(req.query.address ?? '').trim();
+  if (!address) return res.status(400).json({ error: 'Adresse fehlt' });
+  const result = await geocode(address);
+  if (!result) return res.status(404).json({ error: 'Adresse nicht gefunden' });
+  res.json(result);
+}));
+
+app.get('/api/geocode/reverse', route(async (req, res) => {
+  const lat = Number(req.query.lat), lng = Number(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: 'Ungültige Koordinaten' });
+  const result = await reverseGeocode(lat, lng);
+  if (!result) return res.status(404).json({ error: 'Keine Adresse zu diesen Koordinaten gefunden' });
+  res.json(result);
+}));
 
 app.get('/api/local-db', (_req, res) => {
   res.json({ ...dumpDb(), editableFields: editableFields() });

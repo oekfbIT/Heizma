@@ -12,10 +12,13 @@ import type { Appointment, Dataset, ServiceRequest, Technician } from './types.j
 export type EntityKey = 'requests' | 'technicians' | 'appointments';
 type Patch = Record<string, unknown>;
 
-export type EscalationType = 'customer_delay' | 'internal';
+/** customer_delay = Kund:in informieren · internal = Disposition/Vertrieb · technician_request = Techniker:in anfragen */
+export type EscalationType = 'customer_delay' | 'internal' | 'technician_request';
 
 export interface Escalation {
   type: EscalationType;
+  /** Betroffene Anfragen (bei Techniker-Eskalationen) */
+  affectedRequests?: string[];
   at: string;
   /** Neuer Terminvorschlag (nur bei Kundenbenachrichtigung) */
   newDate?: string;
@@ -174,9 +177,18 @@ export function applyOverrides(data: Dataset): Dataset & { overridden: Record<En
 
 // ---- Eskalationen ----
 
-export function escalate(requestId: string, input: { type?: string; newDate?: string; recipient?: string; message?: string }, planTo: string): Escalation {
+/**
+ * Schlüssel: Anfrage-ID (z. B. req_1042) oder "technicians:<id>:<ziel>" für Techniker-Eskalationen.
+ */
+export function escalate(
+  key: string,
+  input: { type?: string; newDate?: string; recipient?: string; message?: string; affectedRequests?: unknown },
+  planTo: string,
+): Escalation {
+  const requestId = key;
   const type = input.type as EscalationType;
-  if (!['customer_delay', 'internal'].includes(type)) throw new ValidationError('type muss customer_delay oder internal sein');
+  if (!['customer_delay', 'internal', 'technician_request'].includes(type))
+    throw new ValidationError('type muss customer_delay, internal oder technician_request sein');
   const message = String(input.message ?? '').trim();
   if (message.length < 10) throw new ValidationError('Nachricht fehlt');
   let newDate: string | undefined;
@@ -189,8 +201,9 @@ export function escalate(requestId: string, input: { type?: string; newDate?: st
     type,
     at: new Date().toISOString(),
     newDate,
-    recipient: String(input.recipient ?? (type === 'customer_delay' ? 'Kunde' : 'Disposition')),
+    recipient: String(input.recipient ?? (type === 'customer_delay' ? 'Kunde' : type === 'technician_request' ? 'Techniker' : 'Disposition')),
     message,
+    affectedRequests: Array.isArray(input.affectedRequests) ? input.affectedRequests.map(String) : undefined,
   };
   const d = load();
   d.escalations[requestId] = escalation;
