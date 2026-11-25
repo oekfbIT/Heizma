@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getToken, handleUnauthorized } from './auth';
 import type { AvailabilityEntry, Appointment, Issue, Plan, ServiceRequest, Technician, TravelResult } from './types';
 
 // ---- Antwort-Typen der eigenen API ----
@@ -37,6 +38,17 @@ export interface Meta {
   office: { label: string; lat: number; lng: number };
 }
 
+export interface MapConfig {
+  googleMapsApiKey: string;
+  googleMapsMapId: string;
+  tileUrl: string;
+  attribution: string;
+}
+
+export interface AppConfig {
+  map: MapConfig;
+}
+
 export interface RouteGeometry {
   points: { lat: number; lng: number }[];
   legs: TravelResult[];
@@ -46,9 +58,22 @@ export interface RouteGeometry {
 
 const cache = new Map<string, unknown>();
 
+/** fetch mit Sitzungstoken; bei 401 wird die Sitzung beendet → Login-Seite */
+export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(path, { ...init, headers });
+  if (res.status === 401) {
+    cache.clear();
+    handleUnauthorized();
+  }
+  return res;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   if (cache.has(path)) return cache.get(path) as T;
-  const res = await fetch(path);
+  const res = await authFetch(path);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   cache.set(path, body);
@@ -57,7 +82,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 
 export async function reloadData() {
   cache.clear();
-  await fetch('/api/reload', { method: 'POST' });
+  await authFetch('/api/reload', { method: 'POST' });
 }
 
 export function useApi<T>(path: string | null) {

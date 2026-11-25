@@ -20,6 +20,13 @@ export const config = {
     lat: num(process.env.OFFICE_LAT, 48.2165),
     lng: num(process.env.OFFICE_LNG, 16.3786),
   },
+  /** Karteneinstellungen – werden zur Laufzeit über /api/config an das Frontend gegeben (kein Rebuild nötig) */
+  map: {
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? '',
+    googleMapsMapId: process.env.GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID',
+    tileUrl: process.env.MAP_TILE_URL || 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: process.env.MAP_ATTRIBUTION || 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap',
+  },
 };
 
 if (config.dataSource === 'live' && !config.heizmaToken) {

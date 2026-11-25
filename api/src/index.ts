@@ -5,6 +5,7 @@ import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaCli
 import { buildPlan } from './planner.js';
 import type { Dataset, Plan } from './types.js';
 import { validateDataset } from './validation.js';
+import { authRouter, requireAuth } from './mockauth/index.js';
 
 const app = express();
 app.use(cors());
@@ -24,6 +25,15 @@ const route = (fn: Handler) => (req: Request, res: Response, next: NextFunction)
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, source: config.dataSource });
+});
+
+// Mock-Login (fest hinterlegt) – alles darunter erfordert eine gültige Sitzung (2 h)
+app.use('/api/auth', authRouter);
+app.use('/api', requireAuth);
+
+/** Frontend-Konfiguration (Karte) – nur nach Login, Google-Key per HTTP-Referrer einschränken */
+app.get('/api/config', (_req, res) => {
+  res.json({ map: config.map });
 });
 
 app.get('/api/meta', route(async (_req, res) => {
@@ -98,6 +108,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: err instanceof Error ? err.message : 'Unbekannter Fehler' });
 });
 
-app.listen(config.port, () => {
-  console.log(`[api] läuft auf http://localhost:${config.port} (Datenquelle: ${config.dataSource})`);
-});
+// Auf Vercel übernimmt die Plattform den Server – lokal/Docker selbst starten
+if (!process.env.VERCEL) {
+  app.listen(config.port, () => {
+    console.log(`[api] läuft auf http://localhost:${config.port} (Datenquelle: ${config.dataSource})`);
+  });
+}
+
+export default app;

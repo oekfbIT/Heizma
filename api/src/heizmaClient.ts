@@ -1,5 +1,8 @@
-import { readFile } from 'node:fs/promises';
 import { config } from './config.js';
+import appointmentsFixture from './fixtures/appointments.json';
+import availabilityFixture from './fixtures/availability.json';
+import requestsFixture from './fixtures/requests.json';
+import techniciansFixture from './fixtures/technicians.json';
 import type { Appointment, AvailabilityEntry, Dataset, LatLng, ServiceRequest, Technician, TravelResult } from './types.js';
 
 /**
@@ -46,9 +49,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+const FIXTURES: Record<string, unknown> = {
+  technicians: techniciansFixture,
+  availability: availabilityFixture,
+  requests: requestsFixture,
+  appointments: appointmentsFixture,
+};
+
 async function fixture<T>(name: string): Promise<T> {
-  const url = new URL(`./fixtures/${name}.json`, import.meta.url);
-  return JSON.parse(await readFile(url, 'utf8')) as T;
+  return FIXTURES[name] as T;
 }
 
 export async function loadDataset(): Promise<Dataset> {

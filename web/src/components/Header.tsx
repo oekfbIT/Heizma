@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom';
 import logo from '@/assets/brand/heizma-logo.png';
+import { useAuth } from '@/lib/auth';
 
 const NAV = [
   { to: '/stammdaten', label: 'Übersicht', end: true },
@@ -11,6 +12,7 @@ const NAV = [
 
 /** Kopfzeile im Stil von heizma.at: Logo links, Navigation mittig, grüner CTA rechts */
 export default function Header() {
+  const { user, logout } = useAuth();
   return (
     <header className="sticky top-0 z-[1000] border-b border-gray-200 bg-white">
       <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-6 px-6 lg:px-10">
@@ -36,9 +38,20 @@ export default function Header() {
           ))}
         </nav>
 
-        <Link to="/planer" className="btn-primary px-6 py-3 text-[15px]">
-          Routenplanung öffnen
-        </Link>
+        <div className="flex shrink-0 items-center gap-4">
+          <Link to="/planer" className="btn-primary px-6 py-3 text-[15px]">
+            Routenplanung öffnen
+          </Link>
+          {user && (
+            <button
+              onClick={logout}
+              title={`${user.email} · Sitzung bis ${new Date(user.expiresAt).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}`}
+              className="text-sm font-medium text-gray-500 transition hover:text-brand-600"
+            >
+              Abmelden
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

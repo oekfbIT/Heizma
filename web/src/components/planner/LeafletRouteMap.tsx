@@ -17,10 +17,6 @@ export interface RouteMapProps {
   onHoverStop: (stopId: string | null) => void;
 }
 
-// Kartenkacheln: Standard Esri World Street Map (sauberer Straßenstil, kein Key), per .env austauschbar
-const TILE_URL = import.meta.env.VITE_MAP_TILE_URL || 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
-const TILE_ATTRIBUTION =
-  import.meta.env.VITE_MAP_ATTRIBUTION || 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap';
 
 const AUSTRIA_BOUNDS = L.latLngBounds([46.4, 9.5], [49.0, 17.2]);
 
@@ -61,7 +57,7 @@ function FitBounds({ points }: { points: L.LatLngExpression[] }) {
 }
 
 /** Google-Maps-ähnliche Kartenansicht der Tagesrouten */
-export default function LeafletRouteMap(props: RouteMapProps) {
+export default function LeafletRouteMap(props: RouteMapProps & { tileUrl: string; attribution: string }) {
   const { routes, technicians, colors, selectedId, geometry, office, hoveredStopId } = props;
   const techById = useMemo(() => new Map(technicians.map((t) => [t.id, t])), [technicians]);
   const visible = selectedId ? routes.filter((r) => r.technicianId === selectedId) : routes;
@@ -99,8 +95,8 @@ export default function LeafletRouteMap(props: RouteMapProps) {
   return (
     <MapContainer bounds={AUSTRIA_BOUNDS} className="h-full w-full" zoomControl={false} attributionControl>
       <TileLayer
-        attribution={TILE_ATTRIBUTION}
-        url={TILE_URL}
+        attribution={props.attribution}
+        url={props.tileUrl}
       />
       <FitBounds points={boundsPoints} />
 

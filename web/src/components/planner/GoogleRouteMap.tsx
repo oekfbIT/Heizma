@@ -6,12 +6,10 @@ import type { RouteMapProps } from './LeafletRouteMap';
 
 /**
  * Kartenansicht mit Google Maps (Maps JavaScript API).
- * Aktiv, sobald VITE_GOOGLE_MAPS_API_KEY in der .env gesetzt ist.
+ * Aktiv, sobald GOOGLE_MAPS_API_KEY in der .env gesetzt ist (kommt über /api/config).
  */
 
-const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
 // Advanced Markers brauchen eine Map-ID. DEMO_MAP_ID funktioniert für Entwicklung.
-const MAP_ID = (import.meta.env.VITE_GOOGLE_MAPS_MAP_ID as string) || 'DEMO_MAP_ID';
 const AUSTRIA_CENTER = { lat: 47.7, lng: 14.5 };
 
 type LatLng = { lat: number; lng: number };
@@ -68,7 +66,7 @@ function Tooltip({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function GoogleRouteMap(props: RouteMapProps) {
+export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; mapId: string }) {
   const { routes, technicians, colors, selectedId, geometry, office, hoveredStopId } = props;
   const techById = useMemo(() => new globalThis.Map(technicians.map((t) => [t.id, t])), [technicians]);
   const visible = selectedId ? routes.filter((r) => r.technicianId === selectedId) : routes;
@@ -117,9 +115,9 @@ export default function GoogleRouteMap(props: RouteMapProps) {
   }, [visible, geometry, selectedId, colors, techById]);
 
   return (
-    <APIProvider apiKey={API_KEY} language="de" region="AT">
+    <APIProvider apiKey={props.apiKey} language="de" region="AT">
       <Map
-        mapId={MAP_ID}
+        mapId={props.mapId}
         defaultCenter={AUSTRIA_CENTER}
         defaultZoom={7}
         gestureHandling="greedy"

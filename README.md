@@ -34,7 +34,7 @@ cp .env.example .env
 # HEIZMA_API_TOKEN in .env eintragen
 ```
 
-**Karte:** Mit `VITE_GOOGLE_MAPS_API_KEY` (Maps JavaScript API, [Key erstellen](https://console.cloud.google.com/google/maps-apis/credentials)) wird Google Maps verwendet, ohne Key automatisch Leaflet mit freien Kacheln.
+**Karte:** Mit `GOOGLE_MAPS_API_KEY` (Maps JavaScript API, [Key erstellen](https://console.cloud.google.com/google/maps-apis/credentials)) wird Google Maps verwendet, ohne Key automatisch Leaflet mit freien Kacheln.
 
 Ohne Token oder offline: `DATA_SOURCE=mock` setzen – dann werden die Beispieldaten aus `api/src/fixtures` verwendet (gleiches Schema, gleiche Datenprobleme in klein).
 
@@ -65,6 +65,16 @@ Weitere Befehle:
 | `npm run build` | Produktions-Build beider Pakete |
 
 ---
+
+## Anmeldung (Mock-Auth)
+
+Die App ist durch einen fest hinterlegten Mock-Login geschützt – keine externen Calls, keine Datenbank (`api/src/mockauth/`).
+
+- **E-Mail:** `planner@heizma.at` · **Passwort:** `1nvite0nly`
+- Zugangsdaten und Laufzeit über `MOCK_AUTH_EMAIL`, `MOCK_AUTH_PASSWORD`, `MOCK_AUTH_TTL_HOURS` (Standard 2 h)
+- Token wird nur im `sessionStorage` gehalten → gilt pro Browser-Sitzung/Tab
+- Zustandsloses HMAC-signiertes Token (funktioniert auch serverless auf Vercel); Schlüssel optional über `MOCK_AUTH_SECRET`
+- Alle `/api/*`-Routen außer `/api/health` und `/api/auth/*` verlangen `Authorization: Bearer <token>`
 
 ## Architektur
 
