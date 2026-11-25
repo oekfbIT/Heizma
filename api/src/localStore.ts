@@ -80,9 +80,8 @@ const FIELDS: Record<EntityKey, Record<string, Parser>> = {
             .filter((p) => p.length === 2 && p.every(Number.isFinite))
             .map(([lat, lng]) => ({ lat, lng })),
   },
-  appointments: {
-    technicianId: (v) => String(v ?? '').trim(),
-  },
+  // Fixe Termine sind laut Case nicht verschiebbar → bewusst nicht bearbeitbar
+  appointments: {},
 };
 
 export class ValidationError extends Error {}

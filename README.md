@@ -168,7 +168,7 @@ In Produktion würde derselbe Endpunkt ins CRM zurückschreiben – Frontend und
 |---|---|
 | Anfragen | `address`, `lat`, `lng`, `visitationType`, `durationMinutes`, `customerAvailableFrom`, `notes` |
 | Techniker | `name`, `region` (eine Zeile pro Eckpunkt `lat, lng`) |
-| Fixe Termine | `technicianId` (z. B. Umplanung bei gesperrtem Techniker) |
+| Fixe Termine | – (laut Case nicht verschiebbar; Konflikte werden nur gemeldet) |
 
 **Endpunkte**
 
