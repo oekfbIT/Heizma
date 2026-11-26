@@ -44,7 +44,7 @@ function clearSession() {
   window.dispatchEvent(new Event('heizma:logout'));
 }
 
-/** Wird von api.ts bei 401 aufgerufen */
+/** Wird vom ApiService bei 401 aufgerufen */
 export const handleUnauthorized = clearSession;
 
 interface AuthContextValue {

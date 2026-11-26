@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import logo from '@/assets/brand/heizma-logo.png';
-import Icon from '@/components/ui/Icon';
-import { useAuth } from '@/lib/auth';
+import { Icon } from '@/ui';
+import { useAuth } from '@/core/auth';
 
 const NAV = [
   { to: '/stammdaten', label: 'Übersicht', end: true },
@@ -23,7 +23,7 @@ export default function Header() {
   useEffect(() => setOpen(false), [location.pathname]);
 
   return (
-    <header className="sticky top-0 z-[1000] border-b border-gray-200 bg-white">
+    <header className="sticky top-0 z-header border-b border-gray-200 bg-white">
       <div className="mx-auto flex h-[60px] max-w-[1440px] items-center justify-between gap-4 px-4 md:h-[72px] md:px-6 lg:px-10">
         <Link to="/stammdaten" className="flex shrink-0 items-center gap-3" aria-label="Heizma Einsatzplanung">
           <img src={logo} alt="heizma" className="h-7 w-auto md:h-9" />
@@ -46,7 +46,7 @@ export default function Header() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2 md:gap-4">
-          <Link to="/planer" className="btn-primary px-3.5 py-2 text-sm md:px-6 md:py-3 md:text-[15px]">
+          <Link to="/planer" className="btn btn--primary px-3.5 py-2 text-sm md:px-6 md:py-3 md:text-[15px]">
             <Icon name="route" className="h-4 w-4 md:hidden" />
             <span className="md:hidden">Routen</span>
             <span className="hidden md:inline">Routenplanung öffnen</span>

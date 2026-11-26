@@ -1,17 +1,16 @@
 import { Link } from 'react-router-dom';
 import RegionOverview from '@/components/RegionOverview';
-import Icon from '@/components/ui/Icon';
-import { ErrorBox, Loading } from '@/components/ui/PageState';
-import { useApi, type Overview, type Stammdaten } from '@/lib/api';
+import { useCore, useResource } from '@/core';
 import { ENTITIES } from '@/lib/entities';
-import { formatDay, formatMinutes } from '@/lib/format';
-import type { Plan } from '@/lib/types';
+import { formatMinutes } from '@/lib/format';
+import { Badge, ErrorBox, Icon, Loading, Page, PageHeader, cx } from '@/ui';
 
 /** Stammdaten-Übersicht: KPI-Kacheln oben, darunter die Bereiche als Index-Karten */
 export default function StammdatenIndex() {
-  const overview = useApi<Overview>('/api/overview');
-  const stamm = useApi<Stammdaten>('/api/stammdaten');
-  const plan = useApi<Plan>('/api/plan');
+  const { system, routen } = useCore();
+  const overview = useResource(system.overview);
+  const stamm = useResource(system.stammdaten);
+  const plan = useResource(routen.plan);
   if (overview.error || stamm.error) return <ErrorBox message={(overview.error ?? stamm.error)!} onRetry={() => { overview.reload(); stamm.reload(); }} />;
   if (!overview.data || !stamm.data) return <Loading />;
 
@@ -25,40 +24,33 @@ export default function StammdatenIndex() {
     termine: d.appointments.length,
     verfuegbarkeiten: d.availability.length,
   };
+  const blockedDays = d.availability.length - o.technicians.techDays;
   const hints: Record<string, string> = {
-    anfragen: `${o.requests.planned} eingeplant · ${o.requests.open} offen`,
-    techniker: `${o.technicians.available} verfügbar · ${formatMinutes(o.driveMinutes)} Fahrzeit`,
-    termine: 'fix – bleiben, wo sie sind',
-    verfuegbarkeiten: `${o.technicians.techDays} Einsatztage`,
+    anfragen: `Diese Woche: ${o.requests.planned} eingeplant, ${o.requests.open} nicht eingeplant`,
+    techniker: `Diese Woche: ${o.technicians.available} von ${d.technicians.length} verfügbar · ${formatMinutes(o.driveMinutes)} Fahrzeit in allen Routen`,
+    termine: 'Nicht verschiebbar – die Routen werden darum herum geplant',
+    verfuegbarkeiten: `Diese Woche: ${o.technicians.techDays} Arbeitstage${blockedDays > 0 ? `, ${blockedDays} gesperrt (Urlaub, krank)` : ''}`,
   };
 
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Stammdaten</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Planungszeitraum {formatDay(d.range.from)} – {formatDay(d.range.to)} · Datenquelle{' '}
-            <span className={d.source === 'live' ? 'font-medium text-brand-600' : 'font-medium text-amber-600'}>
-              {d.source === 'live' ? 'Heizma Case-Study-API' : 'Mock-Daten (offline)'}
-            </span>
-          </p>
-        </div>
-        <Link to="/planer" className="btn-secondary">
-          <Icon name="route" className="h-4 w-4" /> Zur Routenplanung
-        </Link>
-      </div>
+    <Page>
+      <PageHeader
+        title="Übersicht"
+        subtitle={
+          <>
+            Planungszeitraum {system.periodLabel(d.range)} · Datenquelle{' '}
+            <span className={cx('font-medium', d.source === 'live' ? 'text-brand-600' : 'text-warning-600')}>{system.sourceLabel(d.source)}</span>
+          </>
+        }
+        actions={
+          <Link to="/planer" className="btn btn--secondary">
+            <Icon name="route" className="h-4 w-4" /> Zur Routenplanung
+          </Link>
+        }
+      />
 
-      {/* Ein Raster statt KPI-Kacheln + Index-Karten: jede Zahl genau einmal */}
-      <section className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <IndexCard
-          to="/stammdaten/handlungsbedarf"
-          icon="alert"
-          title="Handlungsbedarf"
-          count={o.actionRequired.total}
-          hint={`${o.actionRequired.technicians} Außendienstler · ${o.actionRequired.requests} Anfragen · ${o.actionRequired.appointments} Termine`}
-          tone={o.actionRequired.total ? 'danger' : undefined}
-        />
+      {/* Eine Karte je Bereich – jede mit eigenem Prüfstatus */}
+      <section className="mt-6 grid gap-3 md:grid-cols-2">
         {ENTITIES.map((e) => (
           <IndexCard
             key={e.slug}
@@ -73,25 +65,27 @@ export default function StammdatenIndex() {
       </section>
 
       {plan.data && <RegionOverview data={d} plan={plan.data} />}
-
-    </main>
+    </Page>
   );
 }
 
-function IndexCard(props: { to: string; icon: string; title: string; count: number; hint: string; issues?: number; tone?: 'danger' }) {
+function IndexCard(props: { to: string; icon: string; title: string; count: number; hint: string; issues?: number }) {
+  // Mit Problemen öffnet die Karte direkt die gefilterte Liste („Nur Probleme“)
   return (
-    <Link to={props.to} className="card group flex items-center gap-4 px-5 py-4 transition hover:border-brand-300">
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${props.tone ? 'bg-red-50 text-red-600' : 'bg-brand-50 text-brand-700'}`}>
+    <Link to={props.issues ? `${props.to}?filter=problems` : props.to} className="card group flex items-center gap-4 px-5 py-4 transition hover:border-brand-300">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700">
         <Icon name={props.icon} />
       </span>
       <div className="min-w-0 flex-1">
         <p className="font-semibold">
-          {props.title} <span className={`font-normal ${props.tone ? 'text-red-600' : 'text-gray-400'}`}>· {props.count}</span>
+          {props.title} <span className="font-normal text-gray-400">· {props.count}</span>
         </p>
         <p className="truncate text-sm text-gray-500">{props.hint}</p>
       </div>
-      {!!props.issues && (
-        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-200">{props.issues} prüfen</span>
+      {props.issues ? (
+        <Badge tone="danger">{props.issues} prüfen</Badge>
+      ) : (
+        <span className="shrink-0 text-xs font-medium text-brand-600">✓ in Ordnung</span>
       )}
       <Icon name="chevron" className="h-4 w-4 text-gray-300 transition group-hover:text-brand-500" />
     </Link>

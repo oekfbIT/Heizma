@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import logo from '@/assets/brand/heizma-logo.png';
-import Icon from '@/components/ui/Icon';
-import { useAuth } from '@/lib/auth';
+import { Alert, Button, Field, Input } from '@/ui';
+import { useAuth } from '@/core/auth';
 
 export default function Login() {
   const { login } = useAuth();
@@ -34,39 +34,38 @@ export default function Login() {
         <h1 className="mb-1 text-xl font-semibold text-ink">Anmelden</h1>
         <p className="mb-6 text-sm text-gray-500">Zugang für die Planung.</p>
 
-        <label className="mb-4 block">
-          <span className="mb-1 block text-sm font-medium text-ink">E-Mail</span>
-          <input
+        <Field label="E-Mail" className="mb-4">
+          <Input
             type="email"
             autoComplete="username"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            className="py-2.5"
             placeholder="name@heizma.at"
           />
-        </label>
+        </Field>
 
-        <label className="mb-6 block">
-          <span className="mb-1 block text-sm font-medium text-ink">Passwort</span>
-          <input
+        <Field label="Passwort" className="mb-6">
+          <Input
             type="password"
             autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            className="py-2.5"
           />
-        </label>
+        </Field>
 
         {error && (
-          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <Alert tone="danger" className="mb-4 rounded-lg px-3 py-2">
+            {error}
+          </Alert>
         )}
 
-        <button type="submit" disabled={busy} className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-[15px] disabled:opacity-60">
-          <Icon name="lock" className="h-4 w-4" />
+        <Button type="submit" variant="primary" block icon="lock" disabled={busy} className="py-3 text-[15px] disabled:opacity-60">
           {busy ? 'Wird angemeldet …' : 'Anmelden'}
-        </button>
+        </Button>
 
         <p className="mt-6 text-center text-xs text-gray-400">Sitzung läuft nach 2 Stunden automatisch ab.</p>
       </form>

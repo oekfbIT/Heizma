@@ -1,4 +1,4 @@
-import type { Stammdaten } from './api';
+import type { Stammdaten } from '@/modules';
 
 /** Grobe Ortsreferenzen (AT + Grenzregionen) – damit Eckpunkte ohne Geocoding lesbar sind */
 const TOWNS: [string, number, number][] = [

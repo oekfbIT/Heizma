@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import type { NoteInfo } from '@/lib/api';
+import type { NoteInfo } from '@/modules';
+import { Alert, Button, Modal } from '@/ui';
 import RequestPlanningCard from '@/components/RequestPlanningCard';
 import { formatDateTime, formatDay, visitationLabel } from '@/lib/format';
 import type { Appointment, DayRoute, PlannedStop, ServiceRequest, Technician } from '@/lib/types';
@@ -22,12 +22,6 @@ interface Props {
 
 /** Alle Informationen zu einem Stopp in einem Dialog */
 export default function StopDetailsModal({ stop, index, route, technician, color, request, appointment, notes, violations, onConfirmNote, onPlanChanged, onClose }: Props) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const insight = notes?.insights.find((i) => i.requestId === stop.id);
   const confirmed = notes?.confirmed[stop.id];
   const constraint = insight && (insight.earliest || insight.latest) ? { earliest: insight.earliest, latest: insight.latest } : null;
@@ -35,11 +29,10 @@ export default function StopDetailsModal({ stop, index, route, technician, color
   const prev = index === 0 ? technician.home.label : route.stops[index - 1].customer;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/30 sm:items-center sm:p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
+    <Modal onClose={onClose} padded={false} className="max-h-[90vh] rounded-t-2xl border-0 shadow-2xl sm:rounded-2xl">
         {/* Kopf */}
         <div className="flex items-start gap-3 border-b border-gray-100 p-5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-semibold text-white" style={{ background: stop.fixed ? '#20242d' : color }}>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-semibold text-white" style={{ background: stop.fixed ? 'rgb(var(--color-ink))' : color }}>
             {index + 1}
           </span>
           <div className="min-w-0 flex-1">
@@ -66,14 +59,14 @@ export default function StopDetailsModal({ stop, index, route, technician, color
           )}
 
           {violations.length > 0 && (
-            <div className="rounded-lg bg-red-50 p-3 text-red-700">
+            <Alert tone="danger" className="rounded-lg border-0 p-3">
               <p className="font-semibold">Regelverstoß</p>
               {violations.map((v) => (
                 <p key={v} className="text-xs">
                   {v}
                 </p>
               ))}
-            </div>
+            </Alert>
           )}
 
           <Section title="Zeitplan">
@@ -85,7 +78,7 @@ export default function StopDetailsModal({ stop, index, route, technician, color
             </Row>
             <Row label="Anfahrt">
               von {prev} · {stop.travelEstimated ? 'ca. ' : ''}
-              {stop.travelMinutes} min {stop.travelEstimated && <span className="text-amber-600">(geschätzt)</span>}
+              {stop.travelMinutes} min {stop.travelEstimated && <span className="text-warning-600">(geschätzt)</span>}
             </Row>
             <Row label="Ankunft">{stop.arrival}</Row>
             {stop.waitMinutes > 0 && <Row label="Wartezeit">{stop.waitMinutes} min vor Ort</Row>}
@@ -106,8 +99,8 @@ export default function StopDetailsModal({ stop, index, route, technician, color
             <Section title="Notiz aus dem Vertrieb">
               <p className="rounded-lg bg-gray-50 p-3 italic text-gray-700">„{request.notes}“</p>
               {insight && (
-                <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/50 p-3 text-xs">
-                  <p className="text-violet-800">
+                <div className="mt-2 rounded-lg border border-accent-200 bg-accent-50/50 p-3 text-xs">
+                  <p className="text-accent-800">
                     <strong>{insight.source === 'claude' ? '✦ KI-Hinweis' : 'Erkannter Hinweis'}:</strong> {insight.hint}
                   </p>
                   {constraint && (
@@ -115,12 +108,9 @@ export default function StopDetailsModal({ stop, index, route, technician, color
                       <span className="text-gray-600">
                         {confirmed ? `Wird als feste Regel geplant: ${constraintLabel}.` : `Als feste Regel übernehmen (${constraintLabel})? Der Plan wird danach neu berechnet.`}
                       </span>
-                      <button
-                        onClick={() => onConfirmNote(stop.id, confirmed ? null : constraint)}
-                        className={confirmed ? 'btn-secondary shrink-0 !px-3 !py-1 text-xs' : 'shrink-0 rounded-lg bg-violet-600 px-3 py-1 text-xs font-semibold text-white hover:bg-violet-700'}
-                      >
+                      <Button size="sm" variant={confirmed ? 'secondary' : 'accent'} className="shrink-0 px-3 py-1" onClick={() => onConfirmNote(stop.id, confirmed ? null : constraint)}>
                         {confirmed ? 'Zurücknehmen' : 'Übernehmen'}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -138,15 +128,14 @@ export default function StopDetailsModal({ stop, index, route, technician, color
         </div>
 
         <div className="flex gap-2 border-t border-gray-100 p-4">
-          <a className="btn-secondary flex-1" href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`} target="_blank" rel="noreferrer">
+          <a className="btn btn--secondary flex-1" href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`} target="_blank" rel="noreferrer">
             In Google Maps öffnen
           </a>
-          <button className="btn-primary flex-1" onClick={onClose}>
+          <Button variant="primary" className="flex-1" onClick={onClose}>
             Fertig
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -18,13 +18,6 @@ export function formatDateTime(iso: string): string {
   return m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}` : iso;
 }
 
-/** Feste Farbpalette pro Techniker (Karte + Sidebar) */
-const ROUTE_COLORS = ['#4da547', '#1a73e8', '#e8710a', '#9334e6', '#d93025', '#12b5cb', '#f9ab00', '#5f6368'];
-export function technicianColor(technicianId: string, ids: string[]): string {
-  const index = Math.max(0, ids.indexOf(technicianId));
-  return ROUTE_COLORS[index % ROUTE_COLORS.length];
-}
-
 export const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 
 export function worstSeverity(issues: Issue[]): Severity | null {

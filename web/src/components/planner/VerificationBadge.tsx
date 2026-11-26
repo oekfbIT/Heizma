@@ -14,15 +14,15 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
       <button
         onClick={() => setOpen(!open)}
         className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition ${
-          v.ok ? 'bg-brand-50 text-brand-700 hover:bg-brand-100' : 'bg-red-50 text-red-700 hover:bg-red-100'
+          v.ok ? 'bg-brand-50 text-brand-700 hover:bg-brand-100' : 'bg-danger-50 text-danger-700 hover:bg-danger-100'
         }`}
       >
         {v.ok ? '✓ 0 Regelverstöße' : `⚠ ${v.totalViolations} Regelverstöße`}
         <span className="font-normal opacity-70">· {v.rules.length} Regeln</span>
-        {exceptions.length > 0 && <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-amber-800">{exceptions.length} Ausnahme{exceptions.length === 1 ? '' : 'n'}</span>}
+        {exceptions.length > 0 && <span className="ml-1 rounded-full bg-warning-100 px-1.5 text-warning-800">{exceptions.length} Ausnahme{exceptions.length === 1 ? '' : 'n'}</span>}
       </button>
       {open && (
-        <div className="absolute left-0 top-8 z-[1000] w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-4 text-left shadow-xl">
+        <div className="absolute left-0 top-8 z-header w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-4 text-left shadow-xl">
           <p className="text-sm font-semibold">Unabhängige Plan-Prüfung</p>
           <p className="mb-3 text-xs text-gray-500">
             {checks} Einzelprüfungen gegen die Regeln der Aufgabenstellung – unabhängig vom Planungsalgorithmus nachgerechnet, mit denselben Fahrzeiten.
@@ -31,7 +31,7 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
             {v.rules.map((r) => (
               <li key={r.rule} className="text-xs">
                 <div className="flex items-start gap-2">
-                  <span className={r.violations.length ? 'text-red-600' : 'text-brand-600'}>{r.violations.length ? '✕' : '✓'}</span>
+                  <span className={r.violations.length ? 'text-danger-600' : 'text-brand-600'}>{r.violations.length ? '✕' : '✓'}</span>
                   <span className="flex-1 text-gray-700">{r.label}</span>
                   <span className="tabular-nums text-gray-400">{r.checks}</span>
                 </div>
@@ -39,7 +39,7 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
                   <button
                     key={i}
                     onClick={() => x.technicianId && x.date && onSelect?.(x.technicianId, x.date)}
-                    className="ml-5 block text-left text-[11px] text-red-600 hover:underline"
+                    className="ml-5 block text-left text-[11px] text-danger-600 hover:underline"
                   >
                     {x.date ? `${x.date} · ` : ''}
                     {x.message}
@@ -50,12 +50,12 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
           </ul>
           {exceptions.length > 0 && (
             <div className="mt-3 space-y-1 border-t border-gray-100 pt-3">
-              <p className="text-xs font-semibold text-amber-800">Bewusste Ausnahmen des Planers</p>
+              <p className="text-xs font-semibold text-warning-800">Bewusste Ausnahmen des Planers</p>
               {exceptions.map((e, i) => (
                 <button
                   key={i}
                   onClick={() => e.technicianId && e.date && onSelect?.(e.technicianId, e.date)}
-                  className="block text-left text-[11px] text-amber-700 hover:underline"
+                  className="block text-left text-[11px] text-warning-700 hover:underline"
                 >
                   ◆ {e.date ? `${e.date} · ` : ''}
                   {e.message} – „{e.reason}“

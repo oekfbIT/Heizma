@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Stammdaten } from '@/lib/api';
+import type { Stammdaten } from '@/modules';
 import { nearestPlace, placeIndex } from '@/lib/placeLabel';
 
 interface Point { lat: string; lng: string }
@@ -31,13 +31,13 @@ export default function PolygonEditor({
 
   return (
     <div className="space-y-2">
-      {points.length === 0 && <div className="input bg-gray-50 text-gray-400">— kein Einsatzgebiet —</div>}
+      {points.length === 0 && <div className="input input--readonly text-gray-400">— kein Einsatzgebiet —</div>}
       {points.map((p, i) => {
         const ok = valid(p);
         return (
           <div key={i} className="flex items-center gap-2">
             <span className="w-6 shrink-0 text-right text-xs tabular-nums text-gray-400">{i + 1}</span>
-            <div className={`input flex flex-1 items-center gap-2 ${ok ? '' : 'border-red-400 bg-red-50/50'} ${className}`}>
+            <div className={`input flex flex-1 items-center gap-2 ${ok ? '' : 'input--error'} ${className}`}>
               <input
                 className="w-24 bg-transparent tabular-nums outline-none"
                 value={p.lat} placeholder="lat" inputMode="decimal" readOnly={readOnly}
@@ -56,7 +56,7 @@ export default function PolygonEditor({
             {!readOnly && (
               <button
                 type="button" title="Eckpunkt entfernen"
-                className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                className="rounded-lg p-2 text-gray-400 hover:bg-danger-50 hover:text-danger-600"
                 onClick={() => set(points.filter((_, j) => j !== i))}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -69,11 +69,11 @@ export default function PolygonEditor({
       })}
       <div className="flex items-center justify-between pl-8">
         {!readOnly ? (
-          <button type="button" className="btn-secondary text-sm" onClick={() => set([...points, { lat: '', lng: '' }])}>
+          <button type="button" className="btn btn--secondary" onClick={() => set([...points, { lat: '', lng: '' }])}>
             + Eckpunkt hinzufügen
           </button>
         ) : <span />}
-        {points.length > 0 && points.length < 3 && <span className="text-xs text-amber-600">Mindestens 3 Eckpunkte für ein Gebiet</span>}
+        {points.length > 0 && points.length < 3 && <span className="text-xs text-warning-600">Mindestens 3 Eckpunkte für ein Gebiet</span>}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import type { Stammdaten } from '@/lib/api';
+import type { Stammdaten } from '@/modules';
 import { formatDay } from '@/lib/format';
 
 const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -16,7 +16,7 @@ export default function AvailabilityWeek({ data, technicianId }: { data: Stammda
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50/50 px-4 py-3 text-sm text-red-700">
+      <div className="rounded-xl border border-danger-200 bg-danger-50/50 px-4 py-3 text-sm text-danger-700">
         Für diese Woche ist keine Verfügbarkeit eingetragen – die Person wird nicht eingeplant.
       </div>
     );
@@ -30,7 +30,7 @@ export default function AvailabilityWeek({ data, technicianId }: { data: Stammda
           const free = a && !a.blocked;
           return (
             <div key={date} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${free ? 'bg-brand-500' : a ? 'bg-amber-400' : 'bg-gray-300'}`} />
+              <span className={`h-2 w-2 shrink-0 rounded-full ${free ? 'bg-brand-500' : a ? 'bg-warning-400' : 'bg-gray-300'}`} />
               <span className="w-24 font-medium">{formatDay(date)}</span>
               {free ? (
                 <>
@@ -38,7 +38,7 @@ export default function AvailabilityWeek({ data, technicianId }: { data: Stammda
                   <span className="ml-auto text-gray-400">{hours(toMin(a.end) - toMin(a.start))}</span>
                 </>
               ) : a ? (
-                <span className="text-amber-700">Abwesend</span>
+                <span className="text-warning-700">Abwesend</span>
               ) : (
                 <span className="text-gray-400">Nicht verfügbar</span>
               )}

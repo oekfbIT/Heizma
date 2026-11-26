@@ -9,4 +9,6 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test -w api
+      - run: npm run check:architecture
+      - run: npm run test:coverage
+      - run: npm run build

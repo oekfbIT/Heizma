@@ -2,8 +2,9 @@ import polyline from '@mapbox/polyline';
 import L from 'leaflet';
 import { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
-import type { RouteGeometry } from '@/lib/api';
+import type { RouteGeometry } from '@/modules';
 import type { DayRoute, Technician } from '@/lib/types';
+import { mapColors } from '@/ui';
 import StopPopover from './StopPopover';
 
 export interface RouteMapProps {
@@ -33,8 +34,8 @@ function stopIcon(label: string, color: string, active: boolean, fixed: boolean)
     iconAnchor: [size / 2, size / 2],
     // Fixer Termin = dunkles Quadrat mit Schloss · neu eingeplante Anfrage = Kreis in Technikerfarbe
     html: fixed
-      ? `<div style="position:relative;width:${size}px;height:${size}px;background:#20242d;border:3px solid ${active ? '#66b55f' : '#fff'};border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font:600 12px Inter,sans-serif">${label}<span style="position:absolute;right:-8px;top:-8px;width:16px;height:16px;border-radius:9999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#20242d" stroke-width="3"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span></div>`
-      : `<div style="width:${size}px;height:${size}px;background:${color};border:3px solid #fff;border-radius:9999px;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font:600 12px Inter,sans-serif">${label}</div>`,
+      ? `<div style="position:relative;width:${size}px;height:${size}px;background:rgb(var(--color-ink));border:3px solid ${active ? 'rgb(var(--color-brand-400))' : 'rgb(var(--color-white))'};border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:rgb(var(--color-white));font:600 12px Inter,sans-serif">${label}<span style="position:absolute;right:-8px;top:-8px;width:16px;height:16px;border-radius:9999px;background:rgb(var(--color-white));box-shadow:0 1px 3px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" style="stroke:rgb(var(--color-ink))" stroke-width="3"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span></div>`
+      : `<div style="width:${size}px;height:${size}px;background:${color};border:3px solid rgb(var(--color-white));border-radius:9999px;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:rgb(var(--color-white));font:600 12px Inter,sans-serif">${label}</div>`,
   });
 }
 
@@ -44,7 +45,7 @@ function homeIcon(color: string, active: boolean) {
     className: 'marker-reset',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
-    html: `<div style="width:${size}px;height:${size}px;background:#fff;border:3px solid ${color};border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>`,
+    html: `<div style="width:${size}px;height:${size}px;background:rgb(var(--color-white));border:3px solid ${color};border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>`,
   });
 }
 
@@ -52,7 +53,7 @@ const officeIcon = L.divIcon({
   className: 'marker-reset',
   iconSize: [30, 38],
   iconAnchor: [15, 36],
-  html: `<svg width="30" height="38" viewBox="0 0 32 40"><path d="M16 1C16 1 3 16 3 24a13 13 0 0 0 26 0C29 16 16 1 16 1z" fill="#4DA547" stroke="#fff" stroke-width="2"/><text x="16" y="29" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="700" fill="#fff">H</text></svg>`,
+  html: `<svg width="30" height="38" viewBox="0 0 32 40"><path d="M16 1C16 1 3 16 3 24a13 13 0 0 0 26 0C29 16 16 1 16 1z" style="fill:rgb(var(--color-brand-500));stroke:rgb(var(--color-white))" stroke-width="2"/><text x="16" y="29" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="700" style="fill:rgb(var(--color-white))">H</text></svg>`,
 });
 
 /**
@@ -148,7 +149,7 @@ export default function LeafletRouteMap(props: RouteMapProps & { tileUrl: string
           <Marker
             key={t.id}
             position={[t.home.lat, t.home.lng]}
-            icon={homeIcon(colors[t.id] ?? '#9ca3af', t.id === selectedId)}
+            icon={homeIcon(colors[t.id] ?? mapColors().muted, t.id === selectedId)}
             opacity={dimmed ? 0.35 : hasRoute ? 1 : 0.5}
             eventHandlers={{ click: () => props.onSelect(t.id) }}
           >

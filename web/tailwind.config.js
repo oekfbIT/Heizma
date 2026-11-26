@@ -1,29 +1,42 @@
 /** @type {import('tailwindcss').Config} */
-// Farben & Schrift an heizma.at angelehnt (Grün #4DA547, Text #20242D, Inter)
+// Alle Farben kommen aus den Design-Tokens (src/ui/styles/tokens.css).
+// Hier werden sie nur auf Tailwind-Namen abgebildet – Werte ändert man in tokens.css.
+const scale = (name) =>
+  Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map((s) => [s, `rgb(var(--color-${name}-${s}) / <alpha-value>)`]));
+
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  // ui/components setzen Varianten dynamisch (`btn--${variant}`) → nicht aus dem Code erkennbar
+  safelist: [{ pattern: /^(btn|badge|alert|input|field-message)--/ }],
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#f1f8f0',
-          100: '#ddefdb',
-          200: '#bcdfb8',
-          300: '#90c98a',
-          400: '#66b55f',
-          500: '#4da547',
-          600: '#3d8a38',
-          700: '#326d2f',
-          800: '#2b5729',
-          900: '#244824',
-        },
-        ink: '#20242d',
+        ink: 'rgb(var(--color-ink) / <alpha-value>)',
+        white: 'rgb(var(--color-white) / <alpha-value>)',
+        brand: scale('brand'),
+        gray: scale('gray'),
+        // Semantische Farben statt red/amber/sky/violet
+        danger: scale('danger'),
+        warning: scale('warning'),
+        info: scale('info'),
+        accent: scale('accent'),
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans)'],
+      },
+      borderRadius: {
+        control: 'var(--radius-control)',
+        card: 'var(--radius-card)',
       },
       boxShadow: {
-        card: '0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06)',
+        card: 'var(--shadow-card)',
+      },
+      zIndex: {
+        'map-overlay': 'var(--z-map-overlay)',
+        sidebar: 'var(--z-sidebar)',
+        floating: 'var(--z-floating)',
+        header: 'var(--z-header)',
+        modal: 'var(--z-modal)',
       },
     },
   },

@@ -10,7 +10,11 @@
   "scripts": {
     "dev": "concurrently -n api,web -c green,blue \"npm run dev -w api\" \"npm run dev -w web\"",
     "build": "npm run build -w api && npm run build -w web",
-    "typecheck": "npm run typecheck -w api && npm run typecheck -w web"
+    "typecheck": "npm run typecheck -w api && npm run typecheck -w web",
+    "test": "npm test -w api && npm test -w web",
+    "test:coverage": "npm run test:coverage -w api && npm run test:coverage -w web",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "check": "npm run typecheck && npm run check:architecture && npm test"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

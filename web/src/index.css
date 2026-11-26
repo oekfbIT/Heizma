@@ -1,35 +1,8 @@
+/* Reihenfolge: Fremd-CSS → Design-Tokens → Komponenten (landen per @layer an der richtigen Stelle) */
 @import 'leaflet/dist/leaflet.css';
+@import './ui/styles/tokens.css';
+@import './ui/styles/components.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@layer components {
-  .card {
-    @apply rounded-xl border border-gray-200 bg-white shadow-card;
-  }
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
-  }
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-ink transition hover:bg-gray-50;
-  }
-  .input {
-    @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
-  }
-}
-
-/* Leaflet: eigene Marker (divIcon) ohne Standard-Hintergrund */
-.leaflet-div-icon.marker-reset {
-  background: transparent;
-  border: none;
-}
-.leaflet-tooltip.stop-tooltip {
-  @apply rounded-lg border border-gray-200 px-3 py-2 font-sans text-xs text-ink shadow-lg;
-}
-/* Ausgewählter Stopp: Popover mit etwas mehr Luft, Text darf umbrechen */
-.leaflet-tooltip.stop-popover {
-  @apply rounded-xl p-3 shadow-xl;
-  white-space: normal;
-  pointer-events: auto;
-}

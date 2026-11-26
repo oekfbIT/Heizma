@@ -1,4 +1,4 @@
-import { useApi, type AppConfig } from '@/lib/api';
+import { useCore, useResource } from '@/core';
 import GoogleRouteMap from './GoogleRouteMap';
 import LeafletRouteMap, { type RouteMapProps } from './LeafletRouteMap';
 
@@ -8,7 +8,7 @@ import LeafletRouteMap, { type RouteMapProps } from './LeafletRouteMap';
  * - sonst Leaflet mit freien Kacheln (funktioniert ohne Key)
  */
 export default function RouteMap(props: RouteMapProps) {
-  const { data } = useApi<AppConfig>('/api/config');
+  const { data } = useResource(useCore().system.config);
   if (!data) return <div className="h-full w-full bg-gray-100" />;
   const map = data.map;
   return (
@@ -21,4 +21,3 @@ export default function RouteMap(props: RouteMapProps) {
     </div>
   );
 }
-

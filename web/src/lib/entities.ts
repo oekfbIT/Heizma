@@ -1,4 +1,4 @@
-import type { Stammdaten } from './api';
+import type { Stammdaten } from '@/modules';
 import { formatDateTime } from './format';
 import type { EntityKind } from './types';
 

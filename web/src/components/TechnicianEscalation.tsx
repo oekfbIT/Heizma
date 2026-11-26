@@ -1,13 +1,9 @@
 import { useState } from 'react';
-import Icon from '@/components/ui/Icon';
-import { apiSend, useApi, type Escalation, type Stammdaten } from '@/lib/api';
-import { formatDay } from '@/lib/format';
+import { useCore, useResource } from '@/core';
 import { regionLabel } from '@/lib/regions';
-import type { Issue, Plan, ServiceRequest, Technician } from '@/lib/types';
-
-type Target = 'techniker' | 'vertrieb';
-
-const city = (address: string) => address.split(',').pop()?.trim() ?? address;
+import type { Issue, ServiceRequest, Technician } from '@/lib/types';
+import { cityOf as city, type EscalationTarget as Target, type Stammdaten } from '@/modules';
+import { Button, Card, Icon, Modal, Textarea } from '@/ui';
 const km = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
   const r = (x: number) => (x * Math.PI) / 180;
   const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
@@ -29,7 +25,8 @@ interface Props {
  * Simuliert – Nachricht wird gespeichert, nicht versendet.
  */
 export default function TechnicianEscalation({ technician, issues, data }: Props) {
-  const plan = useApi<Plan>('/api/plan');
+  const core = useCore();
+  const plan = useResource(core.routen.plan);
   const [compose, setCompose] = useState<Target | null>(null);
   const relevant = issues.filter((i) => ESCALATE_CODES.includes(i.code));
   if (!relevant.length) return null;
@@ -45,7 +42,7 @@ export default function TechnicianEscalation({ technician, issues, data }: Props
   });
 
   const region = regionLabel(technician);
-  const week = `${formatDay(data.range.from)} – ${formatDay(data.range.to)}`;
+  const week = core.system.periodLabel(data.range);
   const list = affected.map((r) => `• ${r.id} · ${r.customer} · ${city(r.address)}`).join('\n') || '• (keine offenen Anfragen gefunden)';
   const reason = noAvailability ? 'keine Verfügbarkeit eingetragen' : 'kein Einsatzgebiet hinterlegt';
 
@@ -93,13 +90,12 @@ Wir brauchen eine Lösung:
     },
   };
 
-  const key = (t: Target) => `technicians:${technician.id}:${t}`;
-  const sent = (t: Target): Escalation | undefined => data.escalations?.[key(t)];
+  const sent = (t: Target) => data.escalations?.[`technicians:${technician.id}:${t}`];
 
   return (
-    <div className="card mt-4 p-4 md:p-5">
+    <Card className="mt-4 p-4 md:p-5">
       <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning-50 text-warning-600">
           <Icon name="alert" className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -124,23 +120,15 @@ Wir brauchen eine Lösung:
               </span>
               <button
                 className="text-xs font-medium text-brand-700 underline"
-                onClick={async () => {
-                  await apiSend(`/api/escalations/technicians/${technician.id}/${t}`, 'DELETE');
-                  window.dispatchEvent(new Event('heizma:data-changed'));
-                }}
+                onClick={() => void core.withdrawTechnicianEscalation(technician.id, t)}
               >
                 Rückgängig
               </button>
             </div>
           ) : (
-            <button
-              key={t}
-              onClick={() => setCompose(t)}
-              className={t === 'techniker' ? 'btn-primary w-full' : 'btn-secondary w-full'}
-              disabled={!plan.data}
-            >
+            <Button key={t} block variant={t === 'techniker' ? 'primary' : 'secondary'} onClick={() => setCompose(t)} disabled={!plan.data}>
               {texts[t].button}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -153,17 +141,16 @@ Wir brauchen eine Lösung:
           submitLabel={compose === 'techniker' ? 'Als gesendet markieren' : 'Eskalieren'}
           onClose={() => setCompose(null)}
           onSubmit={async (message) => {
-            await apiSend(`/api/escalations/technicians/${technician.id}/${compose}`, 'POST', {
+            await core.escalateTechnician(technician.id, compose, {
               recipient: texts[compose].recipient,
               message,
               affectedRequests: affected.map((r) => r.id),
             });
             setCompose(null);
-            window.dispatchEvent(new Event('heizma:data-changed'));
           }}
         />
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -171,36 +158,33 @@ function ComposeDialog(props: { title: string; recipient: string; initial: strin
   const [message, setMessage] = useState(props.initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await props.onSubmit(message);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
-    <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/30 sm:items-center sm:p-4" onClick={props.onClose}>
-      <div className="card max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-b-none p-5 sm:rounded-b-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">An: {props.recipient}</p>
-        <h2 className="mt-1 text-lg font-semibold">{props.title}</h2>
-        <textarea rows={13} className="input mt-4" value={message} onChange={(e) => setMessage(e.target.value)} />
-        <p className="mt-2 text-xs text-gray-400">Prototyp: Die Nachricht wird gespeichert und markiert, nicht versendet.</p>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-          <button className="btn-secondary" onClick={props.onClose}>
-            Abbrechen
-          </button>
-          <button
-            className="btn-primary"
-            disabled={saving}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await props.onSubmit(message);
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
+    <Modal
+      onClose={props.onClose}
+      eyebrow={`An: ${props.recipient}`}
+      title={props.title}
+      footer={
+        <>
+          <Button onClick={props.onClose}>Abbrechen</Button>
+          <Button variant="primary" disabled={saving} onClick={() => void submit()}>
             {saving ? 'Wird gespeichert …' : props.submitLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <Textarea rows={13} className="mt-4" value={message} onChange={(e) => setMessage(e.target.value)} />
+      <p className="mt-2 text-xs text-gray-400">Prototyp: Die Nachricht wird gespeichert und markiert, nicht versendet.</p>
+      {error && <p className="mt-2 text-sm text-danger-600">{error}</p>}
+    </Modal>
   );
 }

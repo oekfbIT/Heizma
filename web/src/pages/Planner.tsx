@@ -7,23 +7,26 @@ import StopDetailsModal from '@/components/planner/StopDetailsModal';
 import StopTimeline from '@/components/planner/StopTimeline';
 import TechnicianCell from '@/components/planner/TechnicianCell';
 import VerificationBadge from '@/components/planner/VerificationBadge';
-import Icon from '@/components/ui/Icon';
-import RegionFilter from '@/components/ui/RegionFilter';
-import { ErrorBox, Loading } from '@/components/ui/PageState';
-import { apiGet, apiSend, downloadFile, reloadData, useApi, type Meta, type NoteInfo, type RouteGeometry, type Stammdaten } from '@/lib/api';
-import { formatDay, formatMinutes, technicianColor } from '@/lib/format';
-import { NO_REGION, regionLabel, requestInRegion, useRegion } from '@/lib/regions';
-import type { Plan } from '@/lib/types';
+import RegionFilter from '@/components/stammdaten/RegionFilter';
+import { useCore, useResource } from '@/core';
+import { formatDay, formatMinutes } from '@/lib/format';
+import { NO_REGION, regionLabel, useRegion } from '@/lib/regions';
+import { ROUTE_LEVEL, type RouteGeometry } from '@/modules';
+import { Alert, Button, ErrorBox, Icon, IconButton, Loading } from '@/ui';
 
 /**
  * Planer in drei Schritten: 1. Tag wählen → 2. Routen prüfen → 3. freigeben.
  * Links die Liste, rechts die Karte. Klick auf einen Stopp zoomt hin und öffnet das Popover.
  */
 export default function Planner() {
-  const plan = useApi<Plan>('/api/plan');
-  const stamm = useApi<Stammdaten>('/api/stammdaten');
-  const meta = useApi<Meta>('/api/meta');
-  const notes = useApi<NoteInfo>('/api/notes');
+  const core = useCore();
+  const { routen, techniker, anfragen, termine } = core;
+  const plan = useResource(routen.plan);
+  const team = useResource(techniker.data);
+  const requests = useResource(anfragen.data);
+  useResource(termine.data);
+  const meta = useResource(core.system.meta);
+  const notes = useResource(anfragen.notes);
 
   const [day, setDay] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -37,7 +40,8 @@ export default function Planner() {
   // Mobil: Liste und Karte im Wechsel (Karte bleibt gemountet, damit sie sauber rendert)
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
 
-  const days = useMemo(() => [...new Set(stamm.data?.availability.map((a) => a.date) ?? [])].sort(), [stamm.data]);
+  // Neu berechnen, sobald die Außendienst-Daten da sind
+  const days = useMemo(() => techniker.days(), [techniker, team.data]);
   useEffect(() => {
     if (!day && days.length) setDay(days[0]);
   }, [day, days]);
@@ -46,61 +50,40 @@ export default function Planner() {
   useEffect(() => {
     setGeometry(null);
     if (!selectedId || !day) return;
-    apiGet<RouteGeometry>(`/api/plan/${selectedId}/${day}/geometry`).then(setGeometry).catch(() => setGeometry(null));
-  }, [selectedId, day]);
+    routen.geometry(selectedId, day).then(setGeometry).catch(() => setGeometry(null));
+  }, [routen, selectedId, day]);
 
-  if (plan.error || stamm.error) return <ErrorBox message={(plan.error ?? stamm.error)!} onRetry={() => { plan.reload(); stamm.reload(); }} />;
-  if (!plan.data || !stamm.data || !day) return <Loading label="Routenplanung wird berechnet …" />;
+  const loadError = plan.error ?? team.error ?? requests.error;
+  if (loadError) return <ErrorBox message={loadError} onRetry={() => { plan.reload(); team.reload(); requests.reload(); }} />;
+  if (!plan.data || !team.data || !requests.data || !day) return <Loading label="Routenplanung wird berechnet …" />;
 
   const p = plan.data;
-  const d = stamm.data;
-  const techIds = d.technicians.map((t) => t.id);
-  const colors = Object.fromEntries(techIds.map((id) => [id, technicianColor(id, techIds)]));
+  const technicians = techniker.list();
+  const colors = techniker.colors();
   const inRegion = (techId: string) => !region || (region !== NO_REGION && techId === region);
-  const visibleTechs = d.technicians.filter((t) => inRegion(t.id));
-  const routesOf = (date: string) => p.routes.filter((r) => r.date === date && inRegion(r.technicianId));
-  const dayRoutes = routesOf(day);
-  const waitlist = p.unassigned.filter((u) => requestInRegion(d, u.requestId, region));
+  const visibleTechs = technicians.filter((t) => inRegion(t.id));
+  const dayRoutes = routen.routesOn(p, day, inRegion);
+  const waitlist = p.unassigned.filter((u) => anfragen.inRegion(u.requestId, region));
   const selectedRoute = dayRoutes.find((r) => r.technicianId === selectedId);
-  const selectedTech = d.technicians.find((t) => t.id === selectedId);
+  const selectedTech = selectedId ? techniker.byId(selectedId) : undefined;
+  const violationsFor = (techId: string, date = day) => routen.violationsFor(p, techId, date);
 
-  const allViolations = (p.verification?.rules ?? []).flatMap((r) => r.violations);
-  const violationsFor = (techId: string, date = day) => {
-    const m = new Map<string, string[]>();
-    for (const v of allViolations) {
-      if (v.technicianId !== techId || v.date !== date) continue;
-      const k = v.stopId ?? '__route';
-      m.set(k, [...(m.get(k) ?? []), v.message]);
-    }
-    return m;
-  };
-  const statusFor = (techId: string): 'available' | 'blocked' | 'none' => {
-    const entry = d.availability.find((a) => a.technicianId === techId && a.date === day);
-    if (!entry) return 'none';
-    return entry.blocked ? 'blocked' : 'available';
-  };
-
-  // ---- Aktionen ----
+  // ---- Aktionen: der CoreInteractor lädt danach alles Sichtbare neu ----
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
     try {
       await fn();
-      plan.reload();
-      stamm.reload();
-      notes.reload();
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
-  const routeKey = (techId: string) => `${techId}@${day}`;
-  const toggleApproval = (techId: string, approved: boolean) =>
-    run(() => apiSend('/api/approvals', approved ? 'DELETE' : 'POST', { keys: [routeKey(techId)] }));
+  const toggleApproval = (techId: string, approved: boolean) => run(() => core.approveRoute(techId, day, approved));
   const openRoutes = dayRoutes.filter((r) => r.stops.length && !r.approved);
-  const approveDay = () => run(() => apiSend(`/api/approvals?date=${day}`, 'POST', {}));
-  const confirmNote = (requestId: string, c: { earliest?: string; latest?: string } | null) => run(() => apiSend(`/api/notes/${requestId}/confirm`, 'POST', c ?? {}));
+  const approveDay = () => run(() => core.approveDay(day));
+  const confirmNote = (requestId: string, c: { earliest?: string; latest?: string } | null) => run(() => core.confirmNote(requestId, c));
 
   const selectTech = (techId: string | null) => {
     setSelectedId(techId);
@@ -115,44 +98,30 @@ export default function Planner() {
   // Details-Dialog
   const detailsRoute = detailsStopId ? p.routes.find((r) => r.stops.some((s) => s.id === detailsStopId)) : null;
   const detailsIndex = detailsRoute ? detailsRoute.stops.findIndex((s) => s.id === detailsStopId) : -1;
-  const detailsTech = detailsRoute ? d.technicians.find((t) => t.id === detailsRoute.technicianId) : null;
+  const detailsTech = detailsRoute ? techniker.byId(detailsRoute.technicianId) : null;
 
-  const dayStatus = (date: string) => {
-    const rs = routesOf(date).filter((r) => r.stops.length);
-    const approved = rs.filter((r) => r.approved).length;
-    return { total: rs.length, approved, done: rs.length > 0 && approved === rs.length };
-  };
+  const dayStatus = (date: string) => routen.dayStatus(p, date, inRegion);
   const today = dayStatus(day);
 
   return (
     <div className="relative flex h-[calc(100dvh-60px)] overflow-hidden md:h-[calc(100vh-72px)]">
       {/* ---------- Sidebar ---------- */}
       <aside
-        className={`${mobileView === 'list' ? 'flex' : 'hidden'} absolute inset-0 z-[850] w-full flex-col bg-white md:relative md:z-auto md:flex md:w-[420px] md:shrink-0 md:border-r md:border-gray-200`}
+        className={`${mobileView === 'list' ? 'flex' : 'hidden'} absolute inset-0 z-sidebar w-full flex-col bg-white md:relative md:z-auto md:flex md:w-[420px] md:shrink-0 md:border-r md:border-gray-200`}
       >
         {/* Kopf: was ist der Stand? */}
         <div className="border-b border-gray-100 px-4 pb-3 pt-4 md:px-5">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold">Routenplanung</h1>
-            <button
-              className="text-gray-400 transition hover:text-brand-600"
-              title="Daten neu laden und neu planen"
-              onClick={async () => {
-                await reloadData();
-                plan.reload();
-                stamm.reload();
-              }}
-            >
-              <Icon name="refresh" className="h-4 w-4" />
-            </button>
+            <IconButton icon="refresh" label="Daten neu laden und neu planen" onClick={() => void run(() => core.reloadAll())} />
           </div>
           <button
-            className="mt-1 text-[11px] font-medium text-gray-400 underline-offset-2 transition hover:text-red-600 hover:underline disabled:opacity-50"
+            className="mt-1 text-[11px] font-medium text-gray-400 underline-offset-2 transition hover:text-danger-600 hover:underline disabled:opacity-50"
             title="Nur für Tests: Freigaben, Planer-Entscheidungen, bestätigte Notizen und Eskalationen löschen. Datenkorrekturen bleiben erhalten."
             disabled={busy}
             onClick={() => {
               if (!window.confirm('Planungsstand zurücksetzen?\n\nAlle Freigaben, Planer-Entscheidungen, bestätigten Notizen und Eskalationen werden gelöscht. Datenkorrekturen bleiben erhalten.')) return;
-              void run(() => apiSend('/api/local-db/reset?scope=planning', 'POST', {}));
+              void run(() => core.resetPlanning());
             }}
           >
             Test: Planungsstand zurücksetzen
@@ -191,14 +160,14 @@ export default function Planner() {
                 >
                   <span className="block font-semibold">{formatDay(date)}</span>
                   <span className={active ? 'text-white/85' : st.done ? 'font-medium text-brand-600' : 'text-gray-400'}>
-                    {st.total === 0 ? 'keine Routen' : st.done ? '✓ erledigt' : `${st.total - st.approved} offen`}
+                    {routen.dayStatusLabel(st)}
                   </span>
                 </button>
               );
             })}
           </div>
           <div className="mt-2">
-            <RegionFilter compact technicians={d.technicians} colors={colors} value={region} onChange={(v) => { setRegion(v); selectTech(null); }} />
+            <RegionFilter compact technicians={technicians} colors={colors} value={region} onChange={(v) => { setRegion(v); selectTech(null); }} />
           </div>
         </div>
 
@@ -206,7 +175,7 @@ export default function Planner() {
         <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 md:px-5">
           {selectedRoute && selectedTech ? (
             <>
-              <button onClick={() => selectTech(null)} className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-600">
+              <button onClick={() => selectTech(null)} className="back-link mb-2">
                 <Icon name="back" className="h-4 w-4" /> Alle Personen am {formatDay(day)}
               </button>
               <div className="mb-3 flex items-center gap-3">
@@ -229,12 +198,12 @@ export default function Planner() {
                   onSelectStop={(id) => selectStop(selectedTech.id, id)}
                   onHover={setHoveredStopId}
                   violations={violationsFor(selectedTech.id)}
-                  exceptions={new Set((p.verification?.exceptions ?? []).map((e) => e.requestId))}
+                  exceptions={routen.exceptionIds(p)}
                   notes={notes.data ?? undefined}
                 />
               </div>
-              {violationsFor(selectedTech.id).get('__route')?.map((m) => (
-                <p key={m} className="mt-2 text-xs font-medium text-red-600">
+              {violationsFor(selectedTech.id).get(ROUTE_LEVEL)?.map((m) => (
+                <p key={m} className="mt-2 text-xs font-medium text-danger-600">
                   ⚠ {m}
                 </p>
               ))}
@@ -251,7 +220,7 @@ export default function Planner() {
                       key={t.id}
                       technician={t}
                       route={r}
-                      status={statusFor(t.id)}
+                      status={techniker.statusOn(t.id, day)}
                       color={colors[t.id]}
                       selected={false}
                       approved={!!r?.approved}
@@ -262,9 +231,9 @@ export default function Planner() {
                 })}
               </div>
               {region === NO_REGION && (
-                <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                <Alert tone="neutral" size="sm" className="mt-3 rounded-lg px-3 py-2">
                   Nicht zuordenbare Anfragen (in keinem Gebiet und &gt; 15 km von jedem Wohnort) – nur intern lösbar.
-                </p>
+                </Alert>
               )}
               {waitlist.length > 0 && (
                 <Link to="/stammdaten/anfragen" className="mt-5 flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
@@ -282,7 +251,11 @@ export default function Planner() {
 
         {/* Schritt 3 – immer unten sichtbar */}
         <div className="border-t border-gray-200 bg-white px-4 pb-20 pt-3 md:px-5 md:pb-4">
-          {actionError && <p className="mb-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700">{actionError}</p>}
+          {actionError && (
+            <Alert tone="danger" size="sm" className="mb-2">
+              {actionError}
+            </Alert>
+          )}
           {selectedRoute && selectedTech ? (
             (() => {
               const bad = violationsFor(selectedTech.id).size > 0;
@@ -294,41 +267,40 @@ export default function Planner() {
                       ? `Freigegeben – Reihenfolge und Zeiten bleiben bei Neuplanung erhalten.`
                       : bad
                         ? 'Diese Route verletzt eine Regel und kann nicht freigegeben werden.'
-                        : (p.verification?.exceptions ?? []).some((e) => e.technicianId === selectedTech.id && e.date === day)
+                        : routen.hasException(p, selectedTech.id, day)
                           ? 'Enthält eine bewusste Ausnahme (gelb, mit Begründung) – Freigabe möglich.'
                           : 'Passt alles? Dann freigeben – die Route wird für die Neuplanung gesperrt.'}
                   </p>
                   <div className="flex gap-2">
-                    <button
+                    <Button
+                      variant={approved ? 'secondary' : 'primary'}
+                      className="flex-1"
                       onClick={() => toggleApproval(selectedTech.id, approved)}
                       disabled={busy || !selectedRoute.stops.length || (!approved && bad)}
-                      className={`${approved ? 'btn-secondary' : 'btn-primary'} flex-1`}
                     >
                       {approved ? 'Freigabe zurücknehmen' : `3. Route von ${selectedTech.name} freigeben`}
-                    </button>
+                    </Button>
                     {approved && (
-                      <button
-                        className="btn-secondary"
-                        title="Als Kalenderdatei (.ics) für den Außendienst herunterladen"
-                        onClick={() => downloadFile(`/api/plan/${selectedTech.id}/${day}/ics`, `route-${selectedTech.id}-${day}.ics`)}
-                      >
-                        <Icon name="calendar" className="h-4 w-4" /> Kalender
-                      </button>
+                      <Button icon="calendar" title="Als Kalenderdatei (.ics) für den Außendienst herunterladen" onClick={() => void routen.downloadIcs(selectedTech.id, day)}>
+                        Kalender
+                      </Button>
                     )}
                   </div>
                 </>
               );
             })()
           ) : today.done ? (
-            <p className="rounded-lg bg-brand-50 px-3 py-2.5 text-center text-sm font-medium text-brand-800">✓ Alle Routen am {formatDay(day)} sind freigegeben</p>
+            <Alert tone="success" className="rounded-lg border-0 px-3 py-2.5 text-center font-medium">
+              ✓ Alle Routen am {formatDay(day)} sind freigegeben
+            </Alert>
           ) : (
             <>
               <p className="mb-2 text-xs text-gray-500">
                 {today.approved}/{today.total} Routen freigegeben. Routen mit Regelverstoß werden übersprungen.
               </p>
-              <button onClick={approveDay} disabled={busy || !openRoutes.length} className="btn-primary w-full">
-                <Icon name="lock" className="h-4 w-4" /> 3. {openRoutes.length} {openRoutes.length === 1 ? 'Route' : 'Routen'} am {formatDay(day)} freigeben
-              </button>
+              <Button variant="primary" block icon="lock" onClick={approveDay} disabled={busy || !openRoutes.length}>
+                3. {openRoutes.length} {openRoutes.length === 1 ? 'Route' : 'Routen'} am {formatDay(day)} freigeben
+              </Button>
             </>
           )}
         </div>
@@ -350,12 +322,12 @@ export default function Planner() {
           onSelectStop={selectStop}
           onOpenDetails={setDetailsStopId}
         />
-        <div className="pointer-events-none absolute left-3 top-3 z-[500] max-w-[calc(100%-1.5rem)] truncate rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md md:left-4 md:top-4">
+        <div className="pointer-events-none absolute left-3 top-3 z-map-overlay max-w-[calc(100%-1.5rem)] truncate rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md md:left-4 md:top-4">
           {formatDay(day)} · {selectedTech ? selectedTech.name : `${dayRoutes.filter((r) => r.stops.length).length} Routen`}
-          {region && !selectedTech && ` · ${region === NO_REGION ? 'Ohne Zuständigkeit' : `Region ${regionLabel(d.technicians.find((t) => t.id === region)!)}`}`}
+          {region && !selectedTech && ` · ${region === NO_REGION ? 'Ohne Zuständigkeit' : `Region ${regionLabel(techniker.byId(region)!)}`}`}
         </div>
         {/* Legende */}
-        <div className="pointer-events-none absolute bottom-6 right-3 z-[500] hidden rounded-lg bg-white/95 px-3 py-2 text-[11px] text-gray-600 shadow md:block">
+        <div className="pointer-events-none absolute bottom-6 right-3 z-map-overlay hidden rounded-lg bg-white/95 px-3 py-2 text-[11px] text-gray-600 shadow md:block">
           <p className="flex items-center gap-1.5"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-[9px] font-bold text-white">1</span> Reihenfolge der Termine</p>
           <p className="mt-1 flex items-center gap-1.5"><span className="inline-block h-4 w-4 rounded bg-ink" /> fixer Termin 🔒 <span className="text-gray-400">(nicht verschiebbar)</span></p>
           <p className="mt-1 flex items-center gap-1.5"><span className="inline-block h-4 w-4 rounded border-2 border-brand-500 bg-white" /> Wohnort (Start & Ende)</p>
@@ -365,7 +337,7 @@ export default function Planner() {
       {/* Mobil: Umschalter Liste ⇄ Karte */}
       <button
         onClick={() => setMobileView(mobileView === 'list' ? 'map' : 'list')}
-        className="absolute bottom-5 left-1/2 z-[900] flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white shadow-xl md:hidden"
+        className="absolute bottom-5 left-1/2 z-floating flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white shadow-xl md:hidden"
       >
         <Icon name={mobileView === 'list' ? 'route' : 'inbox'} className="h-4 w-4" />
         {mobileView === 'list' ? 'Karte' : 'Liste'}
@@ -378,16 +350,14 @@ export default function Planner() {
           route={detailsRoute}
           technician={detailsTech}
           color={colors[detailsTech.id]}
-          request={d.requests.find((r) => r.id === detailsStopId) ?? d.convertedRequests?.find((r) => r.id === detailsStopId)}
-          appointment={d.appointments.find((a) => a.id === detailsStopId && !a.simulated)}
+          request={anfragen.byId(detailsStopId!)}
+          appointment={termine.byId(detailsStopId!)}
           notes={notes.data ?? undefined}
           violations={violationsFor(detailsTech.id, detailsRoute.date).get(detailsStopId!) ?? []}
           onConfirmNote={confirmNote}
           onPlanChanged={() => {
-            // Stopp kann in eine andere Tour gewandert sein → Dialog schließen, Plan neu laden
+            // Stopp kann in eine andere Route gewandert sein → Dialog schließen (Neuladen macht der CoreInteractor)
             setDetailsStopId(null);
-            plan.reload();
-            stamm.reload();
           }}
           onClose={() => setDetailsStopId(null)}
         />

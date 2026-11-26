@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import EscalationDialog from '@/components/planner/EscalationDialog';
-import { apiGet } from '@/lib/api';
+import { useCore } from '@/core';
 import type { ServiceRequest } from '@/lib/types';
-
-interface GeoResult { lat: number; lng: number; address: string; source: 'google' | 'osm'; precision: 'exact' | 'street' | 'town' }
+import { Badge, Button } from '@/ui';
 
 const has = (v?: string) => !!v && v.trim() !== '' && v.trim() !== '—';
 
@@ -13,14 +12,14 @@ const has = (v?: string) => !!v && v.trim() !== '' && v.trim() !== '—';
  * Ergebnisse landen nur im Entwurf – gespeichert wird erst mit "Speichern".
  */
 export default function LocationAssist({
-  request, address, lat, lng, onFill, escalated, onEscalated,
+  request, address, lat, lng, onFill, escalated,
 }: {
   request: ServiceRequest;
   address: string; lat: string; lng: string;
   onFill: (patch: Record<string, string>) => void;
   escalated: boolean;
-  onEscalated: () => void;
 }) {
+  const { anfragen } = useCore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [found, setFound] = useState<string | null>(null);
@@ -38,14 +37,14 @@ export default function LocationAssist({
     setError(null);
     try {
       if (mode === 'forward') {
-        const r = await apiGet<GeoResult>(`/api/geocode?address=${encodeURIComponent(address)}`);
+        const r = await anfragen.geocode(address);
         onFill({ lat: String(+r.lat.toFixed(5)), lng: String(+r.lng.toFixed(5)) });
         const note =
           r.precision === 'exact' ? '' : r.precision === 'street' ? ' Hausnummer nicht gefunden – Straßenmitte verwendet.' : ' Nur der Ort wurde gefunden – Ortsmitte verwendet, für die Planung meist ausreichend.';
         setFound(`Gefunden: ${r.address} (${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}).${note} Bitte prüfen und speichern.`);
         setApprox(r.precision !== 'exact');
       } else {
-        const r = await apiGet<GeoResult>(`/api/geocode/reverse?lat=${lat}&lng=${lng}`);
+        const r = await anfragen.reverseGeocode(lat, lng);
         onFill({ address: r.address });
         setFound(`Gefunden: ${r.address} – bitte prüfen und speichern.`);
       }
@@ -71,25 +70,25 @@ export default function LocationAssist({
           : 'Automatisch nicht auffindbar. Der Vertrieb sollte die Adresse mit dem Kunden klären.'}
       </p>
       {escalated ? (
-        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">An den Vertrieb eskaliert</span>
+        <Badge tone="warning" className="px-2.5 py-1">An den Vertrieb eskaliert</Badge>
       ) : (
-        <button type="button" className="btn-secondary" onClick={() => setDialog(true)}>An den Vertrieb eskalieren</button>
+        <Button onClick={() => setDialog(true)}>An den Vertrieb eskalieren</Button>
       )}
     </div>
   );
 
   return (
-    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-amber-900">
+    <div className="mt-4 rounded-xl border border-warning-200 bg-warning-50/60 px-4 py-3 text-warning-900">
       {found ? (
         <div className="space-y-2">
-          <p className={`text-sm ${approx ? 'text-amber-800' : 'text-brand-800'}`}>{approx ? '≈' : '✓'} {found}</p>
+          <p className={`text-sm ${approx ? 'text-warning-800' : 'text-brand-800'}`}>{approx ? '≈' : '✓'} {found}</p>
           {approx && !escalated && (
-            <button type="button" className="btn-secondary text-sm" onClick={() => setDialog(true)}>Genaue Adresse beim Vertrieb anfragen</button>
+            <Button onClick={() => setDialog(true)}>Genaue Adresse beim Vertrieb anfragen</Button>
           )}
         </div>
       ) : mode === 'none' || error ? (
         <>
-          {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+          {error && <p className="mb-2 text-sm text-danger-600">{error}</p>}
           {escalateBox}
         </>
       ) : (
@@ -97,9 +96,9 @@ export default function LocationAssist({
           <p className="flex-1 text-sm">
             {mode === 'forward' ? 'Koordinaten fehlen – wir können sie aus der Adresse ermitteln.' : 'Adresse fehlt – wir können sie aus den Koordinaten ermitteln.'}
           </p>
-          <button type="button" className="btn-primary" disabled={busy} onClick={() => void lookup()}>
+          <Button variant="primary" disabled={busy} onClick={() => void lookup()}>
             {busy ? 'Wird gesucht …' : mode === 'forward' ? 'Koordinaten finden' : 'Adresse finden'}
-          </button>
+          </Button>
         </div>
       )}
       {dialog && (
@@ -109,7 +108,7 @@ export default function LocationAssist({
           type="internal"
           suggestedDate=""
           onClose={() => setDialog(false)}
-          onDone={() => { setDialog(false); onEscalated(); }}
+          onDone={() => setDialog(false)}
         />
       )}
     </div>

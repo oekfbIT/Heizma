@@ -2,9 +2,9 @@ import type { Issue, Severity } from '@/lib/types';
 import { SEVERITY_LABEL, worstSeverity } from '@/lib/format';
 
 const STYLE: Record<Severity, string> = {
-  error: 'bg-red-50 text-red-700 ring-red-200',
-  warning: 'bg-amber-50 text-amber-700 ring-amber-200',
-  info: 'bg-sky-50 text-sky-700 ring-sky-200',
+  error: 'bg-danger-50 text-danger-700 ring-danger-200',
+  warning: 'bg-warning-50 text-warning-700 ring-warning-200',
+  info: 'bg-info-50 text-info-700 ring-info-200',
 };
 
 export function SeverityPill({ severity, children }: { severity: Severity; children?: React.ReactNode }) {

@@ -1,12 +1,13 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Header from './components/Header';
-import { useAuth } from './lib/auth';
+import { useAuth } from './core/auth';
 import Login from './pages/Login';
 import EntityEdit from './pages/EntityEdit';
 import EntityList from './pages/EntityList';
 import Hilfe from './pages/Hilfe';
 import Planner from './pages/Planner';
 import StammdatenIndex from './pages/StammdatenIndex';
+import Styleguide from './pages/Styleguide';
 
 export default function App() {
   const { user } = useAuth();
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/stammdaten/:entity/:id" element={<EntityEdit />} />
         <Route path="/planer" element={<Planner />} />
         <Route path="/hilfe" element={<Hilfe />} />
+        <Route path="/styleguide" element={<Styleguide />} />
         <Route path="*" element={<Navigate to="/stammdaten" replace />} />
       </Routes>
     </div>

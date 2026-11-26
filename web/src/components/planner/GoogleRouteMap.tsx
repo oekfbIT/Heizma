@@ -2,6 +2,7 @@ import polyline from '@mapbox/polyline';
 import { AdvancedMarker, APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { useEffect, useMemo, useRef } from 'react';
 import type { DayRoute } from '@/lib/types';
+import { mapColors } from '@/ui';
 import type { RouteMapProps } from './LeafletRouteMap';
 import StopPopover from './StopPopover';
 
@@ -157,7 +158,7 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
         {/* Wohnorte */}
         {technicians.map((t) => {
           const dimmed = !!selectedId && t.id !== selectedId;
-          const color = colors[t.id] ?? '#9ca3af';
+          const color = colors[t.id] ?? mapColors().muted;
           const active = t.id === selectedId;
           const hasRoute = routes.some((r) => r.technicianId === t.id);
           return (
@@ -204,7 +205,7 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
                     >
                       {idx + 1}
                       <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-white shadow">
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#20242d" strokeWidth="3"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" style={{ stroke: 'rgb(var(--color-ink))' }} strokeWidth="3"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
                       </span>
                     </div>
                   ) : (
@@ -246,8 +247,8 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
         {office && (
           <AdvancedMarker position={office} title={office.label}>
             <svg width="30" height="38" viewBox="0 0 32 40">
-              <path d="M16 1C16 1 3 16 3 24a13 13 0 0 0 26 0C29 16 16 1 16 1z" fill="#4DA547" stroke="#fff" strokeWidth="2" />
-              <text x="16" y="29" textAnchor="middle" fontFamily="Inter,sans-serif" fontSize="11" fontWeight="700" fill="#fff">
+              <path d="M16 1C16 1 3 16 3 24a13 13 0 0 0 26 0C29 16 16 1 16 1z" style={{ fill: 'rgb(var(--color-brand-500))', stroke: 'rgb(var(--color-white))' }} strokeWidth="2" />
+              <text x="16" y="29" textAnchor="middle" fontFamily="Inter,sans-serif" fontSize="11" fontWeight="700" style={{ fill: 'rgb(var(--color-white))' }}>
                 H
               </text>
             </svg>

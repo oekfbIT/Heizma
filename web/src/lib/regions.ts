@@ -1,11 +1,9 @@
 import { useSearchParams } from 'react-router-dom';
-import type { Stammdaten } from './api';
-import type { Technician } from './types';
+import { NO_REGION, regionName } from '@/modules';
 
-/** Ein Techniker = ein Einsatzgebiet. "Techniker Ost" → "Ost" */
-export const regionLabel = (t: Technician) => t.name.replace(/^Techniker\s+/i, '');
-
-export const NO_REGION = 'ohne';
+/** Ein Außendienstler = ein Einsatzgebiet. „Techniker Ost“ → „Ost“ */
+export const regionLabel = regionName;
+export { NO_REGION };
 
 /** Regionsfilter in der URL (?region=tech_01) – bleibt beim Wechsel zwischen Seiten erhalten */
 export function useRegion(): [string, (value: string) => void] {
@@ -18,13 +16,6 @@ export function useRegion(): [string, (value: string) => void] {
     setParams(next, { replace: true });
   };
   return [region, setRegion];
-}
-
-/** Gehört die Anfrage zur gewählten Region? */
-export function requestInRegion(d: Stammdaten, requestId: string, region: string): boolean {
-  if (!region) return true;
-  const techs = d.responsibility?.[requestId] ?? [];
-  return region === NO_REGION ? techs.length === 0 : techs.includes(region);
 }
 
 /** Link-Ziel mit aktuellem Regionsfilter */

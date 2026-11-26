@@ -20,11 +20,11 @@ export default function TechnicianCell({ technician, route, status, color, selec
   const pill = disabled
     ? { label: status === 'blocked' ? 'Abwesend' : 'Nicht verfügbar', cls: 'bg-gray-100 text-gray-500' }
     : hasViolation
-      ? { label: 'Prüfen', cls: 'bg-red-100 text-red-700' }
+      ? { label: 'Prüfen', cls: 'bg-danger-100 text-danger-700' }
       : approved
         ? { label: '✓ Freigegeben', cls: 'bg-brand-500 text-white' }
         : stops
-          ? { label: 'Offen', cls: 'bg-amber-100 text-amber-800' }
+          ? { label: 'Offen', cls: 'bg-warning-100 text-warning-800' }
           : { label: 'Keine Termine', cls: 'bg-gray-100 text-gray-500' };
 
   return (
@@ -35,7 +35,7 @@ export default function TechnicianCell({ technician, route, status, color, selec
         selected ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
       } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" style={{ background: disabled ? '#9ca3af' : color }}>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" style={{ background: disabled ? 'rgb(var(--color-gray-400))' : color }}>
         {technician.name.replace(/^Techniker(in)?\s*/i, '').slice(0, 2).toUpperCase() || stops}
       </span>
       <span className="min-w-0 flex-1">

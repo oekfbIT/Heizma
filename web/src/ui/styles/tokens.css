@@ -1,0 +1,108 @@
+/*
+ * Design-Tokens – einzige Quelle für Farben, Radien, Schatten und Ebenen.
+ * Farben als RGB-Kanäle („77 165 71“), damit Tailwind-Opacity wie `bg-brand-50/50` funktioniert.
+ * Tailwind (tailwind.config.js) und Karten (ui/theme.ts) lesen diese Variablen.
+ * Werte entsprechen 1:1 dem bisherigen Stand → keine sichtbare Änderung.
+ */
+:root {
+  /* Text & Grundfarben */
+  --color-ink: 32 36 45;
+  --color-white: 255 255 255;
+
+  /* brand – Heizma-Grün (heizma.at) */
+  --color-brand-50: 241 248 240;
+  --color-brand-100: 221 239 219;
+  --color-brand-200: 188 223 184;
+  --color-brand-300: 144 201 138;
+  --color-brand-400: 102 181 95;
+  --color-brand-500: 77 165 71;
+  --color-brand-600: 61 138 56;
+  --color-brand-700: 50 109 47;
+  --color-brand-800: 43 87 41;
+  --color-brand-900: 36 72 36;
+
+  /* gray – Neutrale Flächen, Rahmen, Sekundärtext */
+  --color-gray-50: 249 250 251;
+  --color-gray-100: 243 244 246;
+  --color-gray-200: 229 231 235;
+  --color-gray-300: 209 213 219;
+  --color-gray-400: 156 163 175;
+  --color-gray-500: 107 114 128;
+  --color-gray-600: 75 85 99;
+  --color-gray-700: 55 65 81;
+  --color-gray-800: 31 41 55;
+  --color-gray-900: 17 24 39;
+
+  /* danger – Fehler, Regelverstoß, nicht planbar */
+  --color-danger-50: 254 242 242;
+  --color-danger-100: 254 226 226;
+  --color-danger-200: 254 202 202;
+  --color-danger-300: 252 165 165;
+  --color-danger-400: 248 113 113;
+  --color-danger-500: 239 68 68;
+  --color-danger-600: 220 38 38;
+  --color-danger-700: 185 28 28;
+  --color-danger-800: 153 27 27;
+  --color-danger-900: 127 29 29;
+
+  /* warning – Warnung, Warteliste, bewusste Ausnahme */
+  --color-warning-50: 255 251 235;
+  --color-warning-100: 254 243 199;
+  --color-warning-200: 253 230 138;
+  --color-warning-300: 252 211 77;
+  --color-warning-400: 251 191 36;
+  --color-warning-500: 245 158 11;
+  --color-warning-600: 217 119 6;
+  --color-warning-700: 180 83 9;
+  --color-warning-800: 146 64 14;
+  --color-warning-900: 120 53 15;
+
+  /* info – Hinweis, lokal korrigiert, fixiert */
+  --color-info-50: 240 249 255;
+  --color-info-100: 224 242 254;
+  --color-info-200: 186 230 253;
+  --color-info-300: 125 211 252;
+  --color-info-400: 56 189 248;
+  --color-info-500: 14 165 233;
+  --color-info-600: 2 132 199;
+  --color-info-700: 3 105 161;
+  --color-info-800: 7 89 133;
+  --color-info-900: 12 74 110;
+
+  /* accent – Vorgezogen (Priorität) */
+  --color-accent-50: 245 243 255;
+  --color-accent-100: 237 233 254;
+  --color-accent-200: 221 214 254;
+  --color-accent-300: 196 181 253;
+  --color-accent-400: 167 139 250;
+  --color-accent-500: 139 92 246;
+  --color-accent-600: 124 58 237;
+  --color-accent-700: 109 40 217;
+  --color-accent-800: 91 33 182;
+  --color-accent-900: 76 29 149;
+
+  /* Routenfarben je Außendienstler (Karte + Liste) */
+  --color-route-1: 77 165 71;
+  --color-route-2: 26 115 232;
+  --color-route-3: 232 113 10;
+  --color-route-4: 147 52 230;
+  --color-route-5: 217 48 37;
+  --color-route-6: 18 181 203;
+  --color-route-7: 249 171 0;
+  --color-route-8: 95 99 104;
+
+  /* Form */
+  --radius-control: 0.5rem; /* Buttons, Inputs */
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+
+  /* Ebenen */
+  --z-map-overlay: 500;
+  --z-sidebar: 850;
+  --z-floating: 900;
+  --z-header: 1000; /* Kopfzeile, Popover über der Karte */
+  --z-modal: 2000;
+
+  /* Schrift */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}

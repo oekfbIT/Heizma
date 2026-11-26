@@ -20,7 +20,7 @@ export default function PlanKpis({ plan }: { plan: Plan }) {
       <Kpi label="Fahrzeit" value={formatMinutes(s.driveMinutes)} sub={saved > 0 ? `−${pct} % optimiert` : undefined} title={`Greedy: ${formatMinutes(s.greedyDriveMinutes)} → nach 2-opt/Relocate: ${formatMinutes(s.driveMinutes)} (${s.improvements} Verbesserungen)`} />
       <Kpi label="Ø Anfahrt" value={`${s.avgDrivePerVisit} min`} />
       <Kpi label="Freigegeben" value={`${s.approvedRoutes}/${s.routesWithStops}`} />
-      <p className={`col-span-4 text-left text-[11px] ${t && t.source !== 'estimate' ? 'text-gray-500' : 'text-amber-600'}`} title={t ? `${t.pairsReal} echte / ${t.pairsEstimated} geschätzte Fahrzeitpaare` : undefined}>
+      <p className={`col-span-4 text-left text-[11px] ${t && t.source !== 'estimate' ? 'text-gray-500' : 'text-warning-600'}`} title={t ? `${t.pairsReal} echte / ${t.pairsEstimated} geschätzte Fahrzeitpaare` : undefined}>
         🚗 {travelLabel}
       </p>
     </div>

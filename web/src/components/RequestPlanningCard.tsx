@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiGet, apiSend, useApi } from '@/lib/api';
+import { useCore, useResource } from '@/core';
 import { formatDateTime, formatDay } from '@/lib/format';
 import type { AuditEntry, RequestPlanning, SlotOption } from '@/lib/types';
+import type { DecisionInput } from '@/modules';
+import { Alert, Badge, Button, Card, Input, type BadgeTone } from '@/ui';
 
 /**
  * Planung einer einzelnen Anfrage: wo steht sie, und was kann der Planer tun.
@@ -11,13 +13,13 @@ import type { AuditEntry, RequestPlanning, SlotOption } from '@/lib/types';
  * Wird auf der Anfrage-Seite und im Stopp-Dialog des Planers verwendet – gleiche Endpunkte, gleiche Logik.
  */
 
-const STATUS: Record<RequestPlanning['status'], { label: string; tone: string }> = {
-  termin: { label: 'Termin (freigegeben)', tone: 'bg-brand-500 text-white' },
-  pinned: { label: '📌 Manuell fixiert', tone: 'bg-sky-100 text-sky-800' },
-  planned: { label: 'Vorgeschlagen', tone: 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200' },
-  waitlist: { label: 'Warteliste', tone: 'bg-amber-100 text-amber-800' },
-  excluded: { label: 'Aus dem Plan genommen', tone: 'bg-gray-200 text-gray-700' },
-  unplannable: { label: 'Nicht planbar', tone: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200' },
+const STATUS: Record<RequestPlanning['status'], { label: string; tone: BadgeTone }> = {
+  termin: { label: 'Termin (freigegeben)', tone: 'solid' },
+  pinned: { label: '📌 Manuell fixiert', tone: 'info-soft' },
+  planned: { label: 'Vorgeschlagen', tone: 'success' },
+  waitlist: { label: 'Warteliste', tone: 'warning-soft' },
+  excluded: { label: 'Aus dem Plan genommen', tone: 'neutral' },
+  unplannable: { label: 'Nicht planbar', tone: 'danger' },
 };
 
 const ACTION: Record<string, string> = {
@@ -35,7 +37,9 @@ const ACTION: Record<string, string> = {
 type Mode = null | 'move' | 'exclude' | 'prioritize';
 
 export default function RequestPlanningCard({ requestId, compact, onChanged }: { requestId: string; compact?: boolean; onChanged?: () => void }) {
-  const { data: info, error, reload } = useApi<RequestPlanning>(`/api/requests/${encodeURIComponent(requestId)}/planning`);
+  const core = useCore();
+  const planning = core.anfragen.planning.get(requestId);
+  const { data: info, error } = useResource(planning);
   const [mode, setMode] = useState<Mode>(null);
   const [options, setOptions] = useState<SlotOption[] | null>(null);
   const [picked, setPicked] = useState<SlotOption | null>(null);
@@ -43,12 +47,6 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
-
-  useEffect(() => {
-    const onChange = () => reload();
-    window.addEventListener('heizma:data-changed', onChange);
-    return () => window.removeEventListener('heizma:data-changed', onChange);
-  }, [reload]);
 
   const reset = () => {
     setMode(null);
@@ -62,25 +60,22 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
     setMode('move');
     setOptions(null);
     try {
-      const r = await apiGet<{ options: SlotOption[] }>(`/api/requests/${encodeURIComponent(requestId)}/options`);
-      setOptions(r.options);
+      setOptions(await core.anfragen.options(requestId));
     } catch (e) {
       setMsg({ tone: 'error', text: (e as Error).message });
     }
   }
 
-  async function send(body: Record<string, unknown> | null, okText: string | ((fresh: RequestPlanning) => string)) {
+  async function send(body: DecisionInput | null, okText: string | ((fresh: RequestPlanning) => string)) {
     setBusy(true);
     setMsg(null);
     try {
-      await apiSend(`/api/requests/${encodeURIComponent(requestId)}/decision`, body ? 'POST' : 'DELETE', body ?? undefined);
+      await core.decideRequest(requestId, body); // plant neu und lädt alles Sichtbare nach
       reset();
       // Meldung aus dem tatsächlichen Ergebnis der Neuplanung, nicht aus der Vorschau
-      const fresh = await apiGet<RequestPlanning>(`/api/requests/${encodeURIComponent(requestId)}/planning`);
-      reload();
-      window.dispatchEvent(new Event('heizma:data-changed'));
+      const fresh = planning.getState().data ?? (await planning.load());
       onChanged?.();
-      setMsg({ tone: 'ok', text: typeof okText === 'function' ? okText(fresh) : okText });
+      if (fresh) setMsg({ tone: 'ok', text: typeof okText === 'function' ? okText(fresh) : okText });
     } catch (e) {
       setMsg({ tone: 'error', text: (e as Error).message });
     } finally {
@@ -88,8 +83,8 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
     }
   }
 
-  if (error) return <div className="card p-4 text-sm text-red-700">{error}</div>;
-  if (!info) return <div className="card p-4 text-sm text-gray-400">Planung wird geladen …</div>;
+  if (error && !info) return <Card className="p-4 text-sm text-danger-700">{error}</Card>;
+  if (!info) return <Card className="p-4 text-sm text-gray-400">Planung wird geladen …</Card>;
 
   const st = STATUS[info.status];
   const d = info.decision;
@@ -103,10 +98,24 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
       {/* Status */}
       <div className="flex flex-wrap items-center gap-2">
         {!compact && <h2 className="mr-1 text-sm font-semibold">Planung</h2>}
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.tone}`}>{st.label}</span>
-        {d?.mode === 'prioritize' && <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-800">⇡ Vorgezogen</span>}
-        {info.exceptions.length > 0 && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Bewusste Ausnahme</span>}
-        {info.violations.length > 0 && <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Regelverstoß</span>}
+        <Badge strong tone={st.tone}>
+          {st.label}
+        </Badge>
+        {d?.mode === 'prioritize' && (
+          <Badge strong tone="accent">
+            ⇡ Vorgezogen
+          </Badge>
+        )}
+        {info.exceptions.length > 0 && (
+          <Badge strong tone="warning-soft">
+            Bewusste Ausnahme
+          </Badge>
+        )}
+        {info.violations.length > 0 && (
+          <Badge strong tone="danger-soft">
+            Regelverstoß
+          </Badge>
+        )}
       </div>
 
       <div className="mt-2 text-sm text-gray-700">
@@ -134,10 +143,10 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
           </p>
         )}
         {dataBlocked && (
-          <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+          <Alert tone="danger" size="sm" className="mt-2 rounded-lg px-3 py-2">
             Mit fehlerhaften Daten kann die Anfrage nicht eingeplant werden – auch nicht manuell. Korrigiere die markierten Felder unten
             (Adresse, Koordinaten, Uhrzeit …) und speichere: Prüfung und Routenplanung laufen dann neu, die Anfrage wird automatisch eingeplant.
-          </p>
+          </Alert>
         )}
         {locked && (
           <p className="mt-1 text-xs text-gray-500">
@@ -150,18 +159,18 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
           </p>
         )}
         {d?.mode === 'prioritize' && info.status === 'waitlist' && (
-          <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+          <Alert tone="warning" size="sm" className="mt-1">
             Vorgezogen, passt aber regelkonform in keinen Tag. Über „Einplanen …“ lässt sich die Anfrage als bewusste Ausnahme einplanen.
-          </p>
+          </Alert>
         )}
         {info.violations.map((v) => (
-          <p key={v} className="mt-1 text-xs font-medium text-red-600">
+          <p key={v} className="mt-1 text-xs font-medium text-danger-600">
             ⚠ {v}
           </p>
         ))}
         {info.exceptions.map((e, i) => (
-          <p key={i} className="mt-1 text-xs text-amber-700">
-            ◆ {e.message} <span className="text-amber-600">– „{e.reason}“</span>
+          <p key={i} className="mt-1 text-xs text-warning-700">
+            ◆ {e.message} <span className="text-warning-600">– „{e.reason}“</span>
           </p>
         ))}
       </div>
@@ -170,34 +179,34 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
       {!locked && mode === null && (
         <div className="mt-3 flex flex-wrap gap-2">
           {!dataBlocked && (
-            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void openMove()}>
+            <Button size="sm" disabled={busy} onClick={() => void openMove()}>
               {info.route ? 'Verschieben …' : 'Einplanen …'}
-            </button>
+            </Button>
           )}
           {info.status === 'planned' && info.route && (
-            <button
-              className="btn-secondary !py-1.5 text-xs"
+            <Button
+              size="sm"
               disabled={busy}
               title="Bleibt bei Neuplanung an diesem Tag und bei dieser Person"
               onClick={() => void send({ mode: 'pin', technicianId: info.route!.technicianId, date: info.route!.date, reason: '' }, 'Fixiert – bleibt bei Neuplanung an diesem Tag und bei dieser Person.')}
             >
               📌 Fixieren
-            </button>
+            </Button>
           )}
           {info.status === 'waitlist' && !dataBlocked && d?.mode !== 'prioritize' && (
-            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => { reset(); setMode('prioritize'); }}>
+            <Button size="sm" disabled={busy} onClick={() => { reset(); setMode('prioritize'); }}>
               ⇡ Vorziehen
-            </button>
+            </Button>
           )}
           {info.status !== 'excluded' && (
-            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => { reset(); setMode('exclude'); }}>
+            <Button size="sm" disabled={busy} onClick={() => { reset(); setMode('exclude'); }}>
               Aus dem Plan nehmen
-            </button>
+            </Button>
           )}
           {d && (
-            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void send(null, 'Zurückgenommen – Anfrage wird wieder automatisch eingeplant.')}>
+            <Button size="sm" disabled={busy} onClick={() => void send(null, 'Zurückgenommen – Anfrage wird wieder automatisch eingeplant.')}>
               {d.mode === 'pin' ? 'Fixierung lösen' : d.mode === 'exclude' ? 'Wieder aufnehmen' : 'Vorziehen zurücknehmen'}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -230,12 +239,12 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
                           sel ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : 'border-gray-100 hover:bg-gray-50'
                         } ${o.blocked || o.current ? 'cursor-not-allowed opacity-60' : ''}`}
                       >
-                        <span className={`mt-0.5 ${o.blocked ? 'text-gray-400' : o.warnings.length ? 'text-amber-500' : 'text-brand-600'}`}>{o.blocked ? '✕' : o.warnings.length ? '⚠' : '✓'}</span>
+                        <span className={`mt-0.5 ${o.blocked ? 'text-gray-400' : o.warnings.length ? 'text-warning-500' : 'text-brand-600'}`}>{o.blocked ? '✕' : o.warnings.length ? '⚠' : '✓'}</span>
                         <span className="min-w-0 flex-1">
                           <span className="font-semibold">{formatDay(o.date)}</span> · {o.technicianName}
                           {o.start && <span className="tabular-nums text-gray-500"> · ca. {o.start}</span>}
                           {o.current && <span className="text-gray-500"> · aktuell</span>}
-                          {(o.blocked ?? o.warnings[0]) && <span className={`block ${o.blocked ? 'text-gray-500' : 'text-amber-700'}`}>{o.blocked ?? o.warnings.join(' · ')}</span>}
+                          {(o.blocked ?? o.warnings[0]) && <span className={`block ${o.blocked ? 'text-gray-500' : 'text-warning-700'}`}>{o.blocked ?? o.warnings.join(' · ')}</span>}
                         </span>
                         {!o.blocked && !o.current && <span className="shrink-0 tabular-nums text-gray-500">+{o.deltaDrive} min</span>}
                       </button>
@@ -253,7 +262,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
 
           {/* Vorschau vor dem Übernehmen */}
           {picked && (
-            <div className={`mt-3 rounded-lg p-3 text-xs ${picked.warnings.length ? 'bg-amber-50 text-amber-900' : 'bg-gray-50 text-gray-700'}`}>
+            <div className={`mt-3 rounded-lg p-3 text-xs ${picked.warnings.length ? 'bg-warning-50 text-warning-900' : 'bg-gray-50 text-gray-700'}`}>
               <p className="font-semibold">Vorschau</p>
               <p>
                 Neu: {formatDay(picked.date)} · {picked.technicianName}
@@ -271,14 +280,17 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
                   {picked.warnings.map((w) => (
                     <p key={w}>⚠ {w}</p>
                   ))}
-                  <input className="input mt-2 !py-1.5 text-xs" placeholder="Begründung (Pflicht), z. B. „Kunde besteht auf Donnerstag“" value={reason} onChange={(e) => setReason(e.target.value)} />
+                  <Input size="sm" className="mt-2" placeholder="Begründung (Pflicht), z. B. „Kunde besteht auf Donnerstag“" value={reason} onChange={(e) => setReason(e.target.value)} />
                 </>
               ) : (
-                <input className="input mt-2 !py-1.5 text-xs" placeholder="Notiz (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
+                <Input size="sm" className="mt-2" placeholder="Notiz (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
               )}
               <p className="mt-2 text-[11px] opacity-70">Vorschau auf Basis des aktuellen Plans. Nach dem Übernehmen wird die Woche neu geplant und unabhängig geprüft.</p>
-              <button
-                className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${picked.warnings.length ? 'bg-amber-600 hover:bg-amber-700' : 'bg-brand-500 hover:bg-brand-600'}`}
+              <Button
+                variant={picked.warnings.length ? 'warning' : 'primary'}
+                size="sm"
+                block
+                className="mt-2"
                 disabled={busy || (picked.warnings.length > 0 && !reasonOk)}
                 onClick={() =>
                   void send(
@@ -295,7 +307,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
                 }
               >
                 {picked.warnings.length ? 'Trotzdem einplanen (Ausnahme)' : 'Übernehmen'}
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -332,7 +344,11 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         />
       )}
 
-      {msg && <p className={`mt-3 rounded px-2 py-1 text-xs ${msg.tone === 'ok' ? 'bg-brand-50 text-brand-800' : 'bg-red-50 text-red-700'}`}>{msg.text}</p>}
+      {msg && (
+        <Alert tone={msg.tone === 'ok' ? 'success' : 'danger'} size="sm" className="mt-3">
+          {msg.text}
+        </Alert>
+      )}
 
       {info.log.length > 0 && (
         <details className="mt-3">
@@ -366,16 +382,20 @@ function ReasonBox(p: {
   return (
     <div className="mt-3 rounded-xl border border-gray-200 p-3 text-xs">
       <p className="font-semibold">{p.title}</p>
-      {p.warn && <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-amber-800">⚠ {p.warn}</p>}
+      {p.warn && (
+        <Alert tone="warning" size="sm" className="mt-1">
+          ⚠ {p.warn}
+        </Alert>
+      )}
       <p className="mt-1 text-gray-500">{p.hint}</p>
-      <input className="input mt-2 !py-1.5 text-xs" placeholder={p.placeholder} value={p.reason} onChange={(e) => p.setReason(e.target.value)} autoFocus />
+      <Input size="sm" className="mt-2" placeholder={p.placeholder} value={p.reason} onChange={(e) => p.setReason(e.target.value)} autoFocus />
       <div className="mt-2 flex gap-2">
-        <button className="btn-secondary flex-1 !py-1.5 text-xs" onClick={p.onCancel}>
+        <Button size="sm" className="flex-1" onClick={p.onCancel}>
           Abbrechen
-        </button>
-        <button className="btn-primary flex-1 !py-1.5 text-xs" disabled={p.busy || p.reason.trim().length < 3} onClick={p.onConfirm}>
+        </Button>
+        <Button variant="primary" size="sm" className="flex-1" disabled={p.busy || p.reason.trim().length < 3} onClick={p.onConfirm}>
           {p.cta}
-        </button>
+        </Button>
       </div>
     </div>
   );

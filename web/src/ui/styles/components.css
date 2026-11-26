@@ -1,0 +1,194 @@
+/*
+ * Semantische Komponenten-Klassen. Nur die React-Komponenten in ui/components benutzen sie.
+ * Farben ausschließlich über Token-Namen (brand, gray, danger, warning, info, accent).
+ */
+@layer components {
+  /* ---------- Fläche ---------- */
+  .card {
+    @apply rounded-card border border-gray-200 bg-white shadow-card;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-control text-sm transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn--primary {
+    @apply bg-brand-500 px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-brand-600;
+  }
+  .btn--secondary {
+    @apply border border-gray-200 bg-white px-4 py-2 font-medium text-ink hover:bg-gray-50;
+  }
+  .btn--warning {
+    @apply bg-warning-600 px-4 py-2 font-semibold text-white hover:bg-warning-700;
+  }
+  .btn--accent {
+    @apply bg-accent-600 px-3 py-1 font-semibold text-white hover:bg-accent-700;
+  }
+  .btn--ghost {
+    @apply px-2 py-1 font-medium text-gray-500 hover:text-brand-600;
+  }
+  .btn--sm {
+    @apply py-1.5 text-xs;
+  }
+  .btn--icon {
+    @apply rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700;
+  }
+
+  /* ---------- Formulare ---------- */
+  .field-label {
+    @apply mb-1.5 flex items-center gap-2 text-sm font-medium;
+  }
+  .field-hint {
+    @apply mt-1 block text-xs text-gray-400;
+  }
+  .field-message--error {
+    @apply mt-1 block text-xs text-danger-600;
+  }
+  .field-message--warning {
+    @apply mt-1 block text-xs text-warning-600;
+  }
+  .input {
+    @apply w-full rounded-control border border-gray-200 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+  }
+  .input--sm {
+    @apply py-1.5 text-xs;
+  }
+  .input--error {
+    @apply border-danger-400 bg-danger-50/50 focus:border-danger-500 focus:ring-danger-100;
+  }
+  .input--warning {
+    @apply border-warning-400 bg-warning-50/50 focus:border-warning-500 focus:ring-warning-100;
+  }
+  .input--readonly {
+    @apply cursor-not-allowed bg-gray-50 text-gray-500;
+  }
+
+  /* ---------- Hinweise ---------- */
+  .alert {
+    @apply rounded-xl border px-4 py-3 text-sm;
+  }
+  .alert--sm {
+    @apply rounded border-0 px-2 py-1 text-xs;
+  }
+  .alert--success {
+    @apply border-brand-200 bg-brand-50 text-brand-800;
+  }
+  .alert--danger {
+    @apply border-danger-200 bg-danger-50 text-danger-700;
+  }
+  .alert--warning {
+    @apply border-warning-200 bg-warning-50 text-warning-800;
+  }
+  .alert--info {
+    @apply border-info-200 bg-info-50 text-info-800;
+  }
+  .alert--neutral {
+    @apply border-gray-200 bg-gray-50 text-gray-500;
+  }
+
+  /* ---------- Badges & Chips ---------- */
+  .badge {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  .badge--strong {
+    @apply px-2.5 font-semibold;
+  }
+  .badge--success {
+    @apply bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200;
+  }
+  .badge--solid {
+    @apply bg-brand-500 text-white;
+  }
+  .badge--danger {
+    @apply bg-danger-50 text-danger-700 ring-1 ring-inset ring-danger-200;
+  }
+  .badge--danger-soft {
+    @apply bg-danger-100 text-danger-700;
+  }
+  .badge--warning {
+    @apply bg-warning-50 text-warning-700 ring-1 ring-inset ring-warning-200;
+  }
+  .badge--warning-soft {
+    @apply bg-warning-100 text-warning-800;
+  }
+  .badge--info {
+    @apply bg-info-50 text-info-700 ring-1 ring-inset ring-info-200;
+  }
+  .badge--info-soft {
+    @apply bg-info-100 text-info-800;
+  }
+  .badge--neutral {
+    @apply bg-gray-200 text-gray-700;
+  }
+  .badge--accent {
+    @apply bg-accent-100 text-accent-800;
+  }
+
+  /* ---------- Dialog ---------- */
+  .modal-backdrop {
+    @apply fixed inset-0 z-modal flex items-end justify-center bg-black/30 sm:items-center sm:p-4;
+  }
+  .modal-panel {
+    @apply card max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-b-none sm:rounded-b-xl;
+  }
+  .modal-panel--padded {
+    @apply p-5 sm:p-6;
+  }
+  .modal-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-wider text-gray-400;
+  }
+  .modal-title {
+    @apply mt-1 text-lg font-semibold;
+  }
+  .modal-footer {
+    @apply mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3;
+  }
+
+  /* ---------- Seitenrahmen ---------- */
+  .page {
+    @apply mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10;
+  }
+  .page--narrow {
+    @apply max-w-4xl lg:px-6;
+  }
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+  .page-subtitle {
+    @apply mt-1 text-sm text-gray-500;
+  }
+  .back-link {
+    @apply inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-600;
+  }
+
+  /* ---------- Umschalter ---------- */
+  .segmented {
+    @apply inline-flex rounded-lg border border-gray-200 bg-white p-1 text-sm;
+  }
+  .segmented-item {
+    @apply rounded-md px-3 py-1.5 font-medium text-gray-600 transition hover:bg-gray-50;
+  }
+  .segmented-item--active {
+    @apply bg-brand-500 text-white hover:bg-brand-500;
+  }
+
+  /* ---------- Ladezustand ---------- */
+  .spinner {
+    @apply h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent;
+  }
+}
+
+/* ---------- Leaflet-Anpassungen (Fremdbibliothek, daher außerhalb der Komponenten) ---------- */
+.leaflet-div-icon.marker-reset {
+  background: transparent;
+  border: none;
+}
+.leaflet-tooltip.stop-tooltip {
+  @apply rounded-lg border border-gray-200 px-3 py-2 font-sans text-xs text-ink shadow-lg;
+}
+/* Ausgewählter Stopp: Popover mit etwas mehr Luft, Text darf umbrechen */
+.leaflet-tooltip.stop-popover {
+  @apply rounded-xl p-3 shadow-xl;
+  white-space: normal;
+  pointer-events: auto;
+}

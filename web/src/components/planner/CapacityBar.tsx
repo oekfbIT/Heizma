@@ -24,7 +24,7 @@ export default function CapacityBar({ route }: { route: DayRoute }) {
   // Heimfahrt darf laut Case bis 60 min über das Fenster – erst darüber ist es ein Regelverstoß
   const label =
     c.overtime > 60 ? `Heimfahrt +${c.overtime} min – über dem Limit` : c.overtime > 0 ? `voll · Heimfahrt +${c.overtime} min (erlaubt)` : c.free < 30 ? 'voll' : `${formatMinutes(c.free)} frei`;
-  const tone = c.overtime > 60 ? 'text-red-600' : c.free < 60 || c.overtime > 0 ? 'text-amber-600' : 'text-brand-700';
+  const tone = c.overtime > 60 ? 'text-danger-600' : c.free < 60 || c.overtime > 0 ? 'text-warning-600' : 'text-brand-700';
   return (
     <span className="mt-1.5 block" title={`Vor Ort ${formatMinutes(c.work)} · Fahrt ${formatMinutes(c.drive)} · Pause/Warten ${formatMinutes(c.other)} · frei ${formatMinutes(c.free)}`}>
       <span className="flex h-1.5 overflow-hidden rounded-full bg-gray-100">

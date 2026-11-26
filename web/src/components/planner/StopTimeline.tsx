@@ -1,5 +1,5 @@
-import Icon from '@/components/ui/Icon';
-import type { NoteInfo } from '@/lib/api';
+import { Icon } from '@/ui';
+import type { NoteInfo } from '@/modules';
 import { formatMinutes } from '@/lib/format';
 import type { DayRoute, Technician } from '@/lib/types';
 
@@ -36,7 +36,7 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
             {/* Fahrt dorthin */}
             <p className="ml-[58px] py-0.5 text-[11px] text-gray-400">
               ↓ {stop.travelEstimated ? 'ca. ' : ''}
-              {stop.travelMinutes} min Fahrt{stop.waitMinutes > 0 && <span className="text-amber-600"> · {stop.waitMinutes} min Wartezeit</span>}
+              {stop.travelMinutes} min Fahrt{stop.waitMinutes > 0 && <span className="text-warning-600"> · {stop.waitMinutes} min Wartezeit</span>}
             </p>
             <button
               ref={selected ? (el) => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) : undefined}
@@ -44,14 +44,14 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
               onMouseEnter={() => onHover(stop.id)}
               onMouseLeave={() => onHover(null)}
               className={`flex w-full gap-3 rounded-xl border px-2 py-2 text-left transition ${
-                bad ? 'border-red-200 bg-red-50' : exceptions?.has(stop.id) ? 'border-amber-200 bg-amber-50' : selected ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : hoveredStopId === stop.id ? 'border-gray-200 bg-gray-50' : 'border-transparent'
+                bad ? 'border-danger-200 bg-danger-50' : exceptions?.has(stop.id) ? 'border-warning-200 bg-warning-50' : selected ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : hoveredStopId === stop.id ? 'border-gray-200 bg-gray-50' : 'border-transparent'
               }`}
             >
               <span className="w-[46px] shrink-0 pt-0.5 text-right text-xs font-semibold tabular-nums text-gray-700">
                 {stop.start}
                 <span className="block font-normal text-gray-400">{stop.end}</span>
               </span>
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white" style={{ background: stop.fixed ? '#20242d' : color }}>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white" style={{ background: stop.fixed ? 'rgb(var(--color-ink))' : color }}>
                 {idx + 1}
               </span>
               <span className="min-w-0 flex-1">
@@ -64,13 +64,13 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
                   <Tag className={stop.appointmentType === 'Inbetriebnahme' ? 'bg-gray-900 text-white' : 'bg-brand-50 text-brand-700'}>{stop.appointmentType}</Tag>
                   {(stop.appointmentType === 'Besichtigung' || stop.visitationType) && <Tag className="bg-gray-100 text-gray-600">{stop.visitationType ?? 'Typ unbekannt'}</Tag>}
                   {stop.fixed && <Tag className="border border-gray-300 text-gray-600">fix</Tag>}
-                  {stop.manual?.mode === 'pin' && <Tag className="bg-sky-100 text-sky-800">📌 manuell</Tag>}
-                  {stop.manual?.mode === 'prioritize' && <Tag className="bg-violet-100 text-violet-800">⇡ vorgezogen</Tag>}
-                  {exceptions?.has(stop.id) && <Tag className="bg-amber-100 text-amber-800" >Ausnahme</Tag>}
-                  {insight && <Tag className="bg-violet-50 text-violet-700">{insight.hint}</Tag>}
+                  {stop.manual?.mode === 'pin' && <Tag className="bg-info-100 text-info-800">📌 manuell</Tag>}
+                  {stop.manual?.mode === 'prioritize' && <Tag className="bg-accent-100 text-accent-800">⇡ vorgezogen</Tag>}
+                  {exceptions?.has(stop.id) && <Tag className="bg-warning-100 text-warning-800" >Ausnahme</Tag>}
+                  {insight && <Tag className="bg-accent-50 text-accent-700">{insight.hint}</Tag>}
                 </span>
                 {bad?.map((m) => (
-                  <span key={m} className="mt-1 block text-[11px] font-medium text-red-600">
+                  <span key={m} className="mt-1 block text-[11px] font-medium text-danger-600">
                     ⚠ {m}
                   </span>
                 ))}

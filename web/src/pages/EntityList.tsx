@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import Icon from '@/components/ui/Icon';
-import IssueBadge, { SeverityPill } from '@/components/ui/IssueBadge';
-import { ErrorBox, Loading } from '@/components/ui/PageState';
-import RegionFilter from '@/components/ui/RegionFilter';
-import { useApi, type Stammdaten } from '@/lib/api';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import IssueBadge, { SeverityPill } from '@/components/stammdaten/IssueBadge';
+import RegionFilter from '@/components/stammdaten/RegionFilter';
+import { useCore, useResource } from '@/core';
 import { entityByKind, entityBySlug } from '@/lib/entities';
-import { formatDay, SEVERITY_ORDER, technicianColor } from '@/lib/format';
-import { NO_REGION, requestInRegion, useRegion } from '@/lib/regions';
-import type { Issue, Plan } from '@/lib/types';
+import { SEVERITY_ORDER } from '@/lib/format';
+import { NO_REGION, useRegion } from '@/lib/regions';
+import type { Issue } from '@/lib/types';
+import type { RequestPlanStatus, Stammdaten } from '@/modules';
+import { Badge, Card, ErrorBox, Icon, Input, Loading, Page, PageHeader, SegmentedControl, type BadgeTone } from '@/ui';
 
 /** Auf Mobil sichtbare Spalten (Rest ab md) */
 const MOBILE = new Set(['customer', 'address', 'name', 'tech', 'date', 'window', 'start']);
@@ -16,7 +16,9 @@ const MOBILE = new Set(['customer', 'address', 'name', 'tech', 'date', 'window',
 /** Liste eines Stammdaten-Bereichs mit Validierungsstatus pro Zeile */
 export default function EntityList() {
   const { entity: slug } = useParams();
-  const { data, error, reload } = useApi<Stammdaten>('/api/stammdaten');
+  const core = useCore();
+  const { data, error, reload } = useResource(core.system.stammdaten);
+  useResource(core.anfragen.data); // Zuständigkeiten für den Regionsfilter
 
   if (error) return <ErrorBox message={error} onRetry={reload} />;
   if (!data) return <Loading />;
@@ -28,35 +30,29 @@ export default function EntityList() {
 }
 
 function PageHead({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div>
-      <Link to="/stammdaten" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-600">
-        <Icon name="back" className="h-4 w-4" /> Stammdaten
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
-      <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
-    </div>
-  );
+  return <PageHeader title={title} subtitle={subtitle} back={{ to: '/stammdaten', label: 'Übersicht' }} />;
 }
 
 function Table({ data, slug }: { data: Stammdaten; slug: string }) {
   const def = entityBySlug(slug)!;
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<'all' | 'problems' | 'planned'>('all');
+  const core = useCore();
+  const [params] = useSearchParams();
+  const [filter, setFilter] = useState<'all' | 'problems' | 'planned'>(params.get('filter') === 'problems' ? 'problems' : 'all');
   const [query, setQuery] = useState('');
   const [region, setRegion] = useRegion();
-  const techIds = data.technicians.map((t) => t.id);
-  const colors = Object.fromEntries(techIds.map((id) => [id, technicianColor(id, techIds)]));
-  // Nur bei Anfragen: Stand im Tourenplan je Zeile
-  const plan = useApi<Plan>(def.kind === 'request' ? '/api/plan' : null);
-  const planStatus = useMemo(() => (plan.data ? planStatusById(plan.data, data) : null), [plan.data, data]);
+  const colors = core.techniker.colors(data.technicians);
+  // Nur bei Anfragen: Stand im Plan je Zeile
+  const plan = useResource(def.kind === 'request' ? core.routen.plan : null);
+  useResource(def.kind === 'request' ? core.techniker.data : null); // Kurznamen für den Plan-Status
+  const planStatus = useMemo(() => (plan.data ? core.requestStatuses(plan.data) : null), [core, plan.data, data]);
 
   /** Gehört der Datensatz zur gewählten Region? */
   const inRegion = (id: string) => {
     if (!region) return true;
     const rec = def.find(data, id) as Record<string, any> | undefined;
     if (!rec) return false;
-    if (def.kind === 'request') return requestInRegion(data, id, region);
+    if (def.kind === 'request') return core.anfragen.inRegion(id, region);
     if (def.kind === 'technician') return region === NO_REGION ? (rec.region?.length ?? 0) < 3 : rec.id === region;
     return rec.technicianId === region;
   };
@@ -78,7 +74,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
   const problemCount = def.rows(data).filter((r) => (issuesById.get(r.id) ?? []).some((i) => i.severity !== 'info')).length;
 
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
+    <Page>
       <PageHead title={def.title} subtitle={def.description} />
 
       <div className="mt-6">
@@ -88,26 +84,20 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div className="relative w-full sm:w-72">
           <Icon name="search" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input className="input pl-9" placeholder="Suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <Input className="pl-9" placeholder="Suchen …" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 text-sm">
-          {[
-            { v: 'all' as const, label: `Alle (${def.rows(data).length})` },
-            { v: 'problems' as const, label: `Nur Probleme (${problemCount})` },
-            ...(def.kind === 'request' ? [{ v: 'planned' as const, label: `Eingeplant (${planStatus ? def.rows(data).filter((r) => planStatus.get(r.id)?.planned).length : '…'})` }] : []),
-          ].map((opt) => (
-            <button
-              key={opt.v}
-              onClick={() => setFilter(opt.v)}
-              className={`rounded-md px-3 py-1.5 font-medium transition ${filter === opt.v ? 'bg-brand-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'all' as const, label: `Alle (${def.rows(data).length})` },
+            { value: 'problems' as const, label: `Nur Probleme (${problemCount})` },
+            ...(def.kind === 'request' ? [{ value: 'planned' as const, label: `Eingeplant (${planStatus ? def.rows(data).filter((r) => planStatus.get(r.id)?.planned).length : '…'})` }] : []),
+          ]}
+        />
       </div>
 
-      <div className="card mt-4 overflow-x-auto">
+      <Card className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
             <tr>
@@ -128,7 +118,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
                 <tr
                   key={row.id}
                   onClick={() => navigate(`/stammdaten/${def.slug}/${encodeURIComponent(row.id)}`)}
-                  className={`cursor-pointer transition hover:bg-brand-50/50 ${hasError ? 'bg-red-50/40' : ''}`}
+                  className={`cursor-pointer transition hover:bg-brand-50/50 ${hasError ? 'bg-danger-50/40' : ''}`}
                 >
                   {def.columns.map((c) => (
                     <td key={c.key} className={`px-3 py-3 md:px-4 ${c.key === 'id' ? 'font-mono text-xs text-gray-500' : ''} ${c.key === 'customer' || c.key === 'id' ? 'whitespace-nowrap' : ''} ${MOBILE.has(c.key) ? '' : 'hidden md:table-cell'}`}>
@@ -155,8 +145,8 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
             )}
           </tbody>
         </table>
-      </div>
-    </main>
+      </Card>
+    </Page>
   );
 }
 
@@ -166,9 +156,9 @@ function IssueList({ data }: { data: Stammdaten }) {
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.entity.localeCompare(b.entity));
 
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
+    <Page>
       <PageHead title="Handlungsbedarf" subtitle="Datensätze mit fehlenden oder ungültigen Angaben – ein Klick öffnet die Detailansicht" />
-      <div className="card mt-6 divide-y divide-gray-100">
+      <Card className="mt-6 divide-y divide-gray-100">
         {issues.map((issue, idx) => {
           const def = entityByKind(issue.entity);
           return (
@@ -186,49 +176,25 @@ function IssueList({ data }: { data: Stammdaten }) {
           );
         })}
         {!issues.length && <p className="px-5 py-10 text-center text-sm text-gray-400">Alles sauber – kein Handlungsbedarf 🎉</p>}
-      </div>
-    </main>
+      </Card>
+    </Page>
   );
 }
 
-interface PlanStatus {
-  planned: boolean;
-  label: string;
-  tone: string;
-  title: string;
-}
+/** Plan-Status (aus dem Routen-Modul) → Badge-Farbe */
+const PLAN_TONE: Record<RequestPlanStatus['tone'], BadgeTone> = {
+  approved: 'solid',
+  proposed: 'success',
+  waitlist: 'warning-soft',
+  excluded: 'neutral',
+  unplannable: 'danger',
+};
 
-/** Wo steht jede Anfrage im Tourenplan? Eingeplant (Tag · Person), Warteliste, aus Plan genommen, nicht planbar. */
-function planStatusById(plan: Plan, data: Stammdaten): Map<string, PlanStatus> {
-  const map = new Map<string, PlanStatus>();
-  const short = (id: string) => data.technicians.find((t) => t.id === id)?.name.replace(/^Techniker\s+/i, '') ?? id;
-  for (const r of plan.routes)
-    for (const s of r.stops) {
-      if (s.kind !== 'request') continue;
-      const pin = s.manual?.mode === 'pin' ? '📌 ' : '';
-      map.set(s.id, {
-        planned: true,
-        label: `${pin}${formatDay(r.date)} · ${short(r.technicianId)}`,
-        tone: r.approved ? 'bg-brand-500 text-white' : 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200',
-        title: `${r.approved ? 'Freigegeben' : 'Vorgeschlagen'}: ${s.start}–${s.end}`,
-      });
-    }
-  for (const u of plan.unassigned) {
-    const [label, tone] = u.reason.startsWith('Kapazität')
-      ? ['Warteliste', 'bg-amber-100 text-amber-800']
-      : u.reason.startsWith('Aus dem Plan')
-        ? ['Aus dem Plan genommen', 'bg-gray-200 text-gray-700']
-        : ['Nicht planbar', 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200'];
-    map.set(u.requestId, { planned: false, label, tone, title: u.reason });
-  }
-  return map;
-}
-
-function PlanChip({ s }: { s?: PlanStatus }) {
+function PlanChip({ s }: { s?: RequestPlanStatus }) {
   if (!s) return <span className="text-xs text-gray-300">—</span>;
   return (
-    <span title={s.title} className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${s.tone}`}>
+    <Badge tone={PLAN_TONE[s.tone]} title={s.title}>
       {s.label}
-    </span>
+    </Badge>
   );
 }

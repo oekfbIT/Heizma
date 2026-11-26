@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import Icon from '@/components/ui/Icon';
+import { Card, Icon, Page } from '@/ui';
 
 /**
  * Hilfe & Einarbeitung: Ablauf, Regeln, Status und typische Datenprobleme auf einer Seite.
@@ -56,13 +56,13 @@ const RULES: [string, string][] = [
 const STATUS: { label: string; cls: string; text: string }[] = [
   { label: 'Vorgeschlagen', cls: 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200', text: 'Vom System eingeplant, noch nicht freigegeben. Kann sich bei einer Neuplanung noch ändern.' },
   { label: 'Freigegeben', cls: 'bg-brand-500 text-white', text: 'Route ist bestätigt und gesperrt. Die Anfrage wird zum Termin.' },
-  { label: '📌 Fixiert', cls: 'bg-sky-100 text-sky-800', text: 'Vom Planer an Tag und Person gebunden – bleibt bei jeder Neuplanung dort.' },
-  { label: '⇡ Vorgezogen', cls: 'bg-violet-100 text-violet-800', text: 'Wird vor älteren Anfragen eingeplant. Bewusste Ausnahme mit Begründung.' },
-  { label: 'Warteliste', cls: 'bg-amber-100 text-amber-800', text: 'Daten sind in Ordnung, aber die Kapazität der Woche reicht nicht. Kunde über die Verschiebung informieren.' },
+  { label: '📌 Fixiert', cls: 'bg-info-100 text-info-800', text: 'Vom Planer an Tag und Person gebunden – bleibt bei jeder Neuplanung dort.' },
+  { label: '⇡ Vorgezogen', cls: 'bg-accent-100 text-accent-800', text: 'Wird vor älteren Anfragen eingeplant. Bewusste Ausnahme mit Begründung.' },
+  { label: 'Warteliste', cls: 'bg-warning-100 text-warning-800', text: 'Daten sind in Ordnung, aber die Kapazität der Woche reicht nicht. Kunde über die Verschiebung informieren.' },
   { label: 'Aus dem Plan genommen', cls: 'bg-gray-200 text-gray-700', text: 'Bleibt offen, wird aber nicht automatisch eingeplant, bis du sie wieder aufnimmst.' },
-  { label: 'Nicht planbar', cls: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200', text: 'Datenfehler oder nicht zuordenbar. Erst korrigieren bzw. intern klären.' },
-  { label: 'Bewusste Ausnahme', cls: 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200', text: 'Gelb markiert: Eine Regel wurde mit Begründung übergangen. Die Route bleibt freigebbar.' },
-  { label: 'Regelverstoß', cls: 'bg-red-100 text-red-700', text: 'Rot markiert: Die Route verletzt eine Regel und kann nicht freigegeben werden.' },
+  { label: 'Nicht planbar', cls: 'bg-danger-50 text-danger-700 ring-1 ring-inset ring-danger-200', text: 'Datenfehler oder nicht zuordenbar. Erst korrigieren bzw. intern klären.' },
+  { label: 'Bewusste Ausnahme', cls: 'bg-warning-50 text-warning-800 ring-1 ring-inset ring-warning-200', text: 'Gelb markiert: Eine Regel wurde mit Begründung übergangen. Die Route bleibt freigebbar.' },
+  { label: 'Regelverstoß', cls: 'bg-danger-100 text-danger-700', text: 'Rot markiert: Die Route verletzt eine Regel und kann nicht freigegeben werden.' },
 ];
 
 const SYMBOLS: [React.ReactNode, string][] = [
@@ -94,9 +94,9 @@ const PROBLEMS: [string, string][] = [
 
 export default function Hilfe() {
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
-      <h1 className="text-2xl font-semibold tracking-tight">Hilfe & Einarbeitung</h1>
-      <p className="mt-1 max-w-2xl text-sm text-gray-500">
+    <Page>
+      <h1 className="page-title">Hilfe & Einarbeitung</h1>
+      <p className="page-subtitle max-w-2xl">
         Alles, was du für die Wochenplanung der Besichtigungen brauchst: der Ablauf, die Regeln, die das System einhält, und was zu tun ist, wenn
         Daten fehlen. Das System schlägt vor – der Planer prüft und gibt frei.
       </p>
@@ -190,17 +190,17 @@ export default function Hilfe() {
           </Section>
         </div>
       </div>
-    </main>
+    </Page>
   );
 }
 
 function Section({ id, title, hint, children }: { id: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="card scroll-mt-[96px] p-4 md:p-6">
+    <Card as="section" id={id} className="scroll-mt-[96px] p-4 md:p-6">
       <h2 className="text-lg font-semibold">{title}</h2>
       {hint && <p className="mt-0.5 text-sm text-gray-500">{hint}</p>}
       <div className="mt-4">{children}</div>
-    </section>
+    </Card>
   );
 }
 

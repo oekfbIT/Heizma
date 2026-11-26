@@ -6,7 +6,7 @@ export default function StopPopover({ stop, index, color, onDetails, onClose }: 
   return (
     <div className="w-[240px] text-left font-sans text-xs leading-snug text-ink" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ background: stop.fixed ? '#20242d' : color }}>
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ background: stop.fixed ? 'rgb(var(--color-ink))' : color }}>
           {index + 1}
         </span>
         <div className="min-w-0 flex-1">
@@ -48,7 +48,7 @@ export default function StopPopover({ stop, index, color, onDetails, onClose }: 
         {stop.waitMinutes > 0 && (
           <>
             <span className="text-gray-500">Wartezeit</span>
-            <span className="text-amber-600">{stop.waitMinutes} min</span>
+            <span className="text-warning-600">{stop.waitMinutes} min</span>
           </>
         )}
       </div>
