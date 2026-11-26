@@ -16,16 +16,16 @@ const STATUS: Record<RequestPlanning['status'], { label: string; tone: string }>
   pinned: { label: '📌 Manuell fixiert', tone: 'bg-sky-100 text-sky-800' },
   planned: { label: 'Vorgeschlagen', tone: 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200' },
   waitlist: { label: 'Warteliste', tone: 'bg-amber-100 text-amber-800' },
-  excluded: { label: 'Aus Plan genommen', tone: 'bg-gray-200 text-gray-700' },
+  excluded: { label: 'Aus dem Plan genommen', tone: 'bg-gray-200 text-gray-700' },
   unplannable: { label: 'Nicht planbar', tone: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200' },
 };
 
 const ACTION: Record<string, string> = {
   fixiert: 'Fixiert',
-  'aus-plan': 'Aus Plan genommen',
+  'aus-plan': 'Aus dem Plan genommen',
   vorgezogen: 'Vorgezogen',
   zurueckgesetzt: 'Entscheidung zurückgenommen',
-  termin: 'Tour freigegeben → Termin',
+  termin: 'Route freigegeben → Termin',
   'termin-zurueck': 'Freigabe zurückgenommen → wieder Anfrage',
   update: 'Stammdaten korrigiert',
   reset: 'Original wiederhergestellt',
@@ -121,7 +121,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
             </span>
             {!compact && (
               <Link to="/planer" className="ml-2 text-brand-600 hover:underline">
-                Im Planer öffnen →
+                In der Routenplanung öffnen →
               </Link>
             )}
           </p>
@@ -136,12 +136,12 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         {dataBlocked && (
           <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
             Mit fehlerhaften Daten kann die Anfrage nicht eingeplant werden – auch nicht manuell. Korrigiere die markierten Felder unten
-            (Adresse, Koordinaten, Uhrzeit …) und speichere: Prüfung und Tourenplan laufen dann neu, die Anfrage wird automatisch eingeplant.
+            (Adresse, Koordinaten, Uhrzeit …) und speichere: Prüfung und Routenplanung laufen dann neu, die Anfrage wird automatisch eingeplant.
           </p>
         )}
         {locked && (
           <p className="mt-1 text-xs text-gray-500">
-            Teil einer freigegebenen Tour – in Produktion als Termin im Heizma-Backend angelegt. Änderungen erst nach „Freigabe zurücknehmen“.
+            Teil einer freigegebenen Route – wird in Produktion als Termin im Heizma-Backend angelegt. Änderungen sind erst nach „Freigabe zurücknehmen“ möglich.
           </p>
         )}
         {d && d.reason && (
@@ -151,7 +151,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         )}
         {d?.mode === 'prioritize' && info.status === 'waitlist' && (
           <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
-            Vorgezogen, passt aber in keinen Tag regelkonform. Über „Verschieben…“ lässt sie sich als bewusste Ausnahme einplanen.
+            Vorgezogen, passt aber regelkonform in keinen Tag. Über „Einplanen …“ lässt sich die Anfrage als bewusste Ausnahme einplanen.
           </p>
         )}
         {info.violations.map((v) => (
@@ -171,7 +171,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         <div className="mt-3 flex flex-wrap gap-2">
           {!dataBlocked && (
             <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void openMove()}>
-              {info.route ? 'Verschieben…' : 'Einplanen…'}
+              {info.route ? 'Verschieben …' : 'Einplanen …'}
             </button>
           )}
           {info.status === 'planned' && info.route && (
@@ -191,11 +191,11 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
           )}
           {info.status !== 'excluded' && (
             <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => { reset(); setMode('exclude'); }}>
-              Aus Plan nehmen
+              Aus dem Plan nehmen
             </button>
           )}
           {d && (
-            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void send(null, 'Zurückgenommen – Anfrage wird wieder automatisch geplant.')}>
+            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void send(null, 'Zurückgenommen – Anfrage wird wieder automatisch eingeplant.')}>
               {d.mode === 'pin' ? 'Fixierung lösen' : d.mode === 'exclude' ? 'Wieder aufnehmen' : 'Vorziehen zurücknehmen'}
             </button>
           )}
@@ -212,9 +212,9 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
             </button>
           </div>
           {!options ? (
-            <p className="text-sm text-gray-400">Berechne Optionen …</p>
+            <p className="text-sm text-gray-400">Optionen werden berechnet …</p>
           ) : options.length === 0 ? (
-            <p className="text-sm text-gray-500">Keine Optionen – Anfrage hat keine Koordinaten. Erst Adresse/Koordinaten korrigieren.</p>
+            <p className="text-sm text-gray-500">Keine Optionen – die Anfrage hat keine Koordinaten. Bitte zuerst Adresse bzw. Koordinaten korrigieren.</p>
           ) : (
             <>
               <ul className="space-y-1">
@@ -257,7 +257,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
               <p className="font-semibold">Vorschau</p>
               <p>
                 Neu: {formatDay(picked.date)} · {picked.technicianName}
-                {picked.start && ` · ca. ${picked.start}–${picked.end}`} · Tour {picked.stopsBefore} → {picked.stopsBefore + 1} Stopps · +{picked.deltaDrive} min Fahrt
+                {picked.start && ` · ca. ${picked.start}–${picked.end}`} · Route {picked.stopsBefore} → {picked.stopsBefore + 1} Stopps · +{picked.deltaDrive} min Fahrt
               </p>
               {info.route && (
                 <p>
@@ -301,13 +301,13 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         </div>
       )}
 
-      {/* Aus Plan nehmen */}
+      {/* Aus dem Plan nehmen */}
       {mode === 'exclude' && (
         <ReasonBox
           title="Aus dem Plan nehmen"
           hint="Die Anfrage bleibt offen, wird aber nicht automatisch eingeplant, bis du sie wieder aufnimmst."
           placeholder="Grund, z. B. „Kunde ruft zurück“"
-          cta="Aus Plan nehmen"
+          cta="Aus dem Plan nehmen"
           reason={reason}
           setReason={setReason}
           busy={busy}

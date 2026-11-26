@@ -4,6 +4,7 @@ import { useAuth } from './lib/auth';
 import Login from './pages/Login';
 import EntityEdit from './pages/EntityEdit';
 import EntityList from './pages/EntityList';
+import Hilfe from './pages/Hilfe';
 import Planner from './pages/Planner';
 import StammdatenIndex from './pages/StammdatenIndex';
 
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/stammdaten/:entity" element={<EntityList />} />
         <Route path="/stammdaten/:entity/:id" element={<EntityEdit />} />
         <Route path="/planer" element={<Planner />} />
+        <Route path="/hilfe" element={<Hilfe />} />
         <Route path="*" element={<Navigate to="/stammdaten" replace />} />
       </Routes>
     </div>

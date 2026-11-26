@@ -32,7 +32,7 @@ export default function Login() {
         </div>
 
         <h1 className="mb-1 text-xl font-semibold text-ink">Anmelden</h1>
-        <p className="mb-6 text-sm text-gray-500">Zugang für die Disposition.</p>
+        <p className="mb-6 text-sm text-gray-500">Zugang für die Planung.</p>
 
         <label className="mb-4 block">
           <span className="mb-1 block text-sm font-medium text-ink">E-Mail</span>

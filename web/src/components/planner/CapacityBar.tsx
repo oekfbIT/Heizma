@@ -23,7 +23,7 @@ export default function CapacityBar({ route }: { route: DayRoute }) {
   const pct = (v: number) => `${Math.min(100, (v / Math.max(c.window, c.busy)) * 100)}%`;
   // Heimfahrt darf laut Case bis 60 min über das Fenster – erst darüber ist es ein Regelverstoß
   const label =
-    c.overtime > 60 ? `Heimfahrt +${c.overtime} min – über Limit` : c.overtime > 0 ? `voll · Heimfahrt +${c.overtime} min (erlaubt)` : c.free < 30 ? 'voll' : `${formatMinutes(c.free)} frei`;
+    c.overtime > 60 ? `Heimfahrt +${c.overtime} min – über dem Limit` : c.overtime > 0 ? `voll · Heimfahrt +${c.overtime} min (erlaubt)` : c.free < 30 ? 'voll' : `${formatMinutes(c.free)} frei`;
   const tone = c.overtime > 60 ? 'text-red-600' : c.free < 60 || c.overtime > 0 ? 'text-amber-600' : 'text-brand-700';
   return (
     <span className="mt-1.5 block" title={`Vor Ort ${formatMinutes(c.work)} · Fahrt ${formatMinutes(c.drive)} · Pause/Warten ${formatMinutes(c.other)} · frei ${formatMinutes(c.free)}`}>
@@ -34,5 +34,20 @@ export default function CapacityBar({ route }: { route: DayRoute }) {
       </span>
       <span className={`mt-1 block text-[11px] font-medium ${tone}`}>{label}</span>
     </span>
+  );
+}
+
+/** Legende zur Auslastungsleiste – einmal über der Liste statt nur als Hover-Tooltip (mobil nicht erreichbar) */
+export function CapacityLegend() {
+  const item = (cls: string, label: string) => (
+    <span className="flex items-center gap-1"><span className={`inline-block h-2 w-3 rounded-sm ${cls}`} />{label}</span>
+  );
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500">
+      {item('bg-brand-500', 'Vor Ort')}
+      {item('bg-gray-400', 'Fahrt')}
+      {item('bg-gray-300', 'Pause/Warten')}
+      {item('bg-gray-100 ring-1 ring-inset ring-gray-200', 'frei')}
+    </div>
   );
 }

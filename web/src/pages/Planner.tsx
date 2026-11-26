@@ -50,7 +50,7 @@ export default function Planner() {
   }, [selectedId, day]);
 
   if (plan.error || stamm.error) return <ErrorBox message={(plan.error ?? stamm.error)!} onRetry={() => { plan.reload(); stamm.reload(); }} />;
-  if (!plan.data || !stamm.data || !day) return <Loading label="Tourenplan wird berechnet …" />;
+  if (!plan.data || !stamm.data || !day) return <Loading label="Routenplanung wird berechnet …" />;
 
   const p = plan.data;
   const d = stamm.data;
@@ -146,6 +146,17 @@ export default function Planner() {
               <Icon name="refresh" className="h-4 w-4" />
             </button>
           </div>
+          <button
+            className="mt-1 text-[11px] font-medium text-gray-400 underline-offset-2 transition hover:text-red-600 hover:underline disabled:opacity-50"
+            title="Nur für Tests: Freigaben, Planer-Entscheidungen, bestätigte Notizen und Eskalationen löschen. Datenkorrekturen bleiben erhalten."
+            disabled={busy}
+            onClick={() => {
+              if (!window.confirm('Planungsstand zurücksetzen?\n\nAlle Freigaben, Planer-Entscheidungen, bestätigten Notizen und Eskalationen werden gelöscht. Datenkorrekturen bleiben erhalten.')) return;
+              void run(() => apiSend('/api/local-db/reset?scope=planning', 'POST', {}));
+            }}
+          >
+            Test: Planungsstand zurücksetzen
+          </button>
           <p className="mt-0.5 text-sm text-gray-600">
             <strong>{p.stats.planned}</strong> von {p.stats.totalRequests} Anfragen sind automatisch eingeplant
             {p.stats.unassigned > 0 && <>, {p.stats.unassigned} warten</>}.
@@ -180,7 +191,7 @@ export default function Planner() {
                 >
                   <span className="block font-semibold">{formatDay(date)}</span>
                   <span className={active ? 'text-white/85' : st.done ? 'font-medium text-brand-600' : 'text-gray-400'}>
-                    {st.total === 0 ? 'keine Touren' : st.done ? '✓ erledigt' : `${st.total - st.approved} offen`}
+                    {st.total === 0 ? 'keine Routen' : st.done ? '✓ erledigt' : `${st.total - st.approved} offen`}
                   </span>
                 </button>
               );
@@ -207,7 +218,7 @@ export default function Planner() {
                   </p>
                 </div>
               </div>
-              <Step n={2} title="Tour prüfen" hint="Klick auf einen Termin zeigt ihn auf der Karte." />
+              <Step n={2} title="Route prüfen" hint="Ein Klick auf einen Termin zeigt ihn auf der Karte." />
               <div className="mt-2">
                 <StopTimeline
                   route={selectedRoute}
@@ -230,7 +241,7 @@ export default function Planner() {
             </>
           ) : (
             <>
-              <Step n={2} title="Touren prüfen" hint="Klick auf eine Person zeigt ihre Tour." />
+              <Step n={2} title="Routen prüfen" hint="Ein Klick auf eine Person zeigt ihre Tagesroute." />
               <CapacityLegend />
               <div className="mt-2 space-y-2">
                 {visibleTechs.map((t) => {
@@ -252,12 +263,12 @@ export default function Planner() {
               </div>
               {region === NO_REGION && (
                 <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                  Anfragen ohne zuständigen Techniker (kein Gebiet, &gt; 15 km vom Wohnort) – nur intern lösbar.
+                  Nicht zuordenbare Anfragen (in keinem Gebiet und &gt; 15 km von jedem Wohnort) – nur intern lösbar.
                 </p>
               )}
               {waitlist.length > 0 && (
                 <Link to="/stammdaten/anfragen" className="mt-5 flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                  <span><b className="text-ink">{waitlist.length}</b> Anfragen nicht eingeplant – Details in den Anfragen</span>
+                  <span><b className="text-ink">{waitlist.length}</b> Anfragen nicht eingeplant – Details unter „Anfragen“</span>
                   <span className="text-brand-600">→</span>
                 </Link>
               )}
@@ -282,10 +293,10 @@ export default function Planner() {
                     {approved
                       ? `Freigegeben – Reihenfolge und Zeiten bleiben bei Neuplanung erhalten.`
                       : bad
-                        ? 'Diese Tour verletzt eine Regel und kann nicht freigegeben werden.'
+                        ? 'Diese Route verletzt eine Regel und kann nicht freigegeben werden.'
                         : (p.verification?.exceptions ?? []).some((e) => e.technicianId === selectedTech.id && e.date === day)
                           ? 'Enthält eine bewusste Ausnahme (gelb, mit Begründung) – Freigabe möglich.'
-                          : 'Passt alles? Dann freigeben – die Tour wird gesperrt.'}
+                          : 'Passt alles? Dann freigeben – die Route wird für die Neuplanung gesperrt.'}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -293,12 +304,12 @@ export default function Planner() {
                       disabled={busy || !selectedRoute.stops.length || (!approved && bad)}
                       className={`${approved ? 'btn-secondary' : 'btn-primary'} flex-1`}
                     >
-                      {approved ? 'Freigabe zurücknehmen' : `3. Tour von ${selectedTech.name} freigeben`}
+                      {approved ? 'Freigabe zurücknehmen' : `3. Route von ${selectedTech.name} freigeben`}
                     </button>
                     {approved && (
                       <button
                         className="btn-secondary"
-                        title="Als Kalenderdatei für die Techniker:in"
+                        title="Als Kalenderdatei (.ics) für den Außendienst herunterladen"
                         onClick={() => downloadFile(`/api/plan/${selectedTech.id}/${day}/ics`, `route-${selectedTech.id}-${day}.ics`)}
                       >
                         <Icon name="calendar" className="h-4 w-4" /> Kalender
@@ -309,14 +320,14 @@ export default function Planner() {
               );
             })()
           ) : today.done ? (
-            <p className="rounded-lg bg-brand-50 px-3 py-2.5 text-center text-sm font-medium text-brand-800">✓ Alle Touren am {formatDay(day)} sind freigegeben</p>
+            <p className="rounded-lg bg-brand-50 px-3 py-2.5 text-center text-sm font-medium text-brand-800">✓ Alle Routen am {formatDay(day)} sind freigegeben</p>
           ) : (
             <>
               <p className="mb-2 text-xs text-gray-500">
-                {today.approved}/{today.total} Touren freigegeben. Touren mit Regelverstoß werden übersprungen.
+                {today.approved}/{today.total} Routen freigegeben. Routen mit Regelverstoß werden übersprungen.
               </p>
               <button onClick={approveDay} disabled={busy || !openRoutes.length} className="btn-primary w-full">
-                <Icon name="lock" className="h-4 w-4" /> 3. {openRoutes.length} {openRoutes.length === 1 ? 'Tour' : 'Touren'} am {formatDay(day)} freigeben
+                <Icon name="lock" className="h-4 w-4" /> 3. {openRoutes.length} {openRoutes.length === 1 ? 'Route' : 'Routen'} am {formatDay(day)} freigeben
               </button>
             </>
           )}
@@ -340,7 +351,7 @@ export default function Planner() {
           onOpenDetails={setDetailsStopId}
         />
         <div className="pointer-events-none absolute left-3 top-3 z-[500] max-w-[calc(100%-1.5rem)] truncate rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md md:left-4 md:top-4">
-          {formatDay(day)} · {selectedTech ? selectedTech.name : `${dayRoutes.filter((r) => r.stops.length).length} Touren`}
+          {formatDay(day)} · {selectedTech ? selectedTech.name : `${dayRoutes.filter((r) => r.stops.length).length} Routen`}
           {region && !selectedTech && ` · ${region === NO_REGION ? 'Ohne Zuständigkeit' : `Region ${regionLabel(d.technicians.find((t) => t.id === region)!)}`}`}
         </div>
         {/* Legende */}

@@ -7,3 +7,5 @@ api/data/local-db.json
 api/.test-dist/
 api/_run.ts
 api/_to_delete/
+api/data/notes-cache.json
+api/data/travel-cache.json

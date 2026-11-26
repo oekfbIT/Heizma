@@ -16,16 +16,16 @@ const L_LATE = toMinutes('13:00');
 const FULL_DAY = 10 * 60;
 
 const RULE_LABELS: Record<string, string> = {
-  window: 'Arbeitstag im Verfügbarkeitsfenster, Start & Ende am Wohnort',
-  travel: 'Anfahrt passt zeitlich (keine Überlappung inkl. Fahrzeit)',
-  returnHome: 'Heimfahrt max. 60 min über Fensterende',
+  window: 'Arbeitstag im Verfügbarkeitsfenster, Beginn und Ende am Wohnort',
+  travel: 'Nichts überlappt, auch nicht Fahrzeiten',
+  returnHome: 'Heimfahrt höchstens 60 min über das Fensterende hinaus',
   lunch: 'Mittagspause 60 min, Beginn 11:30–13:00, nur ganze Tage',
-  customerFrom: 'Kundenzeiten eingehalten (customerAvailableFrom + bestätigte Notizen)',
+  customerFrom: 'customerAvailableFrom als harte Grenze (inkl. bestätigter Notizen)',
   duration: 'Dauer vor Ort korrekt (PV 60 · WP 75 · WP+PV/unbekannt 105)',
-  fixed: 'Fixe Termine unverändert',
+  fixed: 'Bestehende Termine bleiben, wo sie sind',
   responsibility: 'Zuständigkeit: Gebiet, sonst ≤ 15 km, sonst nicht zuordenbar',
-  unique: 'Jede Anfrage höchstens einmal, keine verloren',
-  priority: 'Ältere Anfragen zuerst',
+  unique: 'Jede Anfrage genau einmal: eingeplant oder auf der Warteliste',
+  priority: 'Reicht die Kapazität nicht, kommen ältere Anfragen zuerst',
 };
 
 export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, noteConstraints: Record<string, { earliest?: string; latest?: string }> = {}): Verification {
@@ -68,8 +68,8 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
         ...sctx,
         message: `${stop.customer}: ${start - earliestLeave} min Lücke, benötigt ${needed} min (Fahrt ${leg}${lunchInGap ? ' + Pause 60' : ''})`,
       });
-      check('window', start - leg >= ws && end <= we, { ...sctx, message: `${stop.customer} ${stop.start}–${stop.end} inkl. Anfahrt außerhalb ${avail.start}–${avail.end}` });
-      if (lunch) check('travel', !(lunch[0] < end && lunch[1] > start), { ...sctx, message: `Mittagspause überlappt ${stop.customer}` });
+      check('window', start - leg >= ws && end <= we, { ...sctx, message: `${stop.customer} ${stop.start}–${stop.end} liegt inkl. Anfahrt außerhalb von ${avail.start}–${avail.end}` });
+      if (lunch) check('travel', !(lunch[0] < end && lunch[1] > start), { ...sctx, message: `Mittagspause überschneidet sich mit ${stop.customer}` });
 
       if (stop.kind === 'request') {
         const r = requests.get(stop.id);
@@ -84,7 +84,7 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
           const expected = r.visitationType === null ? 105 : ({ PV: 60, WP: 75, 'WP+PV': 105 } as const)[r.visitationType];
           check('duration', end - start === expected, { ...sctx, message: `${stop.customer}: ${end - start} min geplant, erwartet ${expected}` });
           const eligible = eligibleTechnicians(r, data.technicians).map((t) => t.id);
-          check('responsibility', eligible.includes(route.technicianId), { ...sctx, message: `${stop.customer} liegt nicht im Gebiet / ≤ 15 km von ${tech.name}` });
+          check('responsibility', eligible.includes(route.technicianId), { ...sctx, message: `${stop.customer} liegt weder im Gebiet von ${tech.name} noch ≤ 15 km von dessen Wohnort` });
         }
       } else {
         const a = appointments.get(stop.id);
@@ -100,16 +100,16 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
     // Heimfahrt
     const back = travel.minutes(pos, tech.home);
     const lastEnd = toMinutes(route.stops[route.stops.length - 1].end);
-    check('returnHome', ret >= lastEnd + back, { ...ctx, message: `Heimkehr ${route.returnHome} zu früh (Fahrt ${back} min)` });
-    check('returnHome', lastEnd + back <= we + 60, { ...ctx, message: `Heimkehr ${lastEnd + back - we} min nach Fensterende (max. 60)` });
+    check('returnHome', ret >= lastEnd + back, { ...ctx, message: `Ankunft zu Hause ${route.returnHome} zu früh (Fahrt ${back} min)` });
+    check('returnHome', lastEnd + back <= we + 60, { ...ctx, message: `Ankunft zu Hause ${lastEnd + back - we} min nach Fensterende (max. 60)` });
 
-    if (lunch && lunch[0] >= lastEnd) check('lunch', lunch[0] >= ret, { ...ctx, message: 'Mittagspause überlappt die Heimfahrt' });
+    if (lunch && lunch[0] >= lastEnd) check('lunch', lunch[0] >= ret, { ...ctx, message: 'Mittagspause überschneidet sich mit der Heimfahrt' });
 
     // Mittagspause
     const full = we - ws >= FULL_DAY;
     if (lunch) {
       check('lunch', full, { ...ctx, message: 'Pause an einem Halbtag' });
-      check('lunch', lunch[1] - lunch[0] === 60 && lunch[0] >= L_EARLY && lunch[0] <= L_LATE, { ...ctx, message: `Pause ${route.lunch!.start}–${route.lunch!.end} außerhalb der Regel` });
+      check('lunch', lunch[1] - lunch[0] === 60 && lunch[0] >= L_EARLY && lunch[0] <= L_LATE, { ...ctx, message: `Mittagspause ${route.lunch!.start}–${route.lunch!.end} außerhalb der Regel` });
     } else if (full) {
       // Gibt es eine Lücke, in die sie gepasst hätte? Dann hätte sie eingeplant werden müssen.
       const gaps: [number, number][] = [[ws, dep]];
@@ -135,10 +135,10 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
   // Keine Anfrage verloren, Zuständigkeit der nicht zuordenbaren korrekt
   const unassigned = new Map(plan.unassigned.map((u) => [u.requestId, u]));
   for (const r of data.requests) {
-    check('unique', seen.has(r.id) !== unassigned.has(r.id), { stopId: r.id, message: `${r.id} ${seen.has(r.id) ? 'geplant und auf Warteliste' : 'weder geplant noch auf Warteliste'}` });
+    check('unique', seen.has(r.id) !== unassigned.has(r.id), { stopId: r.id, message: `${r.id} ${seen.has(r.id) ? 'eingeplant und zugleich auf der Warteliste' : 'weder eingeplant noch auf der Warteliste'}` });
     const u = unassigned.get(r.id);
     if (u?.reason.startsWith('Nicht zuordenbar'))
-      check('responsibility', hasCoords(r) && eligibleTechnicians(r, data.technicians).length === 0, { stopId: r.id, message: `${r.id} als nicht zuordenbar markiert, hat aber Zuständige` });
+      check('responsibility', hasCoords(r) && eligibleTechnicians(r, data.technicians).length === 0, { stopId: r.id, message: `${r.id} als nicht zuordenbar markiert, obwohl eine Zuständigkeit besteht` });
   }
 
   // Priorität: ist eine jüngere Anfrage eingeplant, während eine ältere mit demselben Techniker wartet?
@@ -156,7 +156,7 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
   }
   rules.get('priority')!.checks = plan.routes.length;
   if (inversions)
-    notes.push(`Priorität: ${waitingCap.length} ältere Anfragen auf der Warteliste passten in keinen Tag (Zeitfenster/Ort) – jüngere wurden nur eingeplant, wo die ältere nicht hineinpasste (Greedy prüft älteste zuerst).`);
+    notes.push(`Priorität: ${waitingCap.length} ältere Anfragen auf der Warteliste passten in keinen Tag (Zeitfenster/Ort) – jüngere wurden nur dort eingeplant, wo keine ältere hineinpasste (die Planung prüft immer die älteste zuerst).`);
 
   const estLegs = plan.routes.reduce((n, r) => n + r.stops.filter((s) => s.travelEstimated).length, 0);
   if (estLegs) notes.push(`${estLegs} Fahrten basieren auf Luftlinien-Schätzung (keine echte Fahrzeit verfügbar).`);

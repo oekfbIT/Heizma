@@ -132,7 +132,7 @@ export default function StopDetailsModal({ stop, index, route, technician, color
             <Section title="Fixer Termin">
               <Row label="Nummer">{appointment.id}</Row>
               <Row label="Art">{appointment.type}</Row>
-              <Row label="Hinweis">Nicht verschiebbar – die Route plant drumherum.</Row>
+              <Row label="Hinweis">Nicht verschiebbar – die Route wird um diesen Termin herum geplant.</Row>
             </Section>
           )}
         </div>

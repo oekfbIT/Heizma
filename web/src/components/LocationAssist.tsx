@@ -60,7 +60,7 @@ export default function LocationAssist({
     mode === 'none'
       ? 'Weder Adresse noch Koordinaten vorhanden – Standort unbekannt.'
       : mode === 'forward'
-        ? `Adresse „${address}" konnte nicht gefunden werden – vermutlich Tippfehler.`
+        ? `Adresse „${address}“ konnte nicht gefunden werden – vermutlich Tippfehler.`
         : `Zu den Koordinaten ${lat}, ${lng} wurde keine Adresse gefunden.`;
 
   const escalateBox = (
@@ -68,12 +68,12 @@ export default function LocationAssist({
       <p className="flex-1 text-sm">
         {mode === 'none'
           ? 'Kein Standort vorhanden – hier kann nichts automatisch ergänzt werden. Bitte beim Vertrieb nachfragen.'
-          : 'Automatisch nicht auffindbar. Der Vertrieb sollte die Adresse mit der Kund:in klären.'}
+          : 'Automatisch nicht auffindbar. Der Vertrieb sollte die Adresse mit dem Kunden klären.'}
       </p>
       {escalated ? (
-        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">An Vertrieb eskaliert</span>
+        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">An den Vertrieb eskaliert</span>
       ) : (
-        <button type="button" className="btn-secondary" onClick={() => setDialog(true)}>An Vertrieb eskalieren</button>
+        <button type="button" className="btn-secondary" onClick={() => setDialog(true)}>An den Vertrieb eskalieren</button>
       )}
     </div>
   );
@@ -98,7 +98,7 @@ export default function LocationAssist({
             {mode === 'forward' ? 'Koordinaten fehlen – wir können sie aus der Adresse ermitteln.' : 'Adresse fehlt – wir können sie aus den Koordinaten ermitteln.'}
           </p>
           <button type="button" className="btn-primary" disabled={busy} onClick={() => void lookup()}>
-            {busy ? 'Suche …' : mode === 'forward' ? 'Koordinaten finden' : 'Adresse finden'}
+            {busy ? 'Wird gesucht …' : mode === 'forward' ? 'Koordinaten finden' : 'Adresse finden'}
           </button>
         </div>
       )}

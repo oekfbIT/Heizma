@@ -45,7 +45,7 @@ export default function StammdatenIndex() {
           </p>
         </div>
         <Link to="/planer" className="btn-secondary">
-          <Icon name="route" className="h-4 w-4" /> Zum Tourenplan
+          <Icon name="route" className="h-4 w-4" /> Zur Routenplanung
         </Link>
       </div>
 
@@ -56,7 +56,7 @@ export default function StammdatenIndex() {
           icon="alert"
           title="Handlungsbedarf"
           count={o.actionRequired.total}
-          hint={`${o.actionRequired.technicians} Techniker · ${o.actionRequired.requests} Anfragen · ${o.actionRequired.appointments} Termine`}
+          hint={`${o.actionRequired.technicians} Außendienstler · ${o.actionRequired.requests} Anfragen · ${o.actionRequired.appointments} Termine`}
           tone={o.actionRequired.total ? 'danger' : undefined}
         />
         {ENTITIES.map((e) => (

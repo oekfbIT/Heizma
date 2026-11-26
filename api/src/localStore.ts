@@ -119,8 +119,8 @@ function check(entity: EntityKey, patch: Patch) {
       const v = patch[k];
       if (v !== undefined && v !== null && !Number.isFinite(v as number)) throw new ValidationError(`${k} muss eine Zahl sein`);
     }
-    if (typeof patch.lat === 'number' && (patch.lat < 46 || patch.lat > 49.1)) throw new ValidationError('lat liegt nicht in Österreich (46–49,1)');
-    if (typeof patch.lng === 'number' && (patch.lng < 9.4 || patch.lng > 17.2)) throw new ValidationError('lng liegt nicht in Österreich (9,4–17,2)');
+    if (typeof patch.lat === 'number' && (patch.lat < 46 || patch.lat > 49.1)) throw new ValidationError('Breitengrad (lat) liegt nicht in Österreich (46–49,1)');
+    if (typeof patch.lng === 'number' && (patch.lng < 9.4 || patch.lng > 17.2)) throw new ValidationError('Längengrad (lng) liegt nicht in Österreich (9,4–17,2)');
     if (patch.visitationType != null && !['WP', 'PV', 'WP+PV'].includes(patch.visitationType as string))
       throw new ValidationError('Typ muss WP, PV oder WP+PV sein');
     if (patch.durationMinutes !== undefined && !(Number(patch.durationMinutes) > 0)) throw new ValidationError('Dauer muss > 0 sein');
@@ -141,7 +141,7 @@ export function updateEntity(entity: EntityKey, id: string, input: Patch): Patch
     if (!parsers[k]) throw new ValidationError(`Feld „${k}“ ist nicht bearbeitbar`);
     patch[k] = parsers[k](v);
   }
-  if (!Object.keys(patch).length) throw new ValidationError('Keine Änderungen');
+  if (!Object.keys(patch).length) throw new ValidationError('Keine Änderungen vorhanden');
   check(entity, patch);
   const d = load();
   d.overrides[entity][id] = { ...(d.overrides[entity][id] ?? {}), ...patch };
@@ -159,6 +159,20 @@ export function resetEntity(entity: EntityKey, id: string) {
 
 export function resetAll() {
   db = empty();
+  persist();
+}
+
+/**
+ * Nur für Tests: setzt den Planungsstand zurück (Freigaben, Planer-Entscheidungen,
+ * bestätigte Notizen, Eskalationen). Datenkorrekturen (Overrides) bleiben erhalten.
+ */
+export function resetPlanning() {
+  const d = load();
+  d.approvals = {};
+  d.decisions = {};
+  d.noteConfirmations = {};
+  d.escalations = {};
+  d.log = d.log.filter((l) => l.action === 'update' || l.action === 'reset');
   persist();
 }
 
@@ -204,14 +218,14 @@ export function escalate(
   let newDate: string | undefined;
   if (type === 'customer_delay') {
     newDate = String(input.newDate ?? '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new ValidationError('Neuer Termin im Format YYYY-MM-DD');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new ValidationError('Neuer Termin bitte im Format YYYY-MM-DD angeben');
     if (newDate <= planTo) throw new ValidationError(`Neuer Termin muss nach dem Planungszeitraum (${planTo}) liegen`);
   }
   const escalation: Escalation = {
     type,
     at: new Date().toISOString(),
     newDate,
-    recipient: String(input.recipient ?? (type === 'customer_delay' ? 'Kunde' : type === 'technician_request' ? 'Techniker' : 'Disposition')),
+    recipient: String(input.recipient ?? (type === 'customer_delay' ? 'Kunde' : type === 'technician_request' ? 'Außendienst' : 'Planung')),
     message,
     affectedRequests: Array.isArray(input.affectedRequests) ? input.affectedRequests.map(String) : undefined,
   };

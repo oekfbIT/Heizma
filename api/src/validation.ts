@@ -30,7 +30,7 @@ export function validateDataset(data: Dataset): Issue[] {
     if (!entries.length) {
       issues.push({
         entity: 'technician', entityId: t.id, field: 'availability', severity: 'error', code: 'NO_AVAILABILITY',
-        message: `Keine Verfügbarkeit im Zeitraum ${data.range.from} – ${data.range.to}. Wird nicht eingeplant.`,
+        message: `Keine Verfügbarkeit im Zeitraum ${data.range.from} – ${data.range.to}. Person wird nicht eingeplant.`,
       });
     } else if (!usable.length) {
       issues.push({
@@ -50,7 +50,7 @@ export function validateDataset(data: Dataset): Issue[] {
   for (const a of data.availability) {
     const id = `${a.technicianId}@${a.date}`;
     if (!techIds.has(a.technicianId)) {
-      issues.push({ entity: 'availability', entityId: id, field: 'technicianId', severity: 'error', code: 'UNKNOWN_TECH', message: `Unbekannter Techniker ${a.technicianId}.` });
+      issues.push({ entity: 'availability', entityId: id, field: 'technicianId', severity: 'error', code: 'UNKNOWN_TECH', message: `Unbekannter Außendienstler ${a.technicianId}.` });
     }
     if (!isValidHHMM(a.start) || !isValidHHMM(a.end) || toMinutes(a.start) >= toMinutes(a.end)) {
       issues.push({ entity: 'availability', entityId: id, field: 'start', severity: 'error', code: 'BAD_WINDOW', message: `Ungültiges Zeitfenster ${a.start}–${a.end}.` });
@@ -66,7 +66,7 @@ export function validateDataset(data: Dataset): Issue[] {
       issues.push({ entity: 'request', entityId: r.id, field, severity, code, message });
 
     if (!hasCoords(r)) {
-      push('lat', 'error', 'NO_COORDS', 'Koordinaten fehlen – Adresse muss geokodiert werden (/travel mit Adresse).');
+      push('lat', 'error', 'NO_COORDS', 'Koordinaten fehlen – die Adresse muss geokodiert werden.');
     }
     if (!/\b\d{4}\b/.test(r.address)) {
       push('address', 'warning', 'ADDRESS_NO_ZIP', 'Adresse ohne gültige PLZ – möglicher Tippfehler.');
@@ -74,7 +74,7 @@ export function validateDataset(data: Dataset): Issue[] {
     if (r.visitationType === null) {
       push('visitationType', 'warning', 'NO_TYPE', 'Besichtigungstyp unbekannt – 105 min angenommen.');
     } else if (EXPECTED_DURATION[r.visitationType] !== r.durationMinutes) {
-      push('durationMinutes', 'warning', 'DURATION_MISMATCH', `Dauer ${r.durationMinutes} min passt nicht zu Typ ${r.visitationType} (${EXPECTED_DURATION[r.visitationType]} min).`);
+      push('durationMinutes', 'warning', 'DURATION_MISMATCH', `Dauer ${r.durationMinutes} min passt nicht zum Typ ${r.visitationType} (erwartet ${EXPECTED_DURATION[r.visitationType]} min).`);
     }
     if (r.customerAvailableFrom !== null && !isValidHHMM(r.customerAvailableFrom)) {
       push('customerAvailableFrom', 'error', 'BAD_TIME', `Ungültige Uhrzeit „${r.customerAvailableFrom}“ (erwartet HH:MM).`);
@@ -91,16 +91,16 @@ export function validateDataset(data: Dataset): Issue[] {
   for (const ap of data.appointments) {
     const push = (field: string, severity: Issue['severity'], code: string, message: string) =>
       issues.push({ entity: 'appointment', entityId: ap.id, field, severity, code, message });
-    if (!techIds.has(ap.technicianId)) push('technicianId', 'error', 'UNKNOWN_TECH', `Unbekannter Techniker ${ap.technicianId}.`);
+    if (!techIds.has(ap.technicianId)) push('technicianId', 'error', 'UNKNOWN_TECH', `Unbekannter Außendienstler ${ap.technicianId}.`);
     const { date, minutes: start } = splitIso(ap.start);
     const end = splitIso(ap.end).minutes;
     const avail = data.availability.find((a) => a.technicianId === ap.technicianId && a.date === date);
     if (!avail) {
-      push('start', 'error', 'OUTSIDE_AVAILABILITY', `Techniker hat am ${date} keine Verfügbarkeit.`);
+      push('start', 'error', 'OUTSIDE_AVAILABILITY', `Außendienstler hat am ${date} keine Verfügbarkeit.`);
     } else if (avail.blocked) {
-      push('start', 'error', 'TECH_BLOCKED', `Techniker ist am ${date} gesperrt – Termin muss umgeplant werden.`);
+      push('start', 'error', 'TECH_BLOCKED', `Außendienstler ist am ${date} gesperrt – Termin muss umgeplant werden.`);
     } else if (start < toMinutes(avail.start) || end > toMinutes(avail.end)) {
-      push('start', 'warning', 'OUTSIDE_WINDOW', `Termin liegt außerhalb des Fensters ${avail.start}–${avail.end}.`);
+      push('start', 'warning', 'OUTSIDE_WINDOW', `Termin liegt außerhalb des Verfügbarkeitsfensters ${avail.start}–${avail.end}.`);
     }
     const overlapping = data.appointments.find((o) => {
       if (o.id === ap.id || o.technicianId !== ap.technicianId) return false;

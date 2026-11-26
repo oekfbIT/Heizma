@@ -82,7 +82,7 @@ export default function EntityEdit() {
       reload();
       localDb.reload();
       window.dispatchEvent(new Event('heizma:data-changed')); // Planungs-Karte zeigt sofort den neuen Stand
-      setMessage({ tone: 'ok', text: 'Gespeichert – Prüfung und Tourenplan wurden mit der Korrektur neu berechnet.' });
+      setMessage({ tone: 'ok', text: 'Gespeichert – Prüfung und Routenplanung wurden mit der Korrektur neu berechnet.' });
     } catch (e) {
       setMessage({ tone: 'error', text: (e as Error).message });
     } finally {
@@ -124,7 +124,7 @@ export default function EntityEdit() {
         <Icon name="lock" className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
           Die Case-Study-API ist <strong>read-only</strong>. Korrekturen werden per <code>PATCH</code> an die eigene API
-          gesendet und lokal gespeichert – Prüfung und Tourenplan nutzen sofort die korrigierten Daten. In Produktion
+          gesendet und lokal gespeichert – Prüfung und Routenplanung nutzen sofort die korrigierten Daten. In Produktion
           würde derselbe Endpunkt ins CRM zurückschreiben.
         </p>
       </div>
@@ -138,7 +138,7 @@ export default function EntityEdit() {
           {message.text}
           {message.tone === 'ok' && (
             <Link to="/planer" className="ml-2 font-semibold underline">
-              Zum Tourenplan
+              Zur Routenplanung
             </Link>
           )}
         </div>
@@ -256,7 +256,7 @@ export default function EntityEdit() {
             Verwerfen
           </button>
           <button type="submit" className="btn-primary" disabled={!entityKey || !dirty || saving}>
-            {saving ? 'Speichert …' : 'Speichern'}
+            {saving ? 'Wird gespeichert …' : 'Speichern'}
           </button>
         </div>
       </form>

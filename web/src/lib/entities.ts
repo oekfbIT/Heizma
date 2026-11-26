@@ -87,7 +87,7 @@ export const ENTITIES: EntityDef[] = [
     slug: 'techniker',
     kind: 'technician',
     title: 'Außendienst',
-    description: 'Techniker:innen mit Wohnort und Einsatzgebiet',
+    description: 'Außendienstler mit Wohnort, Einsatzgebiet und Verfügbarkeiten',
     icon: 'users',
     columns: [
       { key: 'id', label: 'ID', className: 'w-28' },
@@ -119,11 +119,11 @@ export const ENTITIES: EntityDef[] = [
     slug: 'termine',
     kind: 'appointment',
     title: 'Fixe Termine',
-    description: 'Bestehende Termine – nicht verschiebbar. Inkl. freigegebener Touren (simuliert)',
+    description: 'Bestehende Termine – nicht verschiebbar, inkl. freigegebener Routen (simuliert)',
     icon: 'calendar',
     columns: [
       { key: 'id', label: 'ID', className: 'w-28' },
-      { key: 'tech', label: 'Techniker', className: 'w-28' },
+      { key: 'tech', label: 'Außendienst', className: 'w-28' },
       { key: 'type', label: 'Art', className: 'w-36' },
       { key: 'customer', label: 'Kunde' },
       { key: 'start', label: 'Beginn', className: 'w-40' },
@@ -137,7 +137,7 @@ export const ENTITIES: EntityDef[] = [
         })),
     find: (d, id) => d.appointments.find((a) => a.id === id),
     fields: [
-      { key: 'technicianId', label: 'Techniker', value: (a) => a.technicianId },
+      { key: 'technicianId', label: 'Außendienst', value: (a) => a.technicianId },
       { key: 'type', label: 'Art', value: (a) => a.type },
       { key: 'start', label: 'Beginn', value: (a) => formatDateTime(a.start) },
       { key: 'end', label: 'Ende', value: (a) => formatDateTime(a.end) },
@@ -152,7 +152,7 @@ export const ENTITIES: EntityDef[] = [
     description: 'Arbeitsfenster pro Person und Tag',
     icon: 'clock',
     columns: [
-      { key: 'tech', label: 'Techniker', className: 'w-28' },
+      { key: 'tech', label: 'Außendienst', className: 'w-28' },
       { key: 'date', label: 'Datum', className: 'w-32' },
       { key: 'window', label: 'Fenster' },
       { key: 'blocked', label: 'Gesperrt', className: 'w-28' },
@@ -166,7 +166,7 @@ export const ENTITIES: EntityDef[] = [
         })),
     find: (d, id) => d.availability.find((a) => `${a.technicianId}@${a.date}` === id),
     fields: [
-      { key: 'technicianId', label: 'Techniker', value: (a) => a.technicianId },
+      { key: 'technicianId', label: 'Außendienst', value: (a) => a.technicianId },
       { key: 'date', label: 'Datum', value: (a) => a.date },
       { key: 'start', label: 'Fenster', value: (a) => `${a.start} – ${a.end}` },
       { key: 'blocked', label: 'Gesperrt', value: (a) => (a.blocked ? 'ja' : 'nein') },

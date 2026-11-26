@@ -282,7 +282,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
   // 1a) Datenfehler sperren die Planung – auch für manuelle Entscheidungen. Nach der Korrektur wird automatisch geplant.
   for (const [id, message] of blockingErrors(data)) {
     if (handled.has(id)) continue;
-    unassigned.push({ requestId: id, reason: `Datenfehler – erst korrigieren: ${message}` });
+    unassigned.push({ requestId: id, reason: `Datenfehler – zuerst korrigieren: ${message}` });
     handled.add(id);
   }
 
@@ -291,7 +291,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
   for (const [id, d] of byTime) {
     if (handled.has(id) || !data.requests.some((r) => r.id === id)) continue;
     if (d.mode === 'exclude') {
-      unassigned.push({ requestId: id, reason: `Aus Plan genommen: ${d.reason}` });
+      unassigned.push({ requestId: id, reason: `Aus dem Plan genommen: ${d.reason}` });
       handled.add(id);
       continue;
     }
@@ -299,7 +299,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
     handled.add(id);
     const item = items.get(id);
     if (!item) {
-      unassigned.push({ requestId: id, reason: 'Keine Koordinaten – erst geokodieren' });
+      unassigned.push({ requestId: id, reason: 'Keine Koordinaten – zuerst geokodieren' });
       continue;
     }
     if (!item.eligible.size) {
@@ -309,7 +309,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
     item.manual = { mode: 'pin', reason: d.reason, override: d.override };
     const slot = open.find((s) => s.tech.id === d.technicianId && s.date === d.date);
     if (!slot) {
-      unassigned.push({ requestId: id, reason: `Fixierung nicht möglich: ${d.technicianId} am ${d.date} nicht verfügbar oder Tour freigegeben` });
+      unassigned.push({ requestId: id, reason: `Fixierung nicht möglich: ${d.technicianId} ist am ${d.date} nicht verfügbar oder die Route ist bereits freigegeben` });
       continue;
     }
     const at = insertionIndex(slot, item, sim, travel);
@@ -347,7 +347,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
   for (const request of queue) {
     const item = items.get(request.id);
     if (!item) {
-      unassigned.push({ requestId: request.id, reason: 'Keine Koordinaten – erst geokodieren' });
+      unassigned.push({ requestId: request.id, reason: 'Keine Koordinaten – zuerst geokodieren' });
       continue;
     }
     if (!item.eligible.size) {
@@ -355,7 +355,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
       continue;
     }
     if (!slots.some((s) => item.eligible.has(s.tech.id))) {
-      unassigned.push({ requestId: request.id, reason: 'Zuständige Techniker ohne Verfügbarkeit' });
+      unassigned.push({ requestId: request.id, reason: 'Zuständige Außendienstler ohne Verfügbarkeit' });
       continue;
     }
     const best = bestInsertion(item, open);
@@ -537,7 +537,7 @@ export function rankOptions(data: Dataset, plan: Plan, requestId: string, opts: 
       }
     }
     const best = ok ?? loose;
-    if (!ok && !base.feasible) warnings.push('Tour verletzt bereits ohne diese Anfrage Regeln');
+    if (!ok && !base.feasible) warnings.push('Die Route verletzt bereits ohne diese Anfrage Regeln');
     else if (!ok && loose?.reason) warnings.push(loose.reason);
     options.push({
       technicianId: tech.id,
@@ -549,7 +549,7 @@ export function rankOptions(data: Dataset, plan: Plan, requestId: string, opts: 
       sourceSaving: Math.round(sourceSaving),
       stopsBefore: slot.items.length,
       warnings,
-      blocked: route.approved ? 'Tour ist freigegeben – zuerst Freigabe zurücknehmen' : null,
+      blocked: route.approved ? 'Route ist freigegeben – zuerst die Freigabe zurücknehmen' : null,
       current,
     });
   }

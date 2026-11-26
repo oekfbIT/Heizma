@@ -3,7 +3,7 @@ import { apiSend, type Escalation } from '@/lib/api';
 import { formatDay } from '@/lib/format';
 import type { ServiceRequest } from '@/lib/types';
 
-const TYPE_LABEL: Record<string, string> = { WP: 'Wärmepumpe', PV: 'Photovoltaik', 'WP+PV': 'Wärmepumpe & Photovoltaik' };
+const TYPE_LABEL: Record<string, string> = { WP: 'Wärmepumpe', PV: 'Photovoltaikanlage', 'WP+PV': 'Wärmepumpe und Photovoltaikanlage' };
 
 const city = (address: string) => address.split(',').pop()?.trim() ?? address;
 
@@ -16,7 +16,7 @@ vielen Dank für Ihr Vertrauen in Heizma. Aufgrund der aktuell hohen Nachfrage k
 
 Als neuen Termin schlagen wir Ihnen ${formatDay(date)} (${date.split('-').reverse().join('.')}) vor. Die genaue Uhrzeit bestätigen wir Ihnen am Vortag. Passt Ihnen der Tag nicht, antworten Sie einfach auf diese Nachricht.
 
-Wir entschuldigen uns für die Verzögerung.
+Bitte entschuldigen Sie die Verzögerung.
 
 Freundliche Grüße
 Ihr Heizma-Team`;
@@ -27,7 +27,7 @@ export function internalText(r: ServiceRequest, reason: string) {
 
 Grund: ${reason}
 
-Bitte klären: zuständigen Techniker bzw. Verfügbarkeit festlegen oder Kund:in informieren.`;
+Bitte klären: Zuständigkeit bzw. Verfügbarkeit festlegen oder den Kunden informieren.`;
 }
 
 interface Props {
@@ -54,7 +54,7 @@ export default function EscalationDialog({ request, reason, type, suggestedDate,
       await apiSend(`/api/escalations/${request.id}`, 'POST', {
         type,
         newDate: type === 'customer_delay' ? date : undefined,
-        recipient: type === 'customer_delay' ? request.customer : 'Disposition / Vertrieb',
+        recipient: type === 'customer_delay' ? request.customer : 'Vertrieb / Planung',
         message,
       });
       onDone();
@@ -69,7 +69,7 @@ export default function EscalationDialog({ request, reason, type, suggestedDate,
     <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/30 sm:items-center sm:p-4" onClick={onClose}>
       <div className="card max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-b-none p-5 sm:rounded-b-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-          {type === 'customer_delay' ? 'Kund:in über Verschiebung informieren' : 'Intern eskalieren'}
+          {type === 'customer_delay' ? 'Kunden über die Verschiebung informieren' : 'Intern eskalieren'}
         </p>
         <h2 className="mt-1 text-lg font-semibold">
           {request.customer} · {city(request.address)}
@@ -114,7 +114,7 @@ export default function EscalationDialog({ request, reason, type, suggestedDate,
             Abbrechen
           </button>
           <button className="btn-primary" onClick={() => void submit()} disabled={saving || (type === 'customer_delay' && !date)}>
-            {saving ? 'Speichert …' : type === 'customer_delay' ? 'Als gesendet markieren' : 'Eskalieren'}
+            {saving ? 'Wird gespeichert …' : type === 'customer_delay' ? 'Als gesendet markieren' : 'Eskalieren'}
           </button>
         </div>
       </div>

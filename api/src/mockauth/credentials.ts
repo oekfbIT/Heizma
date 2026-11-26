@@ -2,7 +2,7 @@
 export const MOCK_USER = {
   email: (process.env.MOCK_AUTH_EMAIL ?? 'planner@heizma.at').trim().toLowerCase(),
   password: process.env.MOCK_AUTH_PASSWORD ?? '1nvite0nly',
-  name: 'Disposition',
+  name: 'Planung',
   role: 'planner',
 } as const;
 

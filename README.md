@@ -1,6 +1,6 @@
 # Heizma · Einsatz- & Routenplanung (Case Study)
 
-Prototyp für die **Routenoptimierung-Case-Study** von Heizma: offene Besichtigungs-Anfragen werden automatisch auf Außendienst-Techniker:innen und Tage verteilt, pro Person entsteht eine fahrzeitoptimierte Tagesroute. Der Planer soll nur noch **draufschauen und freigeben**, statt selbst zu rechnen.
+Prototyp für die **Routenoptimierung-Case-Study** von Heizma: offene Besichtigungs-Anfragen werden automatisch auf Außendienstler und Tage verteilt, pro Person entsteht eine fahrzeitoptimierte Tagesroute. Der Planer soll nur noch **draufschauen und freigeben**, statt selbst zu rechnen.
 
 > Status: **Scaffold / erster Entwurf.** Datenanbindung, Validierung, ein erster Planungs-Algorithmus und die beiden Hauptansichten stehen. Fahrzeiten werden in der Planung noch geschätzt (siehe [Nächste Schritte](#nächste-schritte)).
 
@@ -99,8 +99,9 @@ Die App ist durch einen fest hinterlegten Mock-Login geschützt – keine extern
 
 - **KPI-Kacheln:** eingeplante vs. offene Anfragen, Handlungsbedarf (Techniker / Anfragen / Termine), fixe Termine, verfügbare Techniker & Einsatztage.
 - **Index-Karten** je Bereich: Anfragen, Außendienst, fixe Termine, Verfügbarkeiten, Handlungsbedarf – jeweils mit Anzahl der zu prüfenden Datensätze.
+- **Hilfe & Einarbeitung** (`/hilfe`, im Menü statt „Handlungsbedarf“, der über die Übersicht erreichbar bleibt): Ablauf in 5 Schritten, Planungsregeln, Status & Symbole, Eingriffe des Planers und Lösungen für typische Datenprobleme – für neue Kolleginnen und Kollegen in der Planung.
 - **Listen** mit Suche, Filter „Nur Probleme“ und Status-Spalte (OK / Warnung / Fehler).
-- **Detail-/Bearbeitungsansicht:** fehlerhafte Felder sind rot bzw. gelb markiert, inkl. Begründung. Korrekturen werden per `PATCH` gespeichert und fließen sofort in Prüfung & Tourenplan ein (siehe „Lokale Korrekturen“).
+- **Detail-/Bearbeitungsansicht:** fehlerhafte Felder sind rot bzw. gelb markiert, inkl. Begründung. Korrekturen werden per `PATCH` gespeichert und fließen sofort in Prüfung & Routenplanung ein (siehe „Lokale Korrekturen“).
 
 ### 2. Routenplanung (`/planer`, grüner Button oben rechts)
 
@@ -111,10 +112,14 @@ Die App ist durch einen fest hinterlegten Mock-Login geschützt – keine extern
 - **Hover** über Stopp (Karte oder Liste): Ankunftszeit, Terminfenster, Adresse.
 - **Plan-Prüfung:** Badge „✓ 0 Regelverstöße · 10 Regeln“ – aufklappbar mit jeder Regel, Anzahl Einzelprüfungen und Hinweisen. Verstöße springen per Klick zur betroffenen Route, Stopps werden rot markiert.
 - **Kennzahlen:** eingeplant, Gesamtfahrzeit inkl. Ersparnis durch Optimierung (Greedy → 2-opt/Relocate), Ø Anfahrt pro Besuch, Freigaben, Quelle der Fahrzeiten. Geschätzte Fahrten sind mit „≈“ markiert.
-- **Freigabe:** pro Route oder „alle Routen des Tages freigeben“. Freigegebene Routen sind serverseitig gespeichert und **gesperrt** – Reihenfolge und Zeiten bleiben bei jeder Neuplanung erhalten. Routen mit Regelverstoß sind nicht freigebbar. Export als **.ics** (Kalender) für die Techniker:in.
+- **Freigabe:** pro Route oder „alle Routen des Tages freigeben“. Freigegebene Routen sind serverseitig gespeichert und **gesperrt** – Reihenfolge und Zeiten bleiben bei jeder Neuplanung erhalten. Routen mit Regelverstoß sind nicht freigebbar. Export als **.ics** (Kalender) für den Außendienst.
 - **Kartenlegende:** **Kreis** in Technikerfarbe = neu eingeplante Anfrage (wird mit der Freigabe zum Termin) · **dunkles Quadrat mit Schloss** = bestehender fixer Termin (nicht verschiebbar).
 
-> **Annahme – Benachrichtigung bei Freigabe:** Mit „Route freigeben“ würden in Produktion automatisch die **Kund:innen** (Terminbestätigung mit Datum und Zeitfenster) und die **Techniker:innen** (Tagesroute / Kalendereintrag) benachrichtigt. Im Prototyp wird nur die Freigabe gespeichert – es werden keine Nachrichten versendet.
+> **Annahme – Benachrichtigung bei Freigabe:** Mit „Route freigeben“ würden in Produktion automatisch die **Kunden** (Terminbestätigung mit Datum und Zeitfenster) und die **Außendienstler** (Tagesroute / Kalendereintrag) benachrichtigt. Im Prototyp wird nur die Freigabe gespeichert – es werden keine Nachrichten versendet.
+
+> **Bewusst nicht umgesetzt – kein Rückgängig nach der Veröffentlichung:** Ist eine Route freigegeben und veröffentlicht, sind Kunden und Außendienst in Produktion bereits informiert. Ein „Rückgängig“-Button würde dann Absagen bzw. Storno-Nachrichten und eine erneute Terminabstimmung erfordern – das ist nicht implementiert. Änderungen an veröffentlichten Terminen laufen über den normalen Umplanungsprozess. „Freigabe zurücknehmen“ im Prototyp entsperrt nur die Route für die Neuplanung und verschickt nichts.
+
+> **Zum Testen – Planungsstand zurücksetzen:** In der Routenplanung unter der Überschrift „Test: Planungsstand zurücksetzen“ (oder `POST /api/local-db/reset?scope=planning`). Gelöscht werden alle Freigaben, Planer-Entscheidungen (fixiert, vorgezogen, aus dem Plan genommen), bestätigte Notiz-Hinweise und Eskalationen. **Datenkorrekturen bleiben erhalten**, die Woche wird sofort neu geplant. Ein kompletter Reset inkl. Korrekturen: `POST /api/local-db/reset`.
 - **KI-Hinweise aus Notizen:** Chips wie „Vorher anrufen“, „Nur vormittags“. Zeit-Hinweise lassen sich mit einem Klick als harte Regel übernehmen (Mensch entscheidet).
 - **Warteliste** mit allen nicht eingeplanten Anfragen, gruppiert nach Grund.
 
@@ -123,8 +128,8 @@ Die App ist durch einen fest hinterlegten Mock-Login geschützt – keine extern
 Auf jeder Anfrage-Seite (`/stammdaten/anfragen/:id`) und im Stopp-Dialog des Planers gibt es dieselbe Karte **„Planung“** (gleiche Endpunkte, gleiche Logik):
 
 - **Status:** Vorgeschlagen · 📌 Manuell fixiert · Warteliste (Platz X von Y) · Aus Plan genommen · Nicht planbar (mit Grund) · Termin (freigegeben).
-- **Verschieben… / Einplanen…:** keine leeren Dropdowns, sondern eine **sortierte Liste aller Techniker-Tage** – regelkonforme zuerst, mit voraussichtlicher Uhrzeit und Zusatz-Fahrzeit. Regelbrüche stehen gelb mit Grund daneben („Fixer Termin um 10:30 nicht mehr erreichbar“), freigegebene Touren sind gesperrt.
-- **Vorschau vor dem Übernehmen:** neue vs. bisherige Tour, Fahrzeit-Differenz, verletzte Regeln. Nach dem Übernehmen wird die ganze Woche neu geplant und unabhängig geprüft – die Rückmeldung kommt aus dem **tatsächlichen Ergebnis**, nicht aus der Vorschau.
+- **Verschieben … / Einplanen …:** keine leeren Dropdowns, sondern eine **sortierte Liste aller Außendienst-Tage** – regelkonforme zuerst, mit voraussichtlicher Uhrzeit und Zusatz-Fahrzeit. Regelbrüche stehen gelb mit Grund daneben („Fixer Termin um 10:30 nicht mehr erreichbar“), freigegebene Touren sind gesperrt.
+- **Vorschau vor dem Übernehmen:** neue vs. bisherige Route, Fahrzeit-Differenz, verletzte Regeln. Nach dem Übernehmen wird die ganze Woche neu geplant und unabhängig geprüft – die Rückmeldung kommt aus dem **tatsächlichen Ergebnis**, nicht aus der Vorschau.
 - **📌 Fixieren:** Anfrage bleibt bei Neuplanung an diesem Tag und bei dieser Person.
 - **Aus Plan nehmen** (mit Grund, z. B. „Kunde ruft zurück“) und **Wieder aufnehmen**.
 - **⇡ Vorziehen** von der Warteliste: bricht „ältere zuerst“ bewusst – Hinweis „N ältere Anfragen warten noch“, Begründung Pflicht.
@@ -134,11 +139,11 @@ Auf jeder Anfrage-Seite (`/stammdaten/anfragen/:id`) und im Stopp-Dialog des Pla
 
 **Regelbrüche: erlaubt, aber nie unsichtbar.** Der Planer bleibt nie in der UI stecken. Ein Regelbruch geht nur mit „Trotzdem einplanen“ + Begründung. Die Plan-Prüfung führt ihn dann als **bewusste Ausnahme (gelb)** statt als Fehler (rot); Touren mit Ausnahmen sind freigebbar, Touren mit echten Fehlern nicht. Ein Regelbruch ohne bestätigte Ausnahme bleibt immer rot.
 
-> **Annahme – Anfrage wird Termin:** Mit der Freigabe einer Tour würden in Produktion die Anfragen im Heizma-Backend zu Terminen. Im Prototyp ist das simuliert: Freigegebene Anfragen verschwinden aus „Offene Anfragen“ und erscheinen unter „Termine“ („aus Freigabe“). „Freigabe zurücknehmen“ macht sie wieder zu Anfragen.
+> **Annahme – Anfrage wird Termin:** Mit der Freigabe einer Route würden in Produktion die Anfragen im Heizma-Backend zu Terminen. Im Prototyp ist das simuliert: Freigegebene Anfragen verschwinden aus „Offene Anfragen“ und erscheinen unter „Termine“ („aus Freigabe“). „Freigabe zurücknehmen“ macht sie wieder zu Anfragen.
 
 | Endpunkt | Zweck |
 | --- | --- |
-| `GET /api/requests/:id/planning` | Status, Tour, Warteliste, Entscheidung, Verstöße/Ausnahmen, Protokoll |
+| `GET /api/requests/:id/planning` | Status, Route, Warteliste, Entscheidung, Verstöße/Ausnahmen, Protokoll |
 | `GET /api/requests/:id/options` | Mögliche Techniker-Tage, sortiert (Vorschau, ändert nichts) |
 | `POST /api/requests/:id/decision` | `{ mode: pin \| exclude \| prioritize, technicianId?, date?, reason, override? }` |
 | `DELETE /api/requests/:id/decision` | Entscheidung zurücknehmen → wieder automatisch geplant |
@@ -162,7 +167,7 @@ Umgesetzt in `api/src/planner.ts`, unabhängig nachgeprüft in `api/src/verify.t
 Ablauf in drei Phasen:
 
 1. **Greedy „Cheapest Insertion“** – Anfragen nach Alter sortieren, für jede alle zuständigen Techniker-Tage und Einfügepositionen simulieren, die regelkonforme Position mit dem geringsten Fahrzeit-Zuwachs nehmen.
-2. **Lokale Verbesserung** – 2-opt je Tour (Abschnitt umdrehen) und Relocate (Anfrage in andere Tour / anderen Tag), solange die Gesamtfahrzeit sinkt. Jeder Schritt wird voll simuliert → Regeln bleiben erfüllt.
+2. **Lokale Verbesserung** – 2-opt je Route (Abschnitt umdrehen) und Relocate (Anfrage in andere Route / anderen Tag), solange die Gesamtfahrzeit sinkt. Jeder Schritt wird voll simuliert → Regeln bleiben erfüllt.
 3. **Warteliste erneut** in Altersreihenfolge einplanen (durch Phase 2 frei gewordene Kapazität).
 
 Die Mittagspause wird in jede passende Lücke gelegt (vor der Weiterfahrt, in Wartezeit, vor Abfahrt oder nach Heimkehr). Freigegebene Routen und bestätigte Notiz-Zeitgrenzen gehen als harte Vorgaben in die Planung.
@@ -212,7 +217,7 @@ Die Case-Study-API ist **read-only** – trotzdem lassen sich Datenprobleme dire
 1. In der Detailansicht (z. B. `/stammdaten/anfragen/req_1008`) Feld korrigieren → **Speichern**.
 2. Das Frontend sendet einen echten `PATCH /api/stammdaten/:bereich/:id` an die eigene API.
 3. Die API prüft die Eingabe (Zahlen, Bereich Österreich, `HH:MM`, gültiger Typ …) und speichert sie als **Override** in `api/data/local-db.json`.
-4. Bei jedem Abruf werden die Heizma-Daten + Overrides zusammengeführt → **Validierung und Tourenplan werden sofort neu berechnet**. Die Originaldaten bleiben unverändert; „Original wiederherstellen“ entfernt den Override.
+4. Bei jedem Abruf werden die Heizma-Daten + Overrides zusammengeführt → **Validierung und Routenplanung werden sofort neu berechnet**. Die Originaldaten bleiben unverändert; „Original wiederherstellen“ entfernt den Override.
 
 In Produktion würde derselbe Endpunkt ins CRM zurückschreiben – Frontend und Planung bleiben gleich.
 
@@ -242,7 +247,8 @@ In Produktion würde derselbe Endpunkt ins CRM zurückschreiben – Frontend und
 | PATCH | `/api/stammdaten/:entity/:id` | Korrektur speichern (`entity` = `requests` · `technicians` · `appointments`) |
 | DELETE | `/api/stammdaten/:entity/:id` | Korrektur entfernen (Original wiederherstellen) |
 | GET | `/api/local-db` | Aktuellen DB-Dump + bearbeitbare Felder anzeigen |
-| POST | `/api/local-db/reset` | Alle Korrekturen löschen |
+| POST | `/api/local-db/reset?scope=planning` | Nur für Tests: Freigaben, Entscheidungen, bestätigte Notizen und Eskalationen löschen – Korrekturen bleiben |
+| POST | `/api/local-db/reset` | Alles löschen, inkl. aller Korrekturen |
 
 **Beispiel-Dump: fehlende Koordinaten nachtragen**
 
@@ -274,7 +280,7 @@ Aktivieren und API neu starten:
 cp api/data/local-db.example.json api/data/local-db.json
 ```
 
-Ergebnis: Die Anfragen werden nicht mehr als „Keine Koordinaten“ blockiert, sondern normal geprüft – liegen sie in einem Einsatzgebiet, landen sie in den Touren (oder auf der Warteliste, wenn die Kapazität nicht reicht). `req_1122` (Innsbruck) bleibt bewusst **nicht zuordenbar** – Tirol liegt in keinem Einsatzgebiet und > 15 km von jedem Wohnort. So zeigt der Dump beide Fälle: Datenfehler beheben ✓, echte Geschäftsregel bleibt bestehen ✓.
+Ergebnis: Die Anfragen werden nicht mehr als „Keine Koordinaten“ blockiert, sondern normal geprüft – liegen sie in einem Einsatzgebiet, landen sie in den Routen (oder auf der Warteliste, wenn die Kapazität nicht reicht). `req_1122` (Innsbruck) bleibt bewusst **nicht zuordenbar** – Tirol liegt in keinem Einsatzgebiet und > 15 km von jedem Wohnort. So zeigt der Dump beide Fälle: Datenfehler beheben ✓, echte Geschäftsregel bleibt bestehen ✓.
 
 Hinweise:
 - `api/data/local-db.json` ist in `.gitignore` – jede Umgebung hat ihre eigenen Korrekturen.
@@ -290,7 +296,7 @@ Hinweise:
 | GET | `/api/meta` | Zeitraum, Datenquelle, Firmensitz |
 | GET | `/api/stammdaten` | Techniker, Verfügbarkeiten, Anfragen, Termine + Validierungsbefunde |
 | GET | `/api/overview` | Kennzahlen für die KPI-Kacheln |
-| GET | `/api/plan` | Tourenplan inkl. Warteliste, Kennzahlen, Fahrzeitquelle und Plan-Prüfung |
+| GET | `/api/plan` | Routenplan inkl. Warteliste, Kennzahlen, Fahrzeitquelle und Plan-Prüfung |
 | POST | `/api/approvals` | Routen freigeben (`{ keys: ["tech_01@2026-11-23"] }`, ohne keys alle; `?date=` für einen Tag) |
 | DELETE | `/api/approvals` | Freigaben zurücknehmen |
 | GET | `/api/plan/:technicianId/:date/ics` | Tagesroute als Kalenderdatei |
@@ -342,7 +348,8 @@ Hinweise:
 - **Priorität „ältere zuerst“** wird über die Einplanungsreihenfolge umgesetzt: Eine jüngere Anfrage bekommt nur einen Platz, in den die ältere nicht passte (Ort/Zeitfenster). Die Prüfung weist solche Fälle als Hinweis aus.
 - **KI nur als Vorschlag:** Notiz-Hinweise werden nie automatisch zur Regel – erst nach Klick des Planers.
 - **Speicherung** von Korrekturen, Freigaben und Bestätigungen lokal als JSON statt Datenbank.
-- **Benachrichtigungen** (Kund:innen und Techniker:innen bei Freigabe, Eskalationen) sind angenommen bzw. simuliert – es wird nichts versendet.
+- **Benachrichtigungen** (Kunden und Außendienstler bei Freigabe, Eskalationen) sind angenommen bzw. simuliert – es wird nichts versendet.
+- **Kein Rückgängig nach der Veröffentlichung:** Veröffentlichte Freigaben lassen sich nicht per Button rückgängig machen (dafür wären Absagen an Kunden und Außendienst nötig). Zum Testen gibt es stattdessen den Reset des Planungsstands.
 
 ## Nächste Schritte
 

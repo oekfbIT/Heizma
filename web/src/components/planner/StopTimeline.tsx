@@ -36,7 +36,7 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
             {/* Fahrt dorthin */}
             <p className="ml-[58px] py-0.5 text-[11px] text-gray-400">
               ↓ {stop.travelEstimated ? 'ca. ' : ''}
-              {stop.travelMinutes} min Fahrt{stop.waitMinutes > 0 && <span className="text-amber-600"> · {stop.waitMinutes} min warten</span>}
+              {stop.travelMinutes} min Fahrt{stop.waitMinutes > 0 && <span className="text-amber-600"> · {stop.waitMinutes} min Wartezeit</span>}
             </p>
             <button
               ref={selected ? (el) => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) : undefined}
@@ -62,7 +62,7 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
                 <span className="block truncate text-xs text-gray-500">{stop.address}</span>
                 <span className="mt-0.5 flex flex-wrap gap-1 text-[11px]">
                   <Tag className={stop.appointmentType === 'Inbetriebnahme' ? 'bg-gray-900 text-white' : 'bg-brand-50 text-brand-700'}>{stop.appointmentType}</Tag>
-                  {(stop.appointmentType === 'Besichtigung' || stop.visitationType) && <Tag className="bg-gray-100 text-gray-600">{stop.visitationType ?? 'Typ ?'}</Tag>}
+                  {(stop.appointmentType === 'Besichtigung' || stop.visitationType) && <Tag className="bg-gray-100 text-gray-600">{stop.visitationType ?? 'Typ unbekannt'}</Tag>}
                   {stop.fixed && <Tag className="border border-gray-300 text-gray-600">fix</Tag>}
                   {stop.manual?.mode === 'pin' && <Tag className="bg-sky-100 text-sky-800">📌 manuell</Tag>}
                   {stop.manual?.mode === 'prioritize' && <Tag className="bg-violet-100 text-violet-800">⇡ vorgezogen</Tag>}
@@ -82,7 +82,7 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
       })}
 
       <p className="ml-[58px] py-0.5 text-[11px] text-gray-400">↓ Heimfahrt</p>
-      <Fixed time={route.returnHome} icon="home" title="Zurück zuhause" subtitle={`${formatMinutes(route.driveMinutes)} Fahrt · ${formatMinutes(route.workMinutes)} beim Kunden`} />
+      <Fixed time={route.returnHome} icon="home" title="Ankunft zu Hause" subtitle={`${formatMinutes(route.driveMinutes)} Fahrt · ${formatMinutes(route.workMinutes)} beim Kunden`} />
     </ol>
   );
 }

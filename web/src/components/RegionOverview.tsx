@@ -78,7 +78,7 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
                 <td className="hidden px-4 py-3 text-gray-400 sm:table-cell">–</td>
                 <td className="px-4 py-3 text-gray-400">–</td>
                 <td className="px-4 py-3 font-medium text-red-600">{unassigned}</td>
-                <td className="px-4 py-3 text-xs text-gray-500">kein Gebiet & &gt; 15 km vom Wohnort</td>
+                <td className="px-4 py-3 text-xs text-gray-500">kein Gebiet und &gt; 15 km vom Wohnort</td>
               </tr>
             )}
           </tbody>

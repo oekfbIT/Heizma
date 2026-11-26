@@ -25,7 +25,7 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
         <div className="absolute left-0 top-8 z-[1000] w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-4 text-left shadow-xl">
           <p className="text-sm font-semibold">Unabhängige Plan-Prüfung</p>
           <p className="mb-3 text-xs text-gray-500">
-            {checks} Einzelprüfungen gegen die Case-Regeln – getrennt vom Planer nachgerechnet, mit denselben Fahrzeiten.
+            {checks} Einzelprüfungen gegen die Regeln der Aufgabenstellung – unabhängig vom Planungsalgorithmus nachgerechnet, mit denselben Fahrzeiten.
           </p>
           <ul className="space-y-1.5">
             {v.rules.map((r) => (

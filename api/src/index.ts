@@ -10,7 +10,7 @@ import { getNoteInsights } from './notesAi.js';
 import type { Appointment, Dataset, Plan, RequestPlanning, ServiceRequest, SlotOption } from './types.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
-import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, resetAll, resetEntity, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, resetAll, resetEntity, resetPlanning, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
 
 /** Erster Werktag nach dem Planungszeitraum – Vorschlag für verschobene Termine */
 function nextWorkday(date: string): string {
@@ -182,7 +182,7 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   const id = req.params.id;
   const r = await planningFor(id);
   if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
-  if (r.info.status === 'termin') return res.status(409).json({ error: 'Anfrage ist Teil einer freigegebenen Tour – zuerst Freigabe zurücknehmen' });
+  if (r.info.status === 'termin') return res.status(409).json({ error: 'Anfrage ist Teil einer freigegebenen Route – zuerst die Freigabe zurücknehmen' });
   const body = req.body ?? {};
   const mode = String(body.mode ?? '');
   const reason = String(body.reason ?? '').trim();
@@ -209,7 +209,7 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   if (!option) return res.status(400).json({ error: `${technicianId} ist am ${date} nicht verfügbar` });
   if (option.blocked) return res.status(409).json({ error: option.blocked });
   if (option.warnings.length && !override) return res.status(409).json({ error: 'Regelbruch – nur als bewusste Ausnahme möglich', warnings: option.warnings, needsOverride: true });
-  if (option.warnings.length && reason.length < 3) throw new ValidationError('Ausnahme braucht eine kurze Begründung');
+  if (option.warnings.length && reason.length < 3) throw new ValidationError('Bitte die Ausnahme kurz begründen');
   res.json({ ok: true, decision: setDecision(id, { mode: 'pin', technicianId, date, reason, override: option.warnings.length > 0 }) });
 }));
 
@@ -355,7 +355,7 @@ app.post('/api/escalations/technicians/:id/:target', route(async (req, res) => {
   const target = req.params.target as keyof typeof TECH_TARGETS;
   if (!TECH_TARGETS[target]) return res.status(400).json({ error: 'Ziel muss techniker oder vertrieb sein' });
   const data = await loadDataset();
-  if (!data.technicians.some((t) => t.id === req.params.id)) return res.status(404).json({ error: 'Techniker nicht gefunden' });
+  if (!data.technicians.some((t) => t.id === req.params.id)) return res.status(404).json({ error: 'Außendienstler nicht gefunden' });
   const escalation = escalate(`technicians:${req.params.id}:${target}`, { ...(req.body ?? {}), type: TECH_TARGETS[target] }, data.range.to);
   res.json({ ok: true, escalation });
 }));
@@ -396,9 +396,11 @@ app.get('/api/local-db', (_req, res) => {
   res.json({ ...dumpDb(), editableFields: editableFields() });
 });
 
-app.post('/api/local-db/reset', (_req, res) => {
-  resetAll();
-  res.json({ ok: true });
+/** ?scope=planning → nur Planungsstand (Freigaben, Entscheidungen …), sonst alles inkl. Datenkorrekturen */
+app.post('/api/local-db/reset', (req, res) => {
+  if (req.query.scope === 'planning') resetPlanning();
+  else resetAll();
+  res.json({ ok: true, scope: req.query.scope === 'planning' ? 'planning' : 'all' });
 });
 
 app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {

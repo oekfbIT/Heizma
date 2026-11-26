@@ -167,7 +167,7 @@ function IssueList({ data }: { data: Stammdaten }) {
 
   return (
     <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8 lg:px-10">
-      <PageHead title="Handlungsbedarf" subtitle="Datensätze mit fehlenden oder ungültigen Angaben – Klick öffnet die Detailansicht" />
+      <PageHead title="Handlungsbedarf" subtitle="Datensätze mit fehlenden oder ungültigen Angaben – ein Klick öffnet die Detailansicht" />
       <div className="card mt-6 divide-y divide-gray-100">
         {issues.map((issue, idx) => {
           const def = entityByKind(issue.entity);
@@ -216,8 +216,8 @@ function planStatusById(plan: Plan, data: Stammdaten): Map<string, PlanStatus> {
   for (const u of plan.unassigned) {
     const [label, tone] = u.reason.startsWith('Kapazität')
       ? ['Warteliste', 'bg-amber-100 text-amber-800']
-      : u.reason.startsWith('Aus Plan')
-        ? ['Aus Plan genommen', 'bg-gray-200 text-gray-700']
+      : u.reason.startsWith('Aus dem Plan')
+        ? ['Aus dem Plan genommen', 'bg-gray-200 text-gray-700']
         : ['Nicht planbar', 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200'];
     map.set(u.requestId, { planned: false, label, tone, title: u.reason });
   }

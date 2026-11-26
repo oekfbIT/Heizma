@@ -40,7 +40,7 @@ export default function AvailabilityWeek({ data, technicianId }: { data: Stammda
               ) : a ? (
                 <span className="text-amber-700">Abwesend</span>
               ) : (
-                <span className="text-gray-400">Nicht eingeteilt</span>
+                <span className="text-gray-400">Nicht verfügbar</span>
               )}
             </div>
           );

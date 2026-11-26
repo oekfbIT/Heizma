@@ -7,9 +7,9 @@ import { useAuth } from '@/lib/auth';
 const NAV = [
   { to: '/stammdaten', label: 'Übersicht', end: true },
   { to: '/stammdaten/anfragen', label: 'Anfragen' },
-  { to: '/stammdaten/techniker', label: 'Techniker' },
+  { to: '/stammdaten/techniker', label: 'Außendienst' },
   { to: '/stammdaten/termine', label: 'Termine' },
-  { to: '/stammdaten/handlungsbedarf', label: 'Handlungsbedarf' },
+  { to: '/hilfe', label: 'Hilfe' },
 ];
 
 /**
@@ -48,7 +48,7 @@ export default function Header() {
         <div className="flex shrink-0 items-center gap-2 md:gap-4">
           <Link to="/planer" className="btn-primary px-3.5 py-2 text-sm md:px-6 md:py-3 md:text-[15px]">
             <Icon name="route" className="h-4 w-4 md:hidden" />
-            <span className="md:hidden">Planer</span>
+            <span className="md:hidden">Routen</span>
             <span className="hidden md:inline">Routenplanung öffnen</span>
           </Link>
           {user && (

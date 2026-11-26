@@ -53,7 +53,7 @@ export default function TechnicianEscalation({ technician, issues, data }: Props
     techniker: {
       title: `${technician.name} anfragen`,
       recipient: technician.name,
-      button: noAvailability ? 'Techniker anfragen' : 'Gebiet bestätigen lassen',
+      button: noAvailability ? 'Verfügbarkeit anfragen' : 'Gebiet bestätigen lassen',
       body: noAvailability
         ? `Hallo,
 
@@ -64,7 +64,7 @@ ${list}
 Bitte trag deine Verfügbarkeit ein – oder gib kurz Bescheid, falls du verhindert bist (Urlaub/Krankenstand), dann organisieren wir eine Vertretung.
 
 Danke!
-Disposition`
+Planung`
         : `Hallo,
 
 für dich ist aktuell kein Einsatzgebiet hinterlegt. Dadurch können wir dir nur Anfragen im Umkreis von 15 km um ${technician.home.label} zuteilen. In deiner Nähe warten ${affected.length} Besichtigung(en):
@@ -74,12 +74,12 @@ ${list}
 Bitte bestätige, welches Gebiet du abdeckst, damit wir es eintragen können.
 
 Danke!
-Disposition`,
+Planung`,
     },
     vertrieb: {
-      title: 'An Vertrieb melden',
-      recipient: 'Vertrieb / Disposition',
-      button: 'An Vertrieb melden',
+      title: 'An den Vertrieb melden',
+      recipient: 'Vertrieb / Planung',
+      button: 'An den Vertrieb melden',
       body: `Region ${region} (${technician.name}, ${technician.home.label}): ${reason}.
 
 Dadurch können in der Woche ${week} ${affected.length} Besichtigung(en) nicht eingeplant werden:
@@ -89,7 +89,7 @@ ${list}
 Wir brauchen eine Lösung:
 • Verfügbarkeit bzw. Gebiet mit ${technician.name} klären
 • Vertretung aus einer Nachbarregion prüfen
-• oder betroffene Kund:innen über die Verschiebung informieren`,
+• oder betroffene Kunden über die Verschiebung informieren`,
     },
   };
 
@@ -106,7 +106,7 @@ Wir brauchen eine Lösung:
           <p className="font-semibold">Lösung nötig</p>
           <p className="text-sm text-gray-500">
             {reason.charAt(0).toUpperCase() + reason.slice(1)} · {affected.length} offene Anfrage(n) betroffen. Das lässt sich nicht in den Daten
-            korrigieren – Rückfrage nötig.
+            korrigieren – eine Rückfrage ist nötig.
           </p>
         </div>
       </div>
@@ -117,7 +117,7 @@ Wir brauchen eine Lösung:
           return esc ? (
             <div key={t} className="flex items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-sm">
               <span className="font-medium text-brand-800">
-                ✓ {t === 'techniker' ? 'Techniker angefragt' : 'Vertrieb informiert'}
+                ✓ {t === 'techniker' ? 'Außendienst angefragt' : 'Vertrieb informiert'}
                 <span className="block text-xs font-normal text-brand-700/80">
                   {new Date(esc.at).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -197,7 +197,7 @@ function ComposeDialog(props: { title: string; recipient: string; initial: strin
               }
             }}
           >
-            {saving ? 'Speichert …' : props.submitLabel}
+            {saving ? 'Wird gespeichert …' : props.submitLabel}
           </button>
         </div>
       </div>
