@@ -4,6 +4,7 @@
  * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
  */
 /** Design-System: alle wiederverwendbaren UI-Bausteine. Views importieren nur von hier. */
+export { ActionList, type ActionItem } from './components/ActionList';
 export { Alert, type Tone } from './components/Alert';
 export { Badge, type BadgeTone } from './components/Badge';
 export { Button, IconButton, type ButtonProps, type ButtonVariant } from './components/Button';

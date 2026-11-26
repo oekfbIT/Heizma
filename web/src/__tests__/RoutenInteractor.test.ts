@@ -26,8 +26,33 @@ describe('RoutenInteractor – reine Plan-Auswertung', () => {
 
   it('beschriftet den Tagesstatus', () => {
     expect(routen.dayStatusLabel({ total: 0, approved: 0, done: false })).toBe('keine Routen');
-    expect(routen.dayStatusLabel({ total: 2, approved: 2, done: true })).toBe('✓ erledigt');
-    expect(routen.dayStatusLabel({ total: 3, approved: 1, done: false })).toBe('2 offen');
+    expect(routen.dayStatusLabel({ total: 2, approved: 2, done: true })).toBe('✓ freigegeben');
+    expect(routen.dayStatusLabel({ total: 3, approved: 1, done: false })).toBe('2 zur Freigabe');
+  });
+
+  it('Bilanz: jede Anfrage genau einmal, die Töpfe ergeben die Gesamtzahl', () => {
+    const q = plan({
+      unassigned: [
+        { requestId: 'req_4', reason: 'Kapazität erschöpft (Warteliste)' },
+        { requestId: 'req_7', reason: 'Kapazität erschöpft (Warteliste)' },
+        { requestId: 'req_5', reason: 'Aus dem Plan genommen: Kunde ruft zurück' },
+        { requestId: 'req_6', reason: 'Keine Koordinaten – zuerst geokodieren' },
+        { requestId: 'req_8', reason: 'Nicht zuordenbar (kein Gebiet, > 15 km)' },
+        { requestId: 'req_9', reason: 'Keine Koordinaten – zuerst geokodieren' },
+      ],
+    });
+    const b = routen.balance(q, { req_4: { date: '2026-11-30' } });
+    expect(b).toMatchObject({ total: 8, thisWeek: 2, approved: 1, preplanned: 1, waitlist: 1, unplannable: 3, excluded: 1 });
+    expect(b.thisWeek + b.preplanned + b.waitlist + b.unplannable + b.excluded).toBe(b.total);
+    expect(b.total).toBe(q.routes.flatMap((r) => r.stops).length + q.unassigned.length);
+    expect(b.preplannedByWeek).toEqual([{ week: 49, count: 1 }]);
+    expect(b.unplannableByReason).toEqual([
+      { reason: 'Keine Koordinaten', count: 2 },
+      { reason: 'Nicht zuordenbar', count: 1 },
+    ]);
+    // Filter (z. B. Region) wirkt auf alle Töpfe gleich – die Summe bleibt stimmig
+    const only = routen.balance(q, {}, (id) => ['req_1', 'req_6'].includes(id));
+    expect(only).toMatchObject({ total: 2, thisWeek: 1, unplannable: 1 });
   });
 
   it('ordnet jeder Anfrage einen Plan-Status zu', () => {

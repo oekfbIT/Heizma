@@ -1,6 +1,7 @@
 /**
  * @file      useResizableSidebar.ts – ziehbare Sidebar-Breite (Standard 40 %, gespeichert in localStorage)
  * @layer     Web · View-Hilfe
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
  */
 import { useCallback, useEffect, useState } from 'react';
 

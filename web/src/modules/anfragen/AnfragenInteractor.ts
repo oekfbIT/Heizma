@@ -1,5 +1,5 @@
 /**
- * @file      AnfragenInteractor.ts – Modul Anfragen: Liste, Planung je Anfrage, Entscheidungen, Notizen, Eskalationen
+ * @file      AnfragenInteractor.ts – Modul Anfragen: Liste, Planung je Anfrage, Entscheidungen, Eskalationen
  * @layer     Web · Modul-Interactor
  * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
  */
@@ -7,18 +7,16 @@ import type { ApiService } from '@/core/ApiService';
 import { Resource, ResourceFamily } from '@/core/Resource';
 import type { RequestPlanning, ServiceRequest, SlotOption, SwapOption } from '@/lib/types';
 import type { Stammdaten } from '@/modules/system/types';
-import type { AnfragenData, DecisionInput, EscalationInput, GeoResult, NoteConstraint, NoteInfo } from './types';
+import type { AnfragenData, DecisionInput, EscalationInput, GeoResult } from './types';
 
 /** Regionsfilter-Wert für „ohne Zuständigkeit“ */
 export const NO_REGION = 'ohne';
 
 /**
- * Anfragen-Modul: offene Besichtigungs-Anfragen, ihre Planung je Anfrage,
- * Notizen aus dem Vertrieb (KI-Hinweise) und Eskalationen.
+ * Anfragen-Modul: offene Besichtigungs-Anfragen, ihre Planung je Anfrage und Eskalationen.
  */
 export class AnfragenInteractor {
   readonly data: Resource<AnfragenData>;
-  readonly notes: Resource<NoteInfo>;
   /** Planungsstand je Anfrage: GET /api/requests/:id/planning */
   readonly planning: ResourceFamily<string, RequestPlanning>;
 
@@ -32,12 +30,11 @@ export class AnfragenInteractor {
         escalations: s.escalations ?? {},
       };
     });
-    this.notes = new Resource(() => api.get<NoteInfo>('/api/notes'));
     this.planning = new ResourceFamily((id) => api.get<RequestPlanning>(`/api/requests/${encodeURIComponent(id)}/planning`));
   }
 
   resources() {
-    return [this.data, this.notes, ...this.planning.all()];
+    return [this.data, ...this.planning.all()];
   }
 
   // MARK: - Lesen & Aufbereiten
@@ -78,11 +75,9 @@ export class AnfragenInteractor {
     return r ? `seit ${r.createdAt.slice(8, 10)}.${r.createdAt.slice(5, 7)}.` : '';
   }
 
-  /** KI-/Regel-Hinweis aus den Vertriebsnotizen zu einem Stopp */
-  noteFor(id: string) {
-    const n = this.notes.getState().data;
-    const insight = n?.insights.find((i) => i.requestId === id);
-    return { insight, confirmed: n?.confirmed[id] };
+  /** Freitext-Notiz aus dem Vertrieb (wird angezeigt, nicht ausgewertet) */
+  noteFor(id: string): string | null {
+    return this.byId(id)?.notes ?? null;
   }
 
   // MARK: - Aktionen (Aktualisieren übernimmt der CoreInteractor)
@@ -104,10 +99,6 @@ export class AnfragenInteractor {
 
   withdrawEscalation(id: string) {
     return this.api.send(`/api/escalations/${id}`, 'DELETE');
-  }
-
-  confirmNote(id: string, constraint: NoteConstraint | null) {
-    return this.api.send(`/api/notes/${id}/confirm`, 'POST', constraint ?? {});
   }
 
   geocode(address: string) {

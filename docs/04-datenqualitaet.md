@@ -12,7 +12,7 @@ Der Ansatz: **nichts still reparieren, nichts still verwerfen.** Jedes Problem w
 |---|---|---|
 | 🔴 **Fehler** | Blockiert die Planung – auch manuell | Keine Koordinaten, nicht zuordenbar |
 | 🟡 **Warnung** | Wird mit dokumentierter Annahme geplant | Typ unbekannt → 105 min |
-| 🔵 **Hinweis** | Zur Durchsicht | Freitext-Notiz |
+| 🔵 **Hinweis** | Zur Durchsicht | Tag gesperrt (Urlaub) |
 
 ## Was erkannt wird – und was passiert
 
@@ -29,7 +29,7 @@ Umgesetzt in `api/src/validation.ts`.
 | Außendienstler ohne Gebiet | 🟡 | Nur 15-km-Regel | **Gebiet bestätigen lassen** (Nachricht an Person/Vertrieb) |
 | Außendienstler ohne Verfügbarkeit | 🔴 | Wird nicht eingeplant | **Verfügbarkeit anfragen** |
 | Fixer Termin an gesperrtem Tag / Überschneidung | 🔴 | Muss umgeplant werden | Gemeldet (Termine sind laut Case nicht verschiebbar) |
-| Freitext-Notizen | 🔵 | KI-Hinweise | Zeit-Hinweis mit einem Klick als harte Regel übernehmen |
+| Freitext-Notizen | – | Kein Datenproblem: angezeigt, nicht ausgewertet | Steht in der Tagesroute beim Termin; bei Bedarf „Planung ändern … → Verschieben“ |
 
 **Datenfehler sperren die Planung – auch manuell.** Eine Anfrage mit Fehler wird nie eingeplant, auch nicht als Ausnahme. Nach der Korrektur laufen Prüfung und Plan sofort neu, und die Anfrage wird automatisch eingeplant.
 
@@ -71,11 +71,11 @@ Die Originaldaten bleiben unverändert; „Original wiederherstellen“ entfernt
 
 Eskalationen und Benachrichtigungen sind simuliert: Die Nachricht wird gespeichert und markiert, nicht versendet.
 
-## KI für die Freitext-Notizen
+## Notizen aus dem Vertrieb – bewusst ohne KI
 
-`api/src/notesAi.ts`: Mit `OPENAI_API_KEY` werden alle Notizen in **einem** OpenAI-Aufruf (JSON-Modus) in Kategorien und Hinweise übersetzt („Vorher anrufen“, „Nur vormittags“), Ergebnis gecacht. Ohne Schlüssel greift ein regelbasierter Fallback – die Demo läuft auch offline.
+Die 37 Freitext-Notizen werden **angezeigt, nicht ausgewertet**: in der Tagesroute direkt unter dem Termin und auf der Anfrage-Seite. Harte Zeitgrenze für die Planung ist nur `customerAvailableFrom`.
 
-**Die KI schlägt nur vor.** Eine Zeitgrenze wird erst zur harten Regel, wenn der Planer sie bestätigt. Danach plant das System neu und prüft sie wie jede andere Regel.
+**Warum keine KI?** Ziel der Case Study ist, dem Planer das Rechnen abzunehmen – nicht, ihn zu ersetzen. Eine Notiz wie „nur vormittags erreichbar“ automatisch in eine Regel zu übersetzen, wäre eine eigene Produktentscheidung (wer haftet, wenn das Modell falsch liest?). Der Planer sieht die Notiz beim Prüfen der Route und verschiebt bei Bedarf mit einem Dialog. Wie man das später automatisieren würde, steht im [Ausblick](08-trade-offs-und-ausblick.md).
 
 ---
 

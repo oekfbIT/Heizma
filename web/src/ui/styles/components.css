@@ -145,6 +145,28 @@
   .modal-title {
     @apply mt-1 text-lg font-semibold;
   }
+  /* Aktionen-Muster: Auswahl im Dialog (ActionList) */
+  .action-list {
+    @apply mt-4 space-y-2;
+  }
+  .action-row {
+    @apply flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left transition hover:border-brand-300 hover:bg-brand-50/40;
+  }
+  .action-row--warning {
+    @apply hover:border-warning-300 hover:bg-warning-50/60;
+  }
+  .action-row__icon {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600;
+  }
+  .action-row--warning .action-row__icon {
+    @apply bg-warning-100 text-warning-700;
+  }
+  .action-row__title {
+    @apply block text-sm font-semibold text-ink;
+  }
+  .action-row__desc {
+    @apply block text-xs text-gray-500;
+  }
   .modal-footer {
     @apply mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3;
   }

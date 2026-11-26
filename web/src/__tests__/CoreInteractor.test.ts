@@ -70,6 +70,6 @@ describe('CoreInteractor', () => {
 
   it('gibt Fehler der Aktion an die View weiter', async () => {
     const { core } = setup();
-    await expect(core.confirmNote('req_x', null)).rejects.toThrow(/not found/);
+    await expect(core.decideRequest('req_x', null)).rejects.toThrow(/not found/);
   });
 });

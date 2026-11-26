@@ -39,7 +39,6 @@ export default function Planner() {
   const requests = useResource(anfragen.data);
   useResource(termine.data);
   const meta = useResource(core.system.meta);
-  const notes = useResource(anfragen.notes);
   const forecast = useResource(core.system.forecast);
   // Woche: 0 = echte Planung, ab 1 = Prognose der Warteliste (nur lesen)
   const [params, setParams] = useSearchParams();
@@ -105,7 +104,9 @@ export default function Planner() {
   const inRegion = (techId: string) => !region || (region !== NO_REGION && techId === region);
   const visibleTechs = technicians.filter((t) => inRegion(t.id));
   const dayRoutes = routen.routesOn(p, day, inRegion);
-  const waitlist = p.unassigned.filter((u) => anfragen.inRegion(u.requestId, region));
+  // Eine Quelle für alle Zähler: Bilanz (auf Region gefiltert) – Teile ergeben die Gesamtzahl
+  const bal = core.balance(p, region ? (id) => anfragen.inRegion(id, region) : undefined);
+  const notThisWeek = bal.total - bal.thisWeek;
   const selectedRoute = dayRoutes.find((r) => r.technicianId === selectedId);
   const selectedTech = selectedId ? techniker.byId(selectedId) : undefined;
   const violationsFor = (techId: string, date = day) => routen.violationsFor(p, techId, date);
@@ -125,7 +126,6 @@ export default function Planner() {
   const toggleApproval = (techId: string, approved: boolean) => run(() => core.approveRoute(techId, day, approved));
   const openRoutes = dayRoutes.filter((r) => r.stops.length && !r.approved);
   const approveDay = () => run(() => core.approveDay(day));
-  const confirmNote = (requestId: string, c: { earliest?: string; latest?: string } | null) => run(() => core.confirmNote(requestId, c));
 
   const selectTech = (techId: string | null) => {
     setSelectedId(techId);
@@ -173,8 +173,11 @@ export default function Planner() {
             </>
           ) : (
           <p className="mt-0.5 text-sm text-gray-600">
-            <strong>{p.stats.planned}</strong> von {p.stats.totalRequests} Anfragen sind automatisch eingeplant
-            {p.stats.unassigned > 0 && <>, {p.stats.unassigned} warten</>}.
+            Diese Woche <strong>{bal.thisWeek}</strong> von {bal.total} Anfragen eingeplant
+            {bal.preplanned > 0 && <> · {bal.preplanned} vorgeplant</>}
+            {bal.waitlist > 0 && <> · {bal.waitlist} Warteliste</>}
+            {bal.unplannable > 0 && <> · <span className="text-danger-600">{bal.unplannable} nicht planbar</span></>}
+            {bal.excluded > 0 && <> · {bal.excluded} aus dem Plan</>}
           </p>
           )}
           <div className="mt-2">
@@ -246,7 +249,7 @@ export default function Planner() {
                   onHover={setHoveredStopId}
                   violations={violationsFor(selectedTech.id)}
                   exceptions={routen.exceptionIds(p)}
-                  notes={notes.data ?? undefined}
+                  noteFor={(id) => anfragen.noteFor(id)}
                 />
               </div>
               {violationsFor(selectedTech.id).get(ROUTE_LEVEL)?.map((m) => (
@@ -282,9 +285,14 @@ export default function Planner() {
                   Nicht zuordenbare Anfragen (in keinem Gebiet und &gt; 15 km von jedem Wohnort) – nur intern lösbar.
                 </Alert>
               )}
-              {waitlist.length > 0 && (
+              {notThisWeek > 0 && (
                 <Link to="/stammdaten/anfragen" className="mt-5 flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                  <span><b className="text-ink">{waitlist.length}</b> Anfragen nicht eingeplant – Details unter „Anfragen“</span>
+                  <span>
+                    <b className="text-ink">{notThisWeek}</b> nicht in dieser Woche:{' '}
+                    {[bal.preplanned && `${bal.preplanned} vorgeplant`, bal.waitlist && `${bal.waitlist} Warteliste`, bal.unplannable && `${bal.unplannable} nicht planbar`, bal.excluded && `${bal.excluded} aus dem Plan`]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
                   <span className="text-brand-600">→</span>
                 </Link>
               )}
@@ -417,9 +425,7 @@ export default function Planner() {
           color={colors[detailsTech.id]}
           request={anfragen.byId(detailsStopId!)}
           appointment={termine.byId(detailsStopId!)}
-          notes={notes.data ?? undefined}
           violations={violationsFor(detailsTech.id, detailsRoute.date).get(detailsStopId!) ?? []}
-          onConfirmNote={confirmNote}
           onPlanChanged={() => {
             // Stopp kann in eine andere Route gewandert sein → Dialog schließen (Neuladen macht der CoreInteractor)
             setDetailsStopId(null);

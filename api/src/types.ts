@@ -164,7 +164,7 @@ export interface SwapOption {
   technicianName: string;
   date: string;
   /** Wer weichen müsste */
-  displaced: { id: string; customer: string; address: string; createdAt: string; start: string; end: string; notes: string | null; timeWish: string | null };
+  displaced: { id: string; customer: string; address: string; createdAt: string; start: string; end: string; notes: string | null };
   /** true = die verdrängte Anfrage ist älter → „ältere zuerst“ wird übergangen */
   displacesOlder: boolean;
   /** Neue Uhrzeit der vorgezogenen Anfrage */
@@ -196,7 +196,7 @@ export interface RoutePreview {
   stops: { id: string; customer: string; address: string; start: string; end: string; travelMinutes: number; kind: 'request' | 'appointment'; isNew: boolean }[];
 }
 
-export type RequestPlanningStatus = 'termin' | 'pinned' | 'planned' | 'waitlist' | 'review' | 'excluded' | 'unplannable';
+export type RequestPlanningStatus = 'termin' | 'pinned' | 'planned' | 'waitlist' | 'excluded' | 'unplannable';
 
 export interface RequestPlanning {
   requestId: string;
@@ -213,8 +213,8 @@ export interface RequestPlanning {
   } | null;
   /** Grund, wenn nicht eingeplant */
   reason: string | null;
-  /** Zeitwunsch aus der Notiz (Regel-Parser, ohne KI) und ob der Planer ihn schon entschieden hat */
-  timeWish: (import('./timeWish.js').TimeWish & { status: 'offen' | 'bestaetigt' | 'verworfen' }) | null;
+  /** Freitext-Notiz aus dem Vertrieb – wird angezeigt, nicht ausgewertet */
+  notes: string | null;
   decision: Decision | null;
   /** Warteliste: Platz nach Eingang und ältere Wartende */
   waitlist: { position: number; total: number } | null;

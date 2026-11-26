@@ -2,7 +2,7 @@
  * @file      planner.ts – Kern der Einsatzplanung (Anfragen → Personen-Tage → Tagesrouten)
  * @layer     Backend · Domäne (reine Funktionen, kein I/O)
  * @einstieg  buildPlan() · rankOptions() · swapOptions() · forecast()
- * @nutzt     travelMatrix (Fahrzeiten), validation (Zuständigkeit, Datenfehler), timeWish (Notiz-Zeitwünsche)
+ * @nutzt     travelMatrix (Fahrzeiten), validation (Zuständigkeit, Datenfehler)
  * @genutzt   index.ts (HTTP-Routen), verify.ts prüft das Ergebnis unabhängig nach
  * @siehe     docs/03-planung-und-regeln.md · docs/10-code-navigation.md
  *
@@ -12,7 +12,6 @@
  * Schnellsuche: `grep -n "REGEL-" planner.ts` zeigt, wo jede Case-Regel umgesetzt ist.
  */
 import { hasCoords } from './geo.js';
-import { parseTimeWish } from './timeWish.js';
 import { normalizeTime, splitIso, toHHMM, toMinutes } from './time.js';
 import { estimateLookup, type MatrixStats, type TravelLookup } from './travelMatrix.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
@@ -59,8 +58,7 @@ interface Item {
   visitationType: string | null;
   appointmentType: 'Besichtigung' | 'Inbetriebnahme';
   duration: number;
-  earliest: number | null; // customerAvailableFrom (+ bestätigte Notiz)
-  latestEnd: number | null; // bestätigte Notiz „nur vormittags“ etc.
+  earliest: number | null; // customerAvailableFrom
   fixedStart: number | null; // fixe Termine bzw. freigegebene Stopps
   createdAt: string;
   eligible: Set<string>;
@@ -140,7 +138,6 @@ function simulate(slot: Slot, items: Item[], travel: TravelLookup, strict = true
     const end = start + item.duration;
     // REGEL-2: Termin inkl. Anfahrt ganz im Fenster
     if (end > slot.windowEnd && strict) return fail(`${item.customer} endet ${toHHMM(end)}, Fenster bis ${toHHMM(slot.windowEnd)}`);
-    if (item.latestEnd !== null && end > item.latestEnd && strict) return fail(`${item.customer} endet ${toHHMM(end)}, laut Notiz nur bis ${toHHMM(item.latestEnd)}`);
 
     drive += leg;
     stops.push({
@@ -206,6 +203,16 @@ function simulate(slot: Slot, items: Item[], travel: TravelLookup, strict = true
     }
   }
 
+  // Zeitkette lückenlos ausweisen: Lücke vor jedem Stopp = Fahrt + (Pause, falls dazwischen) + Wartezeit.
+  // Abfahrt so spät wie möglich → Ankunft = Beginn; jede freie Zeit steht als Wartezeit beim nächsten Stopp (nichts verschwindet).
+  for (let i = 0; i < stops.length; i++) {
+    const prevEnd = i === 0 ? departure : toMinutes(stops[i - 1].end);
+    const start = toMinutes(stops[i].start);
+    const pause = lunch && lunch[0] >= prevEnd && lunch[1] <= start ? LUNCH_MINUTES : 0;
+    stops[i].waitMinutes = Math.max(0, start - prevEnd - stops[i].travelMinutes - pause);
+    stops[i].arrival = stops[i].start;
+  }
+
   // REGEL-3 · ANNAHME: Mittagspause hat Vorrang vor einem weiteren Besuch: Entfallen darf sie nur, wenn schon die fixen Termine
   // (bzw. freigegebenen Stopps) des Tages sie unmöglich machen – nie, um eine zusätzliche Anfrage unterzubringen.
   if (strict && fullDay && !lunch && items.some((x) => x.fixedStart === null)) {
@@ -225,12 +232,10 @@ function simulate(slot: Slot, items: Item[], travel: TravelLookup, strict = true
  * REGEL-4: earliest = max(customerAvailableFrom, bestätigter Notiz-Zeitwunsch).
  * REGEL-5: eligible = alle zuständigen Personen (Gebiet, sonst ≤ 15 km) – siehe validation.eligibleTechnicians().
  */
-function requestToItem(r: ServiceRequest, techs: Technician[], note?: NoteConstraint): Item | null {
+function requestToItem(r: ServiceRequest, techs: Technician[]): Item | null {
   if (!hasCoords(r)) return null;
   const norm = normalizeTime(r.customerAvailableFrom);
-  const from = norm ? toMinutes(norm) : null;
-  const noteFrom = note?.earliest ? toMinutes(note.earliest) : null;
-  const earliest = from === null ? noteFrom : noteFrom === null ? from : Math.max(from, noteFrom);
+  const earliest = norm ? toMinutes(norm) : null;
   return {
     kind: 'request',
     id: r.id,
@@ -241,7 +246,6 @@ function requestToItem(r: ServiceRequest, techs: Technician[], note?: NoteConstr
     appointmentType: 'Besichtigung',
     duration: r.visitationType === null ? RULES.UNKNOWN_TYPE_MINUTES : r.durationMinutes,
     earliest,
-    latestEnd: note?.latest ? toMinutes(note.latest) : null,
     fixedStart: null,
     createdAt: r.createdAt,
     eligible: new Set(eligibleTechnicians(r, techs).map((t) => t.id)),
@@ -262,7 +266,6 @@ function appointmentToItem(a: Appointment): Item {
     appointmentType: a.type,
     duration: splitIso(a.end).minutes - s.minutes,
     earliest: null,
-    latestEnd: null,
     fixedStart: s.minutes,
     createdAt: '',
     eligible: new Set([a.technicianId]),
@@ -277,14 +280,7 @@ export interface ApprovedRoute {
   stops: { id: string; start: string }[];
 }
 
-export interface NoteConstraint {
-  earliest?: string;
-  latest?: string;
-}
-
 export interface PlanOptions {
-  /** Vom Planer bestätigte Zeit-Hinweise aus den Notizen */
-  noteConstraints?: Record<string, NoteConstraint>;
   travel?: TravelLookup;
   travelStats?: MatrixStats;
   /** key "techId@date" → freigegebene Route (Stopps + Startzeiten) */
@@ -292,27 +288,6 @@ export interface PlanOptions {
   /** Manuelle Entscheidungen des Planers je Anfrage */
   decisions?: Record<string, Decision>;
   optimize?: boolean;
-}
-
-// MARK: - Zeitwünsche aus Vertriebsnotizen
-
-/**
- * DATEN: Notizen sind Freitext (37 Stück im Datensatz). timeWish.ts liest Zeitwünsche regelbasiert heraus.
- * Zeitwünsche aus Notizen: bestätigte gelten wie bestätigt (leeres Objekt = verworfen).
- * Unbestätigte werden mit `withPending` als harte Grenze eingesetzt (bei manuellen Eingriffen),
- * sonst bleiben sie außen vor – die Anfrage wird dann gar nicht automatisch geplant.
- */
-function pendingTimeWishes(data: Dataset, confirmed: Record<string, NoteConstraint> = {}): Set<string> {
-  return new Set(data.requests.filter((r) => !(r.id in confirmed) && parseTimeWish(r.notes)).map((r) => r.id));
-}
-function effectiveNotes(data: Dataset, confirmed: Record<string, NoteConstraint> = {}, withPendingFor?: (id: string) => boolean): Record<string, NoteConstraint> {
-  const out: Record<string, NoteConstraint> = { ...confirmed };
-  for (const r of data.requests) {
-    if (r.id in confirmed || (withPendingFor && !withPendingFor(r.id))) continue;
-    const w = parseTimeWish(r.notes);
-    if (w) out[r.id] = { earliest: w.earliest, latest: w.latest };
-  }
-  return out;
 }
 
 // MARK: - buildPlan – Hauptablauf (EINSTIEG)
@@ -328,12 +303,9 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
   const approvals = opts.approvals ?? {};
   const optimize = opts.optimize ?? true;
 
-  const pendingWish = pendingTimeWishes(data, opts.noteConstraints);
-  // Manuell eingeplant (fixiert/vorgezogen) trotz offenem Zeitwunsch → Wunsch gilt sicherheitshalber als harte Grenze
-  const notes = effectiveNotes(data, opts.noteConstraints, (id) => !!opts.decisions?.[id] && opts.decisions[id].mode !== 'exclude');
   const items = new Map<string, Item>();
   for (const r of data.requests) {
-    const it = requestToItem(r, data.technicians, notes[r.id]);
+    const it = requestToItem(r, data.technicians);
     if (it) items.set(r.id, it);
   }
 
@@ -462,11 +434,6 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
 
   for (const request of queue) {
     const item = items.get(request.id);
-    // DATEN · ANNAHME: Offener Zeitwunsch aus der Notiz: nie automatisch einplanen – erst bestätigt oder verworfen
-    if (pendingWish.has(request.id) && !decisions[request.id]) {
-      unassigned.push({ requestId: request.id, reason: `Zeitwunsch klären: „${request.notes}“` });
-      continue;
-    }
     if (!item) {
       unassigned.push({ requestId: request.id, reason: 'Keine Koordinaten – zuerst geokodieren' });
       continue;
@@ -678,8 +645,7 @@ export function rankOptions(data: Dataset, plan: Plan, requestId: string, opts: 
   const travel = opts.travel ?? estimateLookup;
   const request = data.requests.find((r) => r.id === requestId);
   if (!request) return [];
-  const notes = effectiveNotes(data, opts.noteConstraints);
-  const item = requestToItem(request, data.technicians, notes[requestId]);
+  const item = requestToItem(request, data.technicians);
   if (!item) return [];
   const toItem = (stop: PlannedStop, approved: boolean): Item | null => {
     if (stop.kind === 'appointment') {
@@ -687,7 +653,7 @@ export function rankOptions(data: Dataset, plan: Plan, requestId: string, opts: 
       return a ? appointmentToItem(a) : null;
     }
     const r = data.requests.find((x) => x.id === stop.id);
-    const it = r ? requestToItem(r, data.technicians, notes[r.id]) : null;
+    const it = r ? requestToItem(r, data.technicians) : null;
     return it ? { ...it, fixedStart: approved ? toMinutes(stop.start) : null } : null;
   };
 
@@ -754,14 +720,13 @@ export function rankOptions(data: Dataset, plan: Plan, requestId: string, opts: 
  */
 export function swapOptions(data: Dataset, plan: Plan, requestId: string, opts: PlanOptions & { withFallback?: boolean; onlyYounger?: boolean } = {}): SwapOption[] {
   const travel = opts.travel ?? estimateLookup;
-  const notes = effectiveNotes(data, opts.noteConstraints);
   const decisions = opts.decisions ?? {};
   const request = data.requests.find((r) => r.id === requestId);
-  const item = request ? requestToItem(request, data.technicians, notes[requestId]) : null;
+  const item = request ? requestToItem(request, data.technicians) : null;
   if (!request || !item) return [];
   const reqItem = (id: string) => {
     const r = data.requests.find((x) => x.id === id);
-    return r ? requestToItem(r, data.technicians, notes[id]) : null;
+    return r ? requestToItem(r, data.technicians) : null;
   };
   const slotOf = (route: DayRoute, tech: Technician): Slot => ({
     tech,
@@ -863,7 +828,7 @@ export function swapOptions(data: Dataset, plan: Plan, requestId: string, opts: 
         technicianId: tech.id,
         technicianName: tech.name,
         date: route.date,
-        displaced: { id: stop.id, customer: stop.customer, address: stop.address, createdAt: displacedReq.createdAt, start: stop.start, end: stop.end, notes: displacedReq.notes, timeWish: parseTimeWish(displacedReq.notes)?.hint ?? null },
+        displaced: { id: stop.id, customer: stop.customer, address: stop.address, createdAt: displacedReq.createdAt, start: stop.start, end: stop.end, notes: displacedReq.notes },
         displacesOlder: displacedReq.createdAt < request.createdAt,
         start: ins.stop.start,
         end: ins.stop.end,
@@ -921,7 +886,7 @@ export interface Forecast {
   /** Bleibt hängen, obwohl Kapazität wiederholt wird (z. B. zuständige Person nie verfügbar) */
   stuck: number;
   /** Braucht eine Entscheidung, bevor es überhaupt planbar ist */
-  needsAction: { review: number; dataErrors: number; excluded: number };
+  needsAction: { dataErrors: number; excluded: number };
   byTechnician: { technicianId: string; name: string; weeks: number; requests: number }[];
   /** Wartende Anfrage → voraussichtlicher Termin in einer Folgewoche (Prognose) */
   placements: Record<string, { week: number; date: string; technicianId: string; start: string; end: string }>;
@@ -969,7 +934,7 @@ export function forecastWithPlans(data: Dataset, plan: Plan, opts: PlanOptions =
       availability: data.availability.map((a) => ({ ...a, date: addDays(a.date, shift) })),
       range: { from: addDays(data.range.from, shift), to: addDays(data.range.to, shift) },
     };
-    const p = buildPlan(week, { travel: opts.travel, noteConstraints: opts.noteConstraints, decisions: opts.decisions, optimize: true });
+    const p = buildPlan(week, { travel: opts.travel, decisions: opts.decisions, optimize: true });
     plans.push({ data: week, plan: p });
     for (const r of p.routes) for (const s of r.stops) if (s.kind === 'request') placements[s.id] = { week: w, date: r.date, technicianId: r.technicianId, start: s.start, end: s.end };
     const left = week.requests.filter((r) => p.unassigned.some((u) => u.requestId === r.id && capacity(u)));
@@ -993,7 +958,6 @@ export function forecastWithPlans(data: Dataset, plan: Plan, opts: PlanOptions =
     stuck: done ? 0 : stuck || remaining.length,
     // ACHTUNG · GRUND-PRAEFIX: Zählung nach Grund-Präfix – neue Gründe hier einordnen
     needsAction: {
-      review: plan.unassigned.filter((u) => u.reason.startsWith('Zeitwunsch')).length,
       dataErrors: plan.unassigned.filter((u) => /^(Datenfehler|Keine Koordinaten|Nicht zuordenbar|Zuständige|Passt in keinen Tag)/.test(u.reason)).length,
       excluded: plan.unassigned.filter((u) => u.reason.startsWith('Aus dem Plan')).length,
     },

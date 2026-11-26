@@ -20,7 +20,7 @@ Das eigentliche Ziel ist also nicht „ein Algorithmus“, sondern **Vertrauen**
 flowchart LR
   A["Daten laden<br/><small>Heizma-API</small>"] --> B["Prüfen<br/><small>Fehler · Warnung · Hinweis</small>"]
   B --> C["Automatisch planen<br/><small>ältere zuerst, Fahrzeit minimal</small>"]
-  C --> D["Unabhängig prüfen<br/><small>10 Regeln</small>"]
+  C --> D["Unabhängig prüfen<br/><small>11 Regeln</small>"]
   D --> E{"Planer<br/>prüft"}
   E -->|passt| F["Freigeben<br/><small>Route fix, .ics</small>"]
   E -->|"anpassen"| G["Verschieben · Fixieren<br/>Vorziehen · Herausnehmen"]
@@ -31,14 +31,14 @@ flowchart LR
 
 | Schritt | Was der Planer sieht |
 |---|---|
-| **1 Tag wählen** | Tages-Tabs mit „3 offen“ / „✓ erledigt“, Regionsfilter je Außendienstler |
+| **1 Tag wählen** | Tages-Tabs mit „3 zur Freigabe“ / „✓ freigegeben“ (gezählt werden Routen), Regionsfilter je Außendienstler |
 | **2 Routen prüfen** | Je Person: Auslastungsbalken (vor Ort · Fahrt · Pause · frei), Klick zeigt Zeitplan und Route auf der Karte |
 | **3 Freigeben** | Pro Route oder alle Routen des Tages. Routen mit Regelverstoß sind gesperrt. |
 
 ## Screens
 
 ### Routenplanung – Tagesübersicht
-Plan-Prüfung oben („✓ 0 Regelverstöße · 10 Regeln“), darunter alle Personen des Tages mit Auslastung.
+Plan-Prüfung oben („✓ 0 Regelverstöße · 11 Regeln“) und die Bilanz „Diese Woche 88 von 150 · 37 vorgeplant · 25 nicht planbar“, darunter alle Personen des Tages mit Auslastung.
 
 ![Routenplanung Tagesübersicht](assets/planer.png)
 

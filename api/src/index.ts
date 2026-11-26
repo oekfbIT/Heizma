@@ -18,12 +18,10 @@ import { geocode, reverseGeocode } from './geocode.js';
 import { buildPlan, forecastWithPlans, rankOptions, requestErrors, swapOptions } from './planner.js';
 import { getTravelMatrix, resetTravelMatrix } from './travelMatrix.js';
 import { applyExceptions, verifyPlan } from './verify.js';
-import { getNoteInsights, notesAiEnabled } from './notesAi.js';
 import type { Appointment, Dataset, Plan, RequestPlanning, ServiceRequest, SlotOption } from './types.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
-import { parseTimeWish } from './timeWish.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
-import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, listLog, resetAll, resetEntity, resetPlanning, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, listLog, resetAll, resetEntity, resetPlanning, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
 
 // MARK: - Hilfsfunktionen
 
@@ -55,10 +53,9 @@ function getPlan(data: Dataset): Promise<Plan> {
     const plan = (async () => {
       const { lookup, stats } = await getTravelMatrix(data);
       const t0 = Date.now();
-      const noteConstraints = listNoteConfirmations();
       const decisions = listDecisions();
-      const p = buildPlan(data, { travel: lookup, travelStats: stats, approvals: listApprovals(), noteConstraints, decisions });
-      p.verification = applyExceptions(verifyPlan(p, data, lookup, noteConstraints, decisions), p, decisions);
+      const p = buildPlan(data, { travel: lookup, travelStats: stats, approvals: listApprovals(), decisions });
+      p.verification = applyExceptions(verifyPlan(p, data, lookup, decisions), p, decisions);
       console.log(`[plan] ${p.stats.planned}/${p.stats.totalRequests} geplant, ${p.verification.totalViolations} Regelverstöße, ${Date.now() - t0} ms, Fahrzeiten: ${stats.source}`);
       return p;
     })();
@@ -156,7 +153,7 @@ async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; inf
     const tech = data.technicians.find((t) => t.id === hit.technicianId);
     route = { technicianId: hit.technicianId, technicianName: tech?.name ?? hit.technicianId, date: hit.date, start: hit.stops[i].start, end: hit.stops[i].end, position: i + 1, stops: hit.stops.length, approved: !!hit.approved };
   }
-  // Status-Ableitung (Reihenfolge ist wichtig): Termin > aus Plan > fixiert > geplant > Warteliste > Zeitwunsch klären > nicht planbar
+  // Status-Ableitung (Reihenfolge ist wichtig): Termin > aus Plan > fixiert > geplant > Warteliste > nicht planbar
   const status: RequestPlanning['status'] = route?.approved
     ? 'termin'
     : decision?.mode === 'exclude'
@@ -167,17 +164,13 @@ async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; inf
           ? 'planned'
           : unassigned?.reason.startsWith('Kapazität')
             ? 'waitlist'
-            : unassigned?.reason.startsWith('Zeitwunsch')
-              ? 'review'
-              : 'unplannable';
-  const wish = parseTimeWish(request.notes);
-  const conf = listNoteConfirmations()[id] as { earliest?: string; latest?: string } | undefined;
+            : 'unplannable';
   const info: RequestPlanning = {
     requestId: id,
     status,
     route,
     reason: unassigned?.reason ?? null,
-    timeWish: wish ? { ...wish, status: !conf ? 'offen' : conf.earliest || conf.latest ? 'bestaetigt' : 'verworfen' } : null,
+    notes: request.notes,
     decision,
     waitlist: pos >= 0 ? { position: pos + 1, total: waiting.length } : null,
     olderWaiting,
@@ -201,7 +194,7 @@ app.get('/api/requests/:id/options', route(async (req, res) => {
   const errors = requestErrors(r.data, req.params.id);
   if (errors.length) return res.json({ options: [], blockedReason: `Datenfehler – erst korrigieren: ${errors[0]}` });
   const { lookup } = await getTravelMatrix(r.data);
-  res.json({ options: rankOptions(r.data, r.plan, req.params.id, { travel: lookup, noteConstraints: listNoteConfirmations() }) });
+  res.json({ options: rankOptions(r.data, r.plan, req.params.id, { travel: lookup }) });
 }));
 
 /** Tausch-Vorschläge für eine wartende Anfrage (Vorschau, ändert nichts) */
@@ -211,7 +204,7 @@ app.get('/api/requests/:id/swap-options', route(async (req, res) => {
   const errors = requestErrors(r.data, req.params.id);
   if (errors.length) return res.json({ options: [], blockedReason: `Datenfehler – erst korrigieren: ${errors[0]}` });
   const { lookup } = await getTravelMatrix(r.data);
-  res.json({ options: swapOptions(r.data, r.plan, req.params.id, { travel: lookup, noteConstraints: listNoteConfirmations(), decisions: listDecisions() }) });
+  res.json({ options: swapOptions(r.data, r.plan, req.params.id, { travel: lookup, decisions: listDecisions() }) });
 }));
 
 /**
@@ -248,12 +241,12 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   if (body.replaces) {
     // Tausch: nur regelkonforme Vorschläge, nie fixe Termine – Begründung Pflicht
     const replaces = String(body.replaces);
-    const swap = swapOptions(r.data, r.plan, id, { travel: lookup, noteConstraints: listNoteConfirmations(), decisions: listDecisions() }).find((o) => o.technicianId === technicianId && o.date === date && o.displaced.id === replaces);
+    const swap = swapOptions(r.data, r.plan, id, { travel: lookup, decisions: listDecisions() }).find((o) => o.technicianId === technicianId && o.date === date && o.displaced.id === replaces);
     if (!swap) return res.status(409).json({ error: 'Tausch nicht (mehr) regelkonform möglich – bitte Vorschläge neu laden' });
     if (reason.length < 3) throw new ValidationError('Bitte den Tausch kurz begründen');
     return res.json({ ok: true, decision: setDecision(id, { mode: 'pin', technicianId, date, reason, override: swap.displacesOlder, replaces }) });
   }
-  const option: SlotOption | undefined = rankOptions(r.data, r.plan, id, { travel: lookup, noteConstraints: listNoteConfirmations() }).find((o) => o.technicianId === technicianId && o.date === date);
+  const option: SlotOption | undefined = rankOptions(r.data, r.plan, id, { travel: lookup }).find((o) => o.technicianId === technicianId && o.date === date);
   if (!option) return res.status(400).json({ error: `${technicianId} ist am ${date} nicht verfügbar` });
   if (option.blocked) return res.status(409).json({ error: option.blocked });
   // Regelbruch nur mit override + Begründung → wird in verify.applyExceptions() gelb statt rot geführt
@@ -304,10 +297,9 @@ async function getForecast(data: Dataset) {
   const plan = await getPlan(data);
   if (forecastCache?.key === plan.generatedAt) return forecastCache.value;
   const { lookup } = await getTravelMatrix(data);
-  const noteConstraints = listNoteConfirmations();
-  const value = forecastWithPlans(data, plan, { travel: lookup, noteConstraints, decisions: listDecisions() });
+  const value = forecastWithPlans(data, plan, { travel: lookup, decisions: listDecisions() });
   // Auch die Prognose-Wochen werden unabhängig geprüft
-  for (const w of value.plans) w.plan.verification = verifyPlan(w.plan, w.data, lookup, noteConstraints, listDecisions());
+  for (const w of value.plans) w.plan.verification = verifyPlan(w.plan, w.data, lookup, listDecisions());
   forecastCache = { key: plan.generatedAt, value };
   return value;
 }
@@ -386,23 +378,6 @@ app.get('/api/plan/:technicianId/:date/ics', route(async (req, res) => {
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="route-${r.technicianId}-${r.date}.ics"`);
   res.send(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Heizma Routenplanung//DE', ...events, 'END:VCALENDAR'].join('\r\n'));
-}));
-
-// MARK: - Notizen & Zeitwünsche (KI optional)
-
-/** KI: Hinweise aus den Vertriebsnotizen (Vorschläge) + vom Planer bestätigte Zeitgrenzen */
-app.get('/api/notes', route(async (_req, res) => {
-  const data = await loadWorkingDataset();
-  res.json({ insights: await getNoteInsights(data.requests), confirmed: listNoteConfirmations(), ai: notesAiEnabled() });
-}));
-
-/** Zeit-Hinweis bestätigen → wird harte Regel in Planung & Prüfung. Body { earliest?, latest? } oder null zum Zurücknehmen */
-app.post('/api/notes/:requestId/confirm', route(async (req, res) => {
-  const data = await loadDataset();
-  if (!data.requests.some((r) => r.id === req.params.requestId)) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
-  // { ignore: true } = Planer hat den Zeitwunsch gelesen und verworfen → Anfrage wird ohne Zeitgrenze geplant
-  confirmNote(req.params.requestId, req.body?.ignore ? {} : req.body && (req.body.earliest || req.body.latest) ? { earliest: req.body.earliest || undefined, latest: req.body.latest || undefined } : null);
-  res.json({ ok: true });
 }));
 
 // MARK: - Lokale Korrekturen (simulierte Schreib-API – die Heizma-API ist read-only)

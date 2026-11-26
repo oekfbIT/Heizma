@@ -9,7 +9,6 @@ flowchart LR
   B["Browser<br/><small>React · Vite · Tailwind</small>"] -->|"/api/* · Sitzungstoken"| A["Eigene API<br/><small>Node · Express</small>"]
   A -->|"Bearer-Token (nur serverseitig)"| H[("Heizma Case-Study-API<br/><small>read-only, eingefroren</small>")]
   A <--> L[("local-db.json<br/><small>Korrekturen · Freigaben · Entscheidungen</small>")]
-  A -.->|optional| C["Claude<br/><small>Notizen → Hinweise</small>"]
   A -.->|optional| G["Geocoding<br/><small>Google / OSM</small>"]
 ```
 
@@ -28,7 +27,7 @@ flowchart LR
   O --> V["validation<br/><small>Befunde + Zuständigkeit</small>"]
   V --> P["planner<br/><small>Greedy → 2-opt/Relocate</small>"]
   T["travelMatrix<br/><small>/travel/path</small>"] --> P
-  P --> X["verify<br/><small>eigener Code, 10 Regeln</small>"]
+  P --> X["verify<br/><small>eigener Code, 11 Regeln</small>"]
   T --> X
 ```
 
@@ -157,7 +156,6 @@ Die eigene API liefert Techniker, Anfragen und Termine in **einem** Endpunkt (`/
 │   ├── planner.ts          Greedy → 2-opt/Relocate
 │   ├── verify.ts           unabhängige Plan-Prüfung
 │   ├── travelMatrix.ts     Fahrzeitmatrix aus /travel/path
-│   ├── notesAi.ts          Notizen → Hinweise (Claude, Fallback Regeln)
 │   ├── geocode.ts          Adresse ↔ Koordinaten
 │   └── types.ts            gemeinsame Typen (auch vom Web genutzt)
 ├── web/src/

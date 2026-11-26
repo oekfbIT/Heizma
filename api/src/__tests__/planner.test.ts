@@ -14,7 +14,6 @@ import technicians from '../fixtures/technicians.json';
 import { buildPlan, forecast, rankOptions, swapOptions } from '../planner.js';
 import { estimateLookup } from '../travelMatrix.js';
 import { normalizeTime } from '../time.js';
-import { parseTimeWish } from '../timeWish.js';
 import type { Appointment, AvailabilityEntry, Dataset, Decision, Plan, ServiceRequest, Technician } from '../types.js';
 import { applyExceptions, verifyPlan } from '../verify.js';
 import { validateDataset } from '../validation.js';
@@ -193,18 +192,32 @@ test('Validator erkennt eingeschleuste Fehler', () => {
   assert.ok(verifyPlan(badLunch, data, travel).totalViolations > 0);
 });
 
-// REGEL-4 · KI: bestätigter Zeitwunsch wird harte Grenze
-test('Bestätigte Notiz „nur vormittags“ wird harte Grenze', () => {
-  const r = req({ customerAvailableFrom: '10:00' });
-  const free = buildPlan(ds([r], [day('07:00', '19:00')]), { travel });
-  assert.ok(plannedIds(free).has(r.id));
-  const noteConstraints = { [r.id]: { latest: '11:00' } }; // 10:00 + 75 min passt nicht bis 11:00
-  const plan = buildPlan(ds([r]), { travel, noteConstraints });
-  assert.ok(!plannedIds(plan).has(r.id));
-  const ok = buildPlan(ds([r]), { travel, noteConstraints: { [r.id]: { latest: '12:00' } } });
-  const stop = ok.routes[0].stops[0];
-  assert.ok(stop.end <= '12:00');
-  assert.equal(verifyPlan(ok, ds([r]), travel, { [r.id]: { latest: '12:00' } }).totalViolations, 0);
+// Zusatz `totals`: Was angezeigt wird, addiert sich – Fahrt + vor Ort + Pause + Warten = Arbeitstag, Summen = Einzelwerte
+test('Zahlen stimmen: jede Route und die Wochensumme addieren sich exakt', () => {
+  const data = fixtureData();
+  const plan = buildPlan(data, { travel });
+  const totals = (p: Plan) => verifyPlan(p, data, travel).rules.find((r) => r.rule === 'totals')!;
+  assert.equal(totals(plan).violations.length, 0, JSON.stringify(totals(plan).violations.slice(0, 3)));
+  assert.ok(totals(plan).checks > plan.routes.length);
+  const toMin = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3);
+  for (const r of plan.routes.filter((x) => x.stops.length)) {
+    r.stops.forEach((s, i) => {
+      const prevEnd = toMin(i ? r.stops[i - 1].end : r.departure);
+      const pause = r.lunch && toMin(r.lunch.start) >= prevEnd && toMin(r.lunch.end) <= toMin(s.start) ? 60 : 0;
+      assert.equal(toMin(s.start) - prevEnd, s.travelMinutes + pause + s.waitMinutes, `${r.technicianId} ${r.date} ${s.id}: Lücke ≠ Fahrt + Pause + Warten`);
+    });
+  }
+
+  const wrongDrive = clone(plan);
+  wrongDrive.routes.find((r) => r.stops.length)!.driveMinutes += 5;
+  assert.ok(totals(wrongDrive).violations.length > 0, 'falsche Routen-Fahrzeit wird erkannt');
+  const wrongSum = clone(plan);
+  wrongSum.stats.driveMinutes += 1;
+  assert.ok(totals(wrongSum).violations.length > 0, 'falsche Wochensumme wird erkannt');
+  const hiddenGap = clone(plan);
+  const hg = hiddenGap.routes.find((r) => r.stops.some((s) => s.waitMinutes > 0)) ?? hiddenGap.routes.find((r) => r.stops.length)!;
+  hg.stops[hg.stops.length - 1].waitMinutes += 30;
+  assert.ok(totals(hiddenGap).violations.length > 0, 'nicht ausgewiesene Wartezeit wird erkannt');
 });
 
 // ---- Planer-Entscheidungen ----
@@ -298,19 +311,12 @@ test('Uhrzeit-Formatfehler („10.00“) wird gelesen, geplant und als Warnung m
     assert.equal(normalizeTime(raw), want, raw);
 });
 
-// DATEN · REGEL-4: offener Zeitwunsch wird nie automatisch geplant
-test('Zeitwunsch in Notiz: ohne Bestätigung nie automatisch eingeplant; bestätigt = harte Grenze; verworfen = normal', () => {
+// DATEN: Freitext-Notizen sind Information für den Planer, keine Planungsregel
+test('Notiz („nur vormittags erreichbar“) blockiert nichts: Anfrage wird normal eingeplant', () => {
   const r = req({ notes: 'nur vormittags erreichbar' });
-  const data = ds([r]);
-  const open = buildPlan(data, { travel });
-  assert.equal(where(open, r.id), undefined);
-  assert.match(open.unassigned.find((u) => u.requestId === r.id)!.reason, /^Zeitwunsch klären/);
-  const ok = buildPlan(data, { travel, noteConstraints: { [r.id]: { latest: '12:00' } } });
-  const stop = ok.routes.flatMap((x) => x.stops).find((s) => s.id === r.id);
-  assert.ok(stop && stop.end <= '12:00');
-  assert.ok(where(buildPlan(data, { travel, noteConstraints: { [r.id]: {} } }), r.id), 'verworfen → geplant');
-  assert.equal(parseTimeWish('Kunde arbeitet Schicht, nachmittags besser')?.kind, 'preference');
-  assert.equal(parseTimeWish('Hund im Garten'), null);
+  const plan = buildPlan(ds([r]), { travel });
+  assert.ok(where(plan, r.id));
+  assert.equal(plan.unassigned.length, 0);
 });
 
 // REGEL-3 · ANNAHME: Pause hat Vorrang

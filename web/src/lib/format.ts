@@ -54,3 +54,6 @@ export function isoWeek(iso: string): number {
   const firstThu = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
   return 1 + Math.round(((d.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
 }
+
+/** Grund ohne Detail: „Nicht zuordenbar (kein Gebiet, > 15 km)“ → „Nicht zuordenbar“, „Keine Koordinaten – zuerst …“ → „Keine Koordinaten“ */
+export const reasonGroup = (reason: string) => reason.split(/[:(–]/)[0].trim();

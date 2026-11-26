@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useCore } from '@/core';
 import { formatDay } from '@/lib/format';
-import type { RequestPlanning, RoutePreview, SwapOption } from '@/lib/types';
+import type { RoutePreview, SwapOption } from '@/lib/types';
 import { Alert, Badge, Button, Input, Modal } from '@/ui';
 
 /**
@@ -83,7 +83,6 @@ function Timeline({ route, removed }: { route: RoutePreview; removed: SwapOption
 export default function SwapModal(p: {
   requestId: string;
   olderWaiting: number;
-  timeWish?: RequestPlanning['timeWish'];
   onClose: () => void;
   onSwap: (o: SwapOption, reason: string) => Promise<void>;
   onPrioritize: (reason: string) => Promise<void>;
@@ -152,14 +151,6 @@ export default function SwapModal(p: {
         {p.olderWaiting > 0 && <span className="text-warning-700"> {p.olderWaiting} ältere Anfrage{p.olderWaiting === 1 ? ' wartet' : 'n warten'} noch.</span>}
       </p>
 
-      {p.timeWish && (
-        <div className="mt-3 rounded-lg border border-info-200 bg-info-50 px-3 py-2 text-sm text-info-900">
-          <strong>🕘 Kundenwunsch: {p.timeWish.hint}</strong>
-          {p.timeWish.status === 'verworfen' ? ' – vom Planer verworfen, wird ignoriert.' : ' – alle Varianten halten ihn ein.'}
-          <span className="block text-xs text-info-700">Notiz: „{p.timeWish.note}“</span>
-        </div>
-      )}
-
       {error && <Alert tone="danger" size="sm" className="mt-3">{error}</Alert>}
       {!options && !error && <p className="mt-4 text-sm text-gray-400">Tausch-Varianten werden berechnet …</p>}
 
@@ -198,7 +189,7 @@ export default function SwapModal(p: {
                       <p className="truncate text-xs text-gray-500">{o.displaced.address}</p>
                       {o.displaced.notes && (
                         <p className="mt-1 truncate text-xs text-gray-600" title={o.displaced.notes}>
-                          {o.displaced.timeWish ? <strong className="text-info-700">🕘 {o.displaced.timeWish} · </strong> : '📝 '}„{o.displaced.notes}“
+                          📝 „{o.displaced.notes}“
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">

@@ -6,7 +6,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import LocationAssist from '@/components/LocationAssist';
-import Waitlist from '@/components/planner/Waitlist';
 import RequestPlanningCard from '@/components/RequestPlanningCard';
 import AvailabilityWeek from '@/components/stammdaten/AvailabilityWeek';
 import { SeverityPill } from '@/components/stammdaten/IssueBadge';
@@ -98,7 +97,8 @@ export default function EntityEdit() {
     <Page narrow>
       <BackLink to={`/stammdaten/${def.slug}`}>{def.title}</BackLink>
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <h1 className="page-title">{id}</h1>
+        <h1 className="page-title">{String(record?.customer ?? record?.name ?? id)}</h1>
+        {Boolean(record?.customer || record?.name) && <span className="font-mono text-sm text-gray-400">{id}</span>}
         {issues.filter((i) => i.severity !== 'info').length === 0 && <Badge tone="success">✓ Daten vollständig</Badge>}
         {isOverridden && <Badge tone="info">Lokal korrigiert</Badge>}
       </div>
@@ -154,16 +154,6 @@ export default function EntityEdit() {
         />
       )}
 
-      {/* Wartet trotz gültiger Daten (Kapazität) → Kunde über Verzögerung informieren */}
-      {def.kind === 'request' && (() => {
-        const u = plan.data ? core.routen.capacityWaitlist(plan.data, id) : [];
-        return u.length > 0 ? (
-          <div className="mt-6">
-            <Waitlist items={u} requests={data.requests} escalations={data.escalations ?? {}} nextWorkday={forecast.data?.placements[id]?.date ?? data.range.to} />
-          </div>
-        ) : null;
-      })()}
-
       <Card
         as="form"
         className="mt-6 space-y-5 p-4 md:p-6"
@@ -213,7 +203,7 @@ export default function EntityEdit() {
                   rows={3}
                   tone={tone}
                   value={value === '—' ? '' : value}
-                  placeholder={field.key === 'region' ? 'Eine Zeile pro Eckpunkt: 48.20, 16.30' : '— fehlt —'}
+                  placeholder={field.key === 'region' ? 'Eine Zeile pro Eckpunkt: 48.20, 16.30' : field.key === 'notes' ? 'keine Notiz' : '— fehlt —'}
                   readOnly={!canEdit}
                   onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
                 />
@@ -221,7 +211,8 @@ export default function EntityEdit() {
                 <Input
                   tone={tone}
                   value={value === '—' ? '' : value}
-                  placeholder="— fehlt —"
+                  // ANNAHME: leeres „Kunde verfügbar ab“ = ganztägig verfügbar (kein Datenfehler)
+                  placeholder={field.key === 'customerAvailableFrom' ? 'ganztägig (keine Angabe)' : '— fehlt —'}
                   readOnly={!canEdit}
                   onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
                 />

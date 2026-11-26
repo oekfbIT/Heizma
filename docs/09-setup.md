@@ -67,13 +67,12 @@ Mock-Login ohne externe Dienste (`api/src/mockauth/`):
 | `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_MAP_ID` | Google Maps; leer → Leaflet mit freien Kacheln | leer |
 | `MAP_TILE_URL`, `MAP_ATTRIBUTION` | Kacheln für Leaflet | Esri |
 | `OFFICE_LAT`, `OFFICE_LNG` | Firmensitz als Referenzpunkt | Wien |
-| `OPENAI_API_KEY`, `OPENAI_MODEL` | KI-Hinweise aus Notizen; leer → Regel-Fallback | leer |
 | `MOCK_AUTH_EMAIL`, `MOCK_AUTH_PASSWORD`, `MOCK_AUTH_TTL_HOURS`, `MOCK_AUTH_SECRET` | Mock-Login | siehe oben |
 | `LOCAL_DB_PATH`, `TRAVEL_CACHE_PATH`, `NOTES_CACHE_PATH` | Speicherorte | `api/data/…` |
 
 ## Zum Testen
 
-- **Planungsstand zurücksetzen:** In der Routenplanung „Test: Planungsstand zurücksetzen“ – löscht Freigaben, Entscheidungen, bestätigte Notizen und Eskalationen. Korrekturen bleiben.
+- **Planungsstand zurücksetzen:** In der Routenplanung „Test: Planungsstand zurücksetzen“ – löscht Freigaben, Entscheidungen und Eskalationen. Korrekturen bleiben.
 - **Beispiel-Korrekturen laden:** `cp api/data/local-db.example.json api/data/local-db.json` ([Details](04-datenqualitaet.md#korrigieren-obwohl-die-api-read-only-ist))
 - **Styleguide:** http://localhost:5173/styleguide
 

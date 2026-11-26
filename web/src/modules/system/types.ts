@@ -41,7 +41,7 @@ export interface Forecast {
   weeks: { index: number; from: string; to: string; planned: number; remaining: number; driveMinutes: number }[];
   weeksNeeded: number | null;
   stuck: number;
-  needsAction: { review: number; dataErrors: number; excluded: number };
+  needsAction: { dataErrors: number; excluded: number };
   byTechnician: { technicianId: string; name: string; weeks: number; requests: number }[];
   placements: Record<string, { week: number; date: string; technicianId: string; start: string; end: string }>;
   assumptions: string[];

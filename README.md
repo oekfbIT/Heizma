@@ -20,16 +20,16 @@ Der Planer schaut drauf und gibt frei, statt selbst zu rechnen.
 | Anfragen **automatisch** auf Außendienstler und Tage verteilen | Planer in 3 Phasen: Greedy *Cheapest Insertion* → 2-opt + Relocate → Warteliste erneut | [Planung & Regeln](docs/03-planung-und-regeln.md) |
 | **Fahrzeitoptimierte** Tagesroute pro Person | Echte Fahrzeitmatrix aus `/travel/path` (13 Fahrten pro Call). Die Optimierung ist nie schlechter als Greedy (getestet), die Ersparnis zeigt der Planer an | [Fahrzeiten](docs/03-planung-und-regeln.md#fahrzeiten) |
 | Planer soll **nur draufschauen und freigeben** | 3-Schritt-UI: Tag wählen → Route prüfen → freigeben. Freigegebene Routen bleiben bei jeder Neuplanung fix, Export als `.ics` | [Ergebnis](docs/01-aufgabe-und-ergebnis.md) |
-| **Alle 8 Regeln** eingehalten | Jede Regel im Planer umgesetzt **und** unabhängig nachgeprüft: Badge „✓ 0 Regelverstöße · 10 Regeln“ | [Regeln & Nachweis](docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis) |
+| **Alle 8 Regeln** eingehalten | Jede Regel im Planer umgesetzt **und** unabhängig nachgeprüft: Badge „✓ 0 Regelverstöße · 11 Regeln“ – die elfte Prüfung rechnet nach, dass sich alle angezeigten Zahlen addieren | [Regeln & Nachweis](docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis) |
 | **Unsaubere Daten** (fehlende Koordinaten, Tippfehler, ohne Gebiet, ohne Verfügbarkeit …) | Validierung mit Fehler / Warnung / Hinweis, Korrektur direkt in der App, Geocoding, Eskalation | [Datenqualität](docs/04-datenqualitaet.md) |
 | **Ältere Anfragen zuerst**, wenn die Kapazität nicht reicht | Einplanung strikt nach Eingang, Warteliste mit Platz X von Y, „Kunde informieren“ | [Priorität](docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis) |
-| „Lieber wenige Kernfunktionen sauber als alles halb“ | Saubere Schichten, Design-System, 84 automatisierte Tests, Architektur-Wächter und Code-Navigations-Gate in CI | [Architektur](docs/02-architektur.md) · [Tests](docs/06-tests-und-qualitaet.md) |
+| „Lieber wenige Kernfunktionen sauber als alles halb“ | Saubere Schichten, Design-System, 85 automatisierte Tests, Architektur-Wächter und Code-Navigations-Gate in CI | [Architektur](docs/02-architektur.md) · [Tests](docs/06-tests-und-qualitaet.md) |
 
 ### Bewusste Annahmen
 
 Die vollständige Liste steht in der App unter **Hilfe → Annahmen**. Die wichtigsten:
 
-- **`customerAvailableFrom = null` heißt „ganztägig verfügbar“.** Das Feld ist laut API „string oder null“ und definiert nur, dass ein Termin *nicht früher* beginnen darf. Ohne Wert gibt es keine Untergrenze. Fehlt die Zeit, ist das daher kein Datenfehler, sondern der Normalfall (im Datensatz bei der Mehrheit der Anfragen). Mit einer Freigabe steht der Termin fest; eine erneute Bestätigung durch den Kunden ist nicht vorgesehen. Zeitwünsche aus den Vertriebsnotizen („nur vormittags“, „ab 14 Uhr“) werden nach Bestätigung durch den Planer zur harten Grenze.
+- **`customerAvailableFrom = null` heißt „ganztägig verfügbar“.** Das Feld ist laut API „string oder null“ und definiert nur, dass ein Termin *nicht früher* beginnen darf. Ohne Wert gibt es keine Untergrenze. Fehlt die Zeit, ist das daher kein Datenfehler, sondern der Normalfall (im Datensatz bei der Mehrheit der Anfragen). Mit einer Freigabe steht der Termin fest; eine erneute Bestätigung durch den Kunden ist nicht vorgesehen. Vertriebsnotizen (37 Freitexte) werden **angezeigt, nicht ausgewertet** – in der Tagesroute direkt beim Termin. Harte Zeitgrenze ist nur `customerAvailableFrom`; bewusst ohne KI, denn die Aufgabe ist, den Planer zu entlasten, nicht ihn zu ersetzen.
 - **Folgewochen werden vorgeplant.** Was diese Woche keinen Platz hat, wird in die nächsten Wochen vorgeplant (vorläufig). Die Case-API liefert Verfügbarkeiten nur für diese Woche; in Produktion kämen sie für jede Woche aus der API – bis dahin werden die Zeiten dieser Woche übernommen. Freigegeben wird erst mit echter Verfügbarkeit.
 - **Uhrzeit im falschen Format** (z. B. „10.00“, „10 Uhr“) wird eindeutig als 10:00 gelesen und geplant – gelbe Warnung mit Korrektur per Klick. Nur unlesbare Werte (z. B. „morgens“) sind ein Datenfehler.
 
@@ -96,7 +96,7 @@ Login: `planner@heizma.at` / `1nvite0nly` · Lokale Entwicklung, alle Befehle un
 | 1 | [Aufgabe & Ergebnis](docs/01-aufgabe-und-ergebnis.md) | Problemverständnis, Ablauf für den Planer, Screenshots |
 | 2 | [Architektur](docs/02-architektur.md) | Systemüberblick, Frontend-Schichten (Interactor/VIPER), Datenfluss, Ordnerstruktur |
 | 3 | [Planung & Regeln](docs/03-planung-und-regeln.md) | Algorithmus, Fahrzeiten, jede Regel mit Umsetzung und Nachweis |
-| 4 | [Datenqualität](docs/04-datenqualitaet.md) | Umgang mit unsauberen Daten, Korrekturen, Eskalation, KI-Hinweise |
+| 4 | [Datenqualität](docs/04-datenqualitaet.md) | Umgang mit unsauberen Daten, Korrekturen, Eskalation, Notizen |
 | 5 | [Design-System](docs/05-design-system.md) | Tokens, Komponenten-Katalog, Styling-Regeln, Styleguide `/styleguide` |
 | 6 | [Tests & Qualität](docs/06-tests-und-qualitaet.md) | Teststrategie, Coverage, Architektur-Wächter, visueller Vergleich |
 | 7 | [API-Referenz](docs/07-api.md) | Alle Endpunkte der eigenen API |

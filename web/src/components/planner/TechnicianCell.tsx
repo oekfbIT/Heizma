@@ -21,6 +21,7 @@ interface Props {
 /** Eine Person in der Liste: wer, wie viele Termine, wie viel Fahrt – und ein klarer Status rechts */
 export default function TechnicianCell({ technician, route, status, color, selected, approved, hasViolation, onClick }: Props) {
   const stops = route?.stops.length ?? 0;
+  const fixed = route?.stops.filter((s) => s.fixed).length ?? 0;
   const disabled = status !== 'available';
   const pill = disabled
     ? { label: status === 'blocked' ? 'Abwesend' : 'Nicht verfügbar', cls: 'bg-gray-100 text-gray-500' }
@@ -29,7 +30,7 @@ export default function TechnicianCell({ technician, route, status, color, selec
       : approved
         ? { label: '✓ Freigegeben', cls: 'bg-brand-500 text-white' }
         : stops
-          ? { label: 'Offen', cls: 'bg-warning-100 text-warning-800' }
+          ? { label: 'Zur Freigabe', cls: 'bg-warning-100 text-warning-800' }
           : { label: 'Keine Termine', cls: 'bg-gray-100 text-gray-500' };
 
   return (
@@ -51,7 +52,8 @@ export default function TechnicianCell({ technician, route, status, color, selec
         {!disabled && route && stops > 0 ? (
           <>
             <span className="block text-xs text-gray-600">
-              {stops} {stops === 1 ? 'Termin' : 'Termine'} · {formatMinutes(route.driveMinutes)} Fahrt · {route.departure}–{route.returnHome}
+              {stops} {stops === 1 ? 'Termin' : 'Termine'}
+              {fixed > 0 && ` (${fixed} fix)`} · {formatMinutes(route.driveMinutes)} Fahrt · {route.departure}–{route.returnHome}
             </span>
             <CapacityBar route={route} />
           </>

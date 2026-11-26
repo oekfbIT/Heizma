@@ -1,5 +1,5 @@
 /**
- * @file      types.ts – Typen des Anfragen-Moduls (Entscheidung, Eskalation, Notiz-Hinweis)
+ * @file      types.ts – Typen des Anfragen-Moduls (Entscheidung, Eskalation)
  * @layer     Web · Modul-Typen
  * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
  */
@@ -12,29 +12,6 @@ export interface Escalation {
   newDate?: string;
   recipient: string;
   message: string;
-}
-
-export interface NoteInsight {
-  requestId: string;
-  note: string;
-  category: string;
-  hint: string;
-  earliest?: string;
-  latest?: string;
-  source: 'ai' | 'rules';
-}
-
-export interface NoteInfo {
-  insights: NoteInsight[];
-  confirmed: Record<string, { earliest?: string; latest?: string; confirmedAt: string }>;
-  ai: boolean;
-}
-
-export interface NoteConstraint {
-  earliest?: string;
-  latest?: string;
-  /** Zeitwunsch gelesen und verworfen → ohne Zeitgrenze planen */
-  ignore?: boolean;
 }
 
 export interface GeoResult {

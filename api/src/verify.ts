@@ -1,7 +1,7 @@
 /**
  * @file      verify.ts – Unabhängige Regelprüfung des fertigen Plans („Vier-Augen-Prinzip im Code“)
  * @layer     Backend · Domäne (reine Funktionen)
- * @einstieg  verifyPlan() → Badge „✓ 0 Regelverstöße · 10 Regeln“ · applyExceptions() → bewusste Ausnahmen (gelb)
+ * @einstieg  verifyPlan() → Badge „✓ 0 Regelverstöße · 11 Regeln“ · applyExceptions() → bewusste Ausnahmen (gelb)
  * @nutzt     nur Originaldaten + ausgegebene Uhrzeiten + dieselbe Fahrzeitquelle wie der Planer
  * @genutzt   index.ts (GET /api/plan), Tests in __tests__/planner.test.ts schleusen gezielt Fehler ein
  * @siehe     docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis · docs/10-code-navigation.md
@@ -9,7 +9,7 @@
  * Zuordnung Prüf-Schlüssel → Case-Regel:
  *   window → REGEL-1/2 · returnHome → REGEL-2 · lunch → REGEL-3 · customerFrom → REGEL-4
  *   responsibility → REGEL-5 · fixed → REGEL-6 · travel → REGEL-7 · priority → REGEL-8
- *   duration, unique → Zusatzprüfungen (Dauer passt zum Typ, jede Anfrage genau einmal)
+ *   duration, unique, totals → Zusatzprüfungen (Dauer passt zum Typ, jede Anfrage genau einmal, angezeigte Zahlen addieren sich)
  *
  * ACHTUNG (für Reviewer): Die Zeitregeln (REGEL-1…7) rechnen komplett mit eigenem Code. Nur die Prioritätsprüfung
  * (REGEL-8) nutzt swapOptions() aus planner.ts, um „hätte eine ältere eine jüngere ersetzen können?“ zu beantworten.
@@ -40,18 +40,19 @@ const RULE_LABELS: Record<string, string> = {
   travel: 'Nichts überlappt, auch nicht Fahrzeiten',
   returnHome: 'Heimfahrt höchstens 60 min über das Fensterende hinaus',
   lunch: 'Mittagspause 60 min, Beginn 11:30–13:00, nur ganze Tage',
-  customerFrom: 'customerAvailableFrom als harte Grenze (inkl. bestätigter Notizen)',
+  customerFrom: 'customerAvailableFrom als harte Grenze',
   duration: 'Dauer vor Ort korrekt (PV 60 · WP 75 · WP+PV/unbekannt 105)',
   fixed: 'Bestehende Termine bleiben, wo sie sind',
   responsibility: 'Zuständigkeit: Gebiet, sonst ≤ 15 km, sonst nicht zuordenbar',
   unique: 'Jede Anfrage genau einmal: eingeplant oder auf der Warteliste',
   priority: 'Reicht die Kapazität nicht, kommen ältere Anfragen zuerst',
+  totals: 'Zahlen stimmen: Fahrt + vor Ort + Pause + Warten = Arbeitstag, Summen = Einzelwerte',
 };
 
 // MARK: - verifyPlan (EINSTIEG)
 
 /** Prüft jede Route Stopp für Stopp. Jede Einzelprüfung zählt in `checks`, jeder Fehler landet in `violations`. */
-export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, noteConstraints: Record<string, { earliest?: string; latest?: string }> = {}, decisions: Record<string, Decision> = {}): Verification {
+export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, decisions: Record<string, Decision> = {}): Verification {
   const rules = new Map<string, RuleCheck>(Object.entries(RULE_LABELS).map(([rule, label]) => [rule, { rule, label, checks: 0, violations: [] }]));
   const check = (rule: string, ok: boolean, v: Omit<Violation, 'rule'>) => {
     const r = rules.get(rule)!;
@@ -103,11 +104,8 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
         seen.set(stop.id, `${route.technicianId}@${route.date}`);
         if (r) {
           const from = normalizeTime(r.customerAvailableFrom);
-          // REGEL-4: customerAvailableFrom + bestätigte Notiz-Zeitgrenzen
+          // REGEL-4: customerAvailableFrom ist eine harte Grenze
           if (from) check('customerFrom', start >= toMinutes(from), { ...sctx, message: `${stop.customer} beginnt ${stop.start}, Kunde erst ab ${from}` });
-          const nc = noteConstraints[r.id];
-          if (nc?.earliest) check('customerFrom', start >= toMinutes(nc.earliest), { ...sctx, message: `${stop.customer} beginnt ${stop.start}, laut bestätigter Notiz erst ab ${nc.earliest}` });
-          if (nc?.latest) check('customerFrom', end <= toMinutes(nc.latest), { ...sctx, message: `${stop.customer} endet ${stop.end}, laut bestätigter Notiz bis ${nc.latest}` });
           // Zusatz: Dauer passt zum Typ · DATEN: unbekannter Typ = 105 min
           const expected = r.visitationType === null ? 105 : ({ PV: 60, WP: 75, 'WP+PV': 105 } as const)[r.visitationType];
           check('duration', end - start === expected, { ...sctx, message: `${stop.customer}: ${end - start} min geplant, erwartet ${expected}` });
@@ -132,6 +130,18 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
     const lastEnd = toMinutes(route.stops[route.stops.length - 1].end);
     check('returnHome', ret >= lastEnd + back, { ...ctx, message: `Ankunft zu Hause ${route.returnHome} zu früh (Fahrt ${back} min)` });
     check('returnHome', lastEnd + back <= we + 60, { ...ctx, message: `Ankunft zu Hause ${lastEnd + back - we} min nach Fensterende (max. 60)` });
+
+    // Zusatz `totals`: Was die Oberfläche anzeigt, muss sich exakt addieren (Fahrt, vor Ort, Pause, Warten → Arbeitstag)
+    const legs = route.stops.reduce((n, s) => n + s.travelMinutes, 0) + (ret - lastEnd);
+    const work = route.stops.reduce((n, s) => n + s.durationMinutes, 0);
+    const waits = route.stops.reduce((n, s) => n + s.waitMinutes, 0);
+    const pause = lunch && lunch[0] >= dep && lunch[1] <= ret ? lunch[1] - lunch[0] : 0;
+    check('totals', route.driveMinutes === legs, { ...ctx, message: `Fahrzeit der Route ${route.driveMinutes} min, Summe der Fahrten ${legs} min` });
+    check('totals', route.workMinutes === work, { ...ctx, message: `Zeit vor Ort ${route.workMinutes} min, Summe der Termine ${work} min` });
+    check('totals', ret - dep === legs + work + pause + waits, {
+      ...ctx,
+      message: `Arbeitstag ${route.departure}–${route.returnHome} (${ret - dep} min) ≠ Fahrt ${legs} + vor Ort ${work} + Pause ${pause} + Warten ${waits}`,
+    });
 
     if (lunch && lunch[0] >= lastEnd) check('lunch', lunch[0] >= ret, { ...ctx, message: 'Mittagspause überschneidet sich mit der Heimfahrt' });
 
@@ -177,7 +187,7 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
   // regelkonform ersetzen könnte? Dann ist die Regel verletzt. Geprüft wird jeder mögliche Tausch in jeder offenen Route.
   const waitingCap = plan.unassigned.filter((u) => u.reason.startsWith('Kapazität')).map((u) => requests.get(u.requestId)!).filter(Boolean);
   for (const w of waitingCap) {
-    const swap = swapOptions(data, plan, w.id, { travel, noteConstraints, decisions, withFallback: false, onlyYounger: true })[0];
+    const swap = swapOptions(data, plan, w.id, { travel, decisions, withFallback: false, onlyYounger: true })[0];
     check('priority', !swap, {
       technicianId: swap?.technicianId,
       date: swap?.date,
@@ -187,6 +197,16 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
   }
   if (waitingCap.length && !rules.get('priority')!.violations.length)
     notes.push(`Priorität: ${waitingCap.length} wartende Anfragen geprüft – keine passt regelkonform anstelle einer jüngeren in eine Route.`);
+
+  // Zusatz `totals`: Wochensummen = Summe der Routen, jede Anfrage genau einmal gezählt
+  const routeDrive = plan.routes.reduce((n, r) => n + r.driveMinutes, 0);
+  check('totals', plan.stats.driveMinutes === routeDrive, { message: `Fahrzeit gesamt ${plan.stats.driveMinutes} min ≠ Summe der Routen ${routeDrive} min` });
+  check('totals', plan.stats.planned === seen.size && plan.stats.unassigned === unassigned.size, {
+    message: `Zählung: ${plan.stats.planned} eingeplant / ${plan.stats.unassigned} nicht – im Plan stehen ${seen.size} / ${unassigned.size}`,
+  });
+  check('totals', plan.stats.planned + plan.stats.unassigned === data.requests.length && plan.stats.totalRequests === data.requests.length, {
+    message: `${plan.stats.planned} + ${plan.stats.unassigned} ≠ ${data.requests.length} Anfragen`,
+  });
 
   const estLegs = plan.routes.reduce((n, r) => n + r.stops.filter((s) => s.travelEstimated).length, 0);
   if (estLegs) notes.push(`${estLegs} Fahrten basieren auf Luftlinien-Schätzung (keine echte Fahrzeit verfügbar).`);

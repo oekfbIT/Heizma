@@ -77,7 +77,7 @@ export default function LocationAssist({
       {escalated ? (
         <Badge tone="warning" className="px-2.5 py-1">An den Vertrieb eskaliert</Badge>
       ) : (
-        <Button onClick={() => setDialog(true)}>An den Vertrieb eskalieren</Button>
+        <Button size="sm" onClick={() => setDialog(true)}>An den Vertrieb eskalieren …</Button>
       )}
     </div>
   );
@@ -88,7 +88,7 @@ export default function LocationAssist({
         <div className="space-y-2">
           <p className={`text-sm ${approx ? 'text-warning-800' : 'text-brand-800'}`}>{approx ? '≈' : '✓'} {found}</p>
           {approx && !escalated && (
-            <Button onClick={() => setDialog(true)}>Genaue Adresse beim Vertrieb anfragen</Button>
+            <Button size="sm" onClick={() => setDialog(true)}>Genaue Adresse beim Vertrieb anfragen …</Button>
           )}
         </div>
       ) : mode === 'none' || error ? (
@@ -101,7 +101,7 @@ export default function LocationAssist({
           <p className="flex-1 text-sm">
             {mode === 'forward' ? 'Koordinaten fehlen – wir können sie aus der Adresse ermitteln.' : 'Adresse fehlt – wir können sie aus den Koordinaten ermitteln.'}
           </p>
-          <Button variant="primary" disabled={busy} onClick={() => void lookup()}>
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void lookup()}>
             {busy ? 'Wird gesucht …' : mode === 'forward' ? 'Koordinaten finden' : 'Adresse finden'}
           </Button>
         </div>

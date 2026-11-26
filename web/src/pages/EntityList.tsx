@@ -43,10 +43,10 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
   const navigate = useNavigate();
   const core = useCore();
   const [params] = useSearchParams();
-  type Filter = 'all' | 'problems' | 'planned' | 'approved' | 'preplanned' | 'waitlist' | 'review' | 'unplannable' | 'excluded';
+  type Filter = 'all' | 'problems' | 'planned' | 'approved' | 'preplanned' | 'waitlist' | 'unplannable' | 'excluded';
   const initial = params.get('filter') as Filter | null;
   // Bei Anfragen gibt es kein „Nur Probleme“: jedes Problem landet in einem Plan-Status
-  const [filter, setFilter] = useState<Filter>(initial && !(def.kind === 'request' && initial === 'problems') && ['problems', 'planned', 'approved', 'preplanned', 'waitlist', 'review', 'unplannable', 'excluded'].includes(initial) ? initial : 'all');
+  const [filter, setFilter] = useState<Filter>(initial && !(def.kind === 'request' && initial === 'problems') && ['problems', 'planned', 'approved', 'preplanned', 'waitlist', 'unplannable', 'excluded'].includes(initial) ? initial : 'all');
   const [query, setQuery] = useState('');
   const [region, setRegion] = useRegion();
   const colors = core.techniker.colors(data.technicians);
@@ -78,7 +78,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
     const problems = (issuesById.get(row.id) ?? []).some((i) => i.severity !== 'info');
     if (filter === 'problems' && !problems) return false;
     if (filter === 'planned' && !planStatus?.get(row.id)?.planned) return false;
-    if (['approved', 'preplanned', 'waitlist', 'review', 'unplannable', 'excluded'].includes(filter) && planStatus?.get(row.id)?.tone !== filter) return false;
+    if (['approved', 'preplanned', 'waitlist', 'unplannable', 'excluded'].includes(filter) && planStatus?.get(row.id)?.tone !== filter) return false;
     if (!query) return true;
     return Object.values(row.cells).join(' ').toLowerCase().includes(query.toLowerCase());
   });
@@ -107,12 +107,11 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
               ? (() => {
                   const all = def.rows(data);
                   const n = (f: (st: ReturnType<NonNullable<typeof planStatus>['get']>) => boolean) => (planStatus ? all.filter((r) => f(planStatus.get(r.id))).length : null);
+                  // Die Tabs schließen sich gegenseitig aus und ergeben zusammen „Alle“ (gleiche Töpfe wie core.balance)
                   const tabs: { value: Filter; label: string; count: number | null }[] = [
                     { value: 'planned', label: 'Diese Woche', count: n((st) => !!st?.planned) },
-                    { value: 'approved', label: 'Freigegeben', count: n((st) => st?.tone === 'approved') },
                     { value: 'preplanned', label: 'Vorgeplant', count: n((st) => st?.tone === 'preplanned') },
                     { value: 'waitlist', label: 'Warteliste', count: n((st) => st?.tone === 'waitlist') },
-                    { value: 'review', label: 'Zeitwunsch klären', count: n((st) => st?.tone === 'review') },
                     { value: 'unplannable', label: 'Nicht planbar', count: n((st) => st?.tone === 'unplannable') },
                     { value: 'excluded', label: 'Aus dem Plan', count: n((st) => st?.tone === 'excluded') },
                   ];
@@ -214,7 +213,6 @@ const PLAN_TONE: Record<RequestPlanStatus['tone'], BadgeTone> = {
   proposed: 'success',
   preplanned: 'info-soft',
   waitlist: 'warning-soft',
-  review: 'info-soft',
   excluded: 'neutral',
   unplannable: 'danger',
 };

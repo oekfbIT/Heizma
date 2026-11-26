@@ -3,7 +3,6 @@
  * @layer     Web · View-Komponente (Planer)
  * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
  */
-import type { NoteInfo } from '@/modules';
 import { Alert, Button, Modal } from '@/ui';
 import RequestPlanningCard from '@/components/RequestPlanningCard';
 import { formatDateTime, formatDay, visitationLabel } from '@/lib/format';
@@ -17,20 +16,14 @@ interface Props {
   color: string;
   request?: ServiceRequest;
   appointment?: Appointment;
-  notes?: NoteInfo;
   violations: string[];
-  onConfirmNote: (requestId: string, c: { earliest?: string; latest?: string } | null) => void;
   /** Planer hat die Anfrage verschoben / fixiert / herausgenommen → Plan neu laden */
   onPlanChanged?: () => void;
   onClose: () => void;
 }
 
 /** Alle Informationen zu einem Stopp in einem Dialog */
-export default function StopDetailsModal({ stop, index, route, technician, color, request, appointment, notes, violations, onConfirmNote, onPlanChanged, onClose }: Props) {
-  const insight = notes?.insights.find((i) => i.requestId === stop.id);
-  const confirmed = notes?.confirmed[stop.id];
-  const constraint = insight && (insight.earliest || insight.latest) ? { earliest: insight.earliest, latest: insight.latest } : null;
-  const constraintLabel = constraint ? [constraint.earliest && `ab ${constraint.earliest}`, constraint.latest && `bis ${constraint.latest}`].filter(Boolean).join(' ') : '';
+export default function StopDetailsModal({ stop, index, route, technician, color, request, appointment, violations, onPlanChanged, onClose }: Props) {
   const prev = index === 0 ? technician.home.label : route.stops[index - 1].customer;
 
   return (
@@ -97,29 +90,6 @@ export default function StopDetailsModal({ stop, index, route, technician, color
               <Row label="Dauer vor Ort">
                 {request.visitationType ? request.durationMinutes : 105} min{!request.visitationType && ' (Typ unbekannt → 105 min angenommen)'}
               </Row>
-            </Section>
-          )}
-
-          {request?.notes && (
-            <Section title="Notiz aus dem Vertrieb">
-              <p className="rounded-lg bg-gray-50 p-3 italic text-gray-700">„{request.notes}“</p>
-              {insight && (
-                <div className="mt-2 rounded-lg border border-accent-200 bg-accent-50/50 p-3 text-xs">
-                  <p className="text-accent-800">
-                    <strong>{insight.source === 'ai' ? '✦ KI-Hinweis' : 'Erkannter Hinweis'}:</strong> {insight.hint}
-                  </p>
-                  {constraint && (
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="text-gray-600">
-                        {confirmed ? `Wird als feste Regel geplant: ${constraintLabel}.` : `Als feste Regel übernehmen (${constraintLabel})? Der Plan wird danach neu berechnet.`}
-                      </span>
-                      <Button size="sm" variant={confirmed ? 'secondary' : 'accent'} className="shrink-0 px-3 py-1" onClick={() => onConfirmNote(stop.id, confirmed ? null : constraint)}>
-                        {confirmed ? 'Zurücknehmen' : 'Übernehmen'}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
             </Section>
           )}
 

@@ -14,7 +14,7 @@ import { join, relative } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const DIRS = ['api/src', 'web/src', 'scripts'];
-const TAGS = ['REGEL-1', 'REGEL-2', 'REGEL-3', 'REGEL-4', 'REGEL-5', 'REGEL-6', 'REGEL-7', 'REGEL-8', 'DATEN', 'ANNAHME', 'TRADE-OFF', 'ACHTUNG', 'SICHERHEIT', 'KI', 'AUSBLICK', 'EINSTIEG', 'GRUND-PRAEFIX'];
+const TAGS = ['REGEL-1', 'REGEL-2', 'REGEL-3', 'REGEL-4', 'REGEL-5', 'REGEL-6', 'REGEL-7', 'REGEL-8', 'DATEN', 'ANNAHME', 'TRADE-OFF', 'ACHTUNG', 'SICHERHEIT', 'AUSBLICK', 'EINSTIEG', 'GRUND-PRAEFIX'];
 
 const SELF = 'scripts/code-index.mjs';
 const SKIP = new Set(['node_modules', 'fixtures', 'dist', '.test-dist']);

@@ -58,7 +58,7 @@ export const stammdaten = (over: Partial<Stammdaten> = {}): Stammdaten => ({
       visitationType: 'PV',
       durationMinutes: 60,
       customerAvailableFrom: null,
-      notes: null,
+      notes: 'nur vormittags erreichbar',
       createdAt: '2026-11-03T09:12:00+01:00',
     },
   ],

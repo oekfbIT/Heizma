@@ -45,7 +45,7 @@ export const ENTITIES: EntityDef[] = [
   {
     slug: 'anfragen',
     kind: 'request',
-    title: 'Offene Anfragen',
+    title: 'Anfragen',
     description: 'Angenommene Angebote, die noch eine Besichtigung brauchen',
     icon: 'inbox',
     columns: [
@@ -57,8 +57,9 @@ export const ENTITIES: EntityDef[] = [
       { key: 'region', label: 'Zuständig', className: 'w-32' },
       { key: 'createdAt', label: 'Eingang', className: 'w-40' },
     ],
+    // Alle Anfragen dieser Planung – auch die schon freigegebenen (Status „Freigegeben“), damit die Liste zur Bilanz passt
     rows: (d) =>
-      [...d.requests]
+      [...d.requests, ...(d.convertedRequests ?? [])]
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .map((r) => ({
           id: r.id,

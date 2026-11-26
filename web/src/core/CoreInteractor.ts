@@ -8,9 +8,9 @@
  * die `this.mutate(() => …)` aufruft. Dann lädt alles Sichtbare automatisch neu – Views laden nie selbst nach.
  */
 import { AnfragenInteractor } from '@/modules/anfragen/AnfragenInteractor';
-import type { DecisionInput, EscalationInput, NoteConstraint } from '@/modules/anfragen/types';
+import type { DecisionInput, EscalationInput } from '@/modules/anfragen/types';
 import { RoutenInteractor } from '@/modules/routen/RoutenInteractor';
-import type { RequestPlanStatus } from '@/modules/routen/types';
+import type { PlanBalance, RequestPlanStatus } from '@/modules/routen/types';
 import { SystemInteractor } from '@/modules/system/SystemInteractor';
 import type { EntityKey, LogEntry, LogItem } from '@/modules/system/types';
 import { TechnikerInteractor } from '@/modules/techniker/TechnikerInteractor';
@@ -51,6 +51,11 @@ export class CoreInteractor {
     return this.routen.requestStatuses(plan, (id) => this.techniker.getShortName(id), this.system.forecast.getState().data?.placements);
   }
 
+  /** Bilanz aller Anfragen (Summe der Töpfe = Gesamtzahl) – Basis für jede Zahl in Übersicht, Prognose, Planer und Liste */
+  balance(plan: Plan, include?: (requestId: string) => boolean): PlanBalance {
+    return this.routen.balance(plan, this.system.forecast.getState().data?.placements, include);
+  }
+
   // MARK: - Schreiben: ausführen, dann alles Sichtbare aktualisieren
   approveRoute(technicianId: string, date: string, currentlyApproved: boolean) {
     return this.mutate(() => this.routen.setApproval([this.routen.routeKey(technicianId, date)], !currentlyApproved));
@@ -58,10 +63,6 @@ export class CoreInteractor {
 
   approveDay(date: string) {
     return this.mutate(() => this.routen.approveDay(date));
-  }
-
-  confirmNote(requestId: string, constraint: NoteConstraint | null) {
-    return this.mutate(() => this.anfragen.confirmNote(requestId, constraint));
   }
 
   decideRequest(requestId: string, input: DecisionInput | null) {

@@ -10,16 +10,14 @@ import { fakeApi, stammdaten } from './helpers';
 async function setup() {
   const { api, calls } = fakeApi({
     'GET /api/stammdaten': stammdaten({ escalations: { req_1: { type: 'internal', at: 'x', recipient: 'V', message: 'm' } } }),
-    'GET /api/notes': { insights: [{ requestId: 'req_1', note: 'ab 10', category: 'zeit', hint: 'Kunde ab 10', earliest: '10:00', source: 'rules' }], confirmed: {}, ai: false },
     'GET /api/requests/req_1/options': { options: [{ technicianId: 'tech_02', date: '2026-11-24' }] },
     'GET /api/requests/req_1/planning': { requestId: 'req_1', status: 'planned' },
     'GET /api/geocode': { lat: 47, lng: 15, address: 'Graz', source: 'osm', precision: 'town' },
     'POST /api/requests/req_1/decision': { ok: true },
     'DELETE /api/requests/req_1/decision': { ok: true },
-    'POST /api/notes/req_1/confirm': { ok: true },
   });
   const a = new AnfragenInteractor(api);
-  await Promise.all([a.data.load(), a.notes.load()]);
+  await a.data.load();
   return { a, calls };
 }
 
@@ -49,10 +47,10 @@ describe('AnfragenInteractor', () => {
     expect(cityOf('ohne Komma')).toBe('ohne Komma');
   });
 
-  it('liefert KI-Hinweise zu einer Anfrage', async () => {
+  it('liefert die Vertriebsnotiz unverändert (keine Auswertung)', async () => {
     const { a } = await setup();
-    expect(a.noteFor('req_1').insight?.earliest).toBe('10:00');
-    expect(a.noteFor('req_7').insight).toBeUndefined();
+    expect(a.noteFor('req_1')).toBe('nur vormittags erreichbar');
+    expect(a.noteFor('req_x')).toBeNull();
   });
 
   it('lädt Optionen, Planung je Anfrage und Geocoding', async () => {
@@ -66,9 +64,8 @@ describe('AnfragenInteractor', () => {
     const { a, calls } = await setup();
     await a.decide('req_1', { mode: 'pin', reason: '' });
     await a.decide('req_1', null);
-    await a.confirmNote('req_1', null);
     const writes = calls.filter((c) => c.method !== 'GET');
-    expect(writes.map((c) => c.method)).toEqual(['POST', 'DELETE', 'POST']);
-    expect(writes[2].body).toEqual({});
+    expect(writes.map((c) => c.method)).toEqual(['POST', 'DELETE']);
+    expect(writes[0].body).toEqual({ mode: 'pin', reason: '' });
   });
 });

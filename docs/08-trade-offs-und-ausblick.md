@@ -10,7 +10,7 @@
 | **Fahrzeit symmetrisch** (A→B ≈ B→A) | Halb so viele Calls an `/travel/path` | Kleine Abweichungen bei Einbahnen |
 | **Keine Tageszeit-Abhängigkeit** | Eine Matrix für die ganze Woche | Kein Berufsverkehr, kein Puffer pro Stopp |
 | **„Ältere zuerst“ über die Einplanungsreihenfolge** | Einfach und prüfbar | Eine jüngere Anfrage bekommt einen Platz, in den die ältere nicht passte (Ort/Fenster) – die Prüfung weist das als Hinweis aus |
-| **KI nur als Vorschlag** | Mensch entscheidet, Planung bleibt deterministisch | Ein Klick mehr für den Planer |
+| **Notizen nicht automatisch auswerten (keine KI)** | Außerhalb des Auftrags; Planer entscheidet, Planung bleibt deterministisch | Ein Zeitwunsch in einer Notiz kann zunächst falsch eingeplant sein – der Planer sieht die Notiz beim Termin und verschiebt |
 | **Lokale JSON-Datei statt Datenbank** | Keine Infrastruktur, sofort lauffähig | Nicht für mehrere Instanzen; auf Vercel unter `/tmp` nicht dauerhaft |
 | **Benachrichtigungen simuliert** | Fokus auf die Planung | Es wird nichts versendet |
 | **`/api/stammdaten` als ein Endpunkt** | Ein Request für alle Module | Modul-Interactors schneiden ihren Teil heraus, statt eigene Endpunkte zu haben |
@@ -34,16 +34,17 @@
 
 **Daten**
 6. **Adress-Tippfehler per LLM + Geocoding vorschlagen** (mit Freigabe), statt nur zu markieren.
-7. **Schreibende Anbindung an CRM und Kalender** statt lokaler JSON-Datei – derselbe `PATCH`-Endpunkt.
+7. **Zeitwünsche aus Notizen als eigenes Feature** – z. B. ein strukturiertes Feld „Kunde erreichbar bis“ im Vertrieb, statt Freitext nachträglich zu deuten. Bis dahin sieht der Planer die Notiz beim Termin.
+8. **Schreibende Anbindung an CRM und Kalender** statt lokaler JSON-Datei – derselbe `PATCH`-Endpunkt.
 
 **Bedienung**
-8. **Drag & Drop** auf Karte und Zeitleiste als zweiter Weg zu „Verschieben“ (gleiche Endpunkte).
-9. **Rollen und Benutzer** im Änderungsprotokoll.
+9. **Drag & Drop** auf Karte und Zeitleiste als zweiter Weg zu „Verschieben“ (gleiche Endpunkte).
+10. **Rollen und Benutzer** im Änderungsprotokoll.
 
 **Qualität**
-10. **Playwright-End-to-End-Tests** für die Hauptabläufe in CI (der visuelle Vergleich existiert schon als Skript).
-11. **Ein Endpunkt pro Modul** (`/api/techniker`, `/api/anfragen` …), damit jedes Interactor-Modul nur seine Daten lädt.
-12. **Mock-Server für die Heizma-API**, um `heizmaClient` und `travelMatrix` zu testen.
+11. **Playwright-End-to-End-Tests** für die Hauptabläufe in CI (der visuelle Vergleich existiert schon als Skript).
+12. **Ein Endpunkt pro Modul** (`/api/techniker`, `/api/anfragen` …), damit jedes Interactor-Modul nur seine Daten lädt.
+13. **Mock-Server für die Heizma-API**, um `heizmaClient` und `travelMatrix` zu testen.
 
 ---
 

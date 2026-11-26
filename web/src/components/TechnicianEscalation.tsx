@@ -112,7 +112,7 @@ Wir brauchen eine Lösung:
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 flex flex-wrap gap-2 pl-12">
         {(['techniker', 'vertrieb'] as Target[]).map((t) => {
           const esc = sent(t);
           return esc ? (
@@ -131,8 +131,8 @@ Wir brauchen eine Lösung:
               </button>
             </div>
           ) : (
-            <Button key={t} block variant={t === 'techniker' ? 'primary' : 'secondary'} onClick={() => setCompose(t)} disabled={!plan.data}>
-              {texts[t].button}
+            <Button key={t} size="sm" variant={t === 'techniker' ? 'primary' : 'secondary'} onClick={() => setCompose(t)} disabled={!plan.data}>
+              {texts[t].button} …
             </Button>
           );
         })}

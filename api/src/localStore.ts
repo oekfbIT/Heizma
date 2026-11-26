@@ -44,8 +44,6 @@ export interface LocalDb {
   escalations: Record<string, Escalation>;
   /** Freigegebene Tagesrouten, key "techId@date" – gesperrt für die Neuplanung */
   approvals: Record<string, { at: string; stops: { id: string; start: string }[] }>;
-  /** Vom Planer bestätigte KI-Hinweise aus den Notizen (requestId → Felder) */
-  noteConfirmations: Record<string, { earliest?: string; latest?: string; confirmedAt: string }>;
   /** Manuelle Planer-Entscheidungen je Anfrage (fixieren, aus Plan nehmen, vorziehen) */
   decisions: Record<string, Decision>;
   /** Änderungsprotokoll: wer hat was warum geändert */
@@ -56,7 +54,7 @@ const DB_PATH = resolve(
   process.env.LOCAL_DB_PATH ?? (process.env.VERCEL ? '/tmp/heizma-local-db.json' : resolve(process.cwd(), 'data/local-db.json')),
 );
 
-const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, approvals: {}, noteConfirmations: {}, decisions: {}, log: [] });
+const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, approvals: {}, decisions: {}, log: [] });
 
 // MARK: - Laden & Speichern
 
@@ -75,7 +73,6 @@ function load(): LocalDb {
   db.log ??= [];
   db.escalations ??= {};
   db.approvals ??= {};
-  db.noteConfirmations ??= {};
   db.decisions ??= {};
   return db;
 }
@@ -183,7 +180,6 @@ export function resetPlanning() {
   const d = load();
   d.approvals = {};
   d.decisions = {};
-  d.noteConfirmations = {};
   d.escalations = {};
   d.log = d.log.filter((l) => l.action === 'update' || l.action === 'reset');
   persist();
@@ -285,24 +281,6 @@ export function unapproveRoutes(keys: string[]) {
     for (const s of d.approvals[k]?.stops ?? []) if (s.id.startsWith('req_')) d.log.push({ at, entity: 'requests', id: s.id, action: 'termin-zurueck', changes: { route: k } });
     delete d.approvals[k];
     d.log.push({ at, entity: 'approvals', id: k, action: 'unapprove' });
-  }
-  persist();
-}
-
-// MARK: - Bestätigte Notiz-Hinweise
-export function listNoteConfirmations() {
-  return load().noteConfirmations;
-}
-
-export function confirmNote(requestId: string, c: { earliest?: string; latest?: string } | null) {
-  const d = load();
-  if (c) {
-    for (const v of [c.earliest, c.latest]) if (v !== undefined && !HHMM.test(v)) throw new ValidationError('Uhrzeit im Format HH:MM');
-    d.noteConfirmations[requestId] = { ...c, confirmedAt: new Date().toISOString() };
-    d.log.push({ at: d.noteConfirmations[requestId].confirmedAt, entity: 'requests', id: requestId, action: c.earliest || c.latest ? 'notiz-bestaetigt' : 'notiz-verworfen', changes: { ...c } });
-  } else if (d.noteConfirmations[requestId]) {
-    delete d.noteConfirmations[requestId];
-    d.log.push({ at: new Date().toISOString(), entity: 'requests', id: requestId, action: 'notiz-zurueck' });
   }
   persist();
 }

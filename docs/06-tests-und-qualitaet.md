@@ -14,7 +14,7 @@ Alles läuft auch in GitHub Actions (`.github/workflows/ci.yml`) bei jedem Push.
 | Ebene | Werkzeug | Umfang |
 |---|---|---|
 | **Planung & Prüfung** (API) | Node Test Runner | 26 Tests |
-| **Core, Module, Tokens** (Web) | Vitest | 58 Tests |
+| **Core, Module, Tokens** (Web) | Vitest | 59 Tests |
 | **Architektur-Regeln** | `scripts/check-architecture.mjs` | 6 Regeln |
 | **Typen** | `tsc --noEmit` | API + Web, `strict` |
 | **Visueller Vergleich** | Playwright | Alter vs. neuer Build, 8 Ansichten ([Ergebnis](05-design-system.md#ohne-sichtbare-änderung-umgestellt)) |
@@ -33,7 +33,8 @@ Alles läuft auch in GitHub Actions (`.github/workflows/ci.yml`) bei jedem Push.
 - Fixe Termine bleiben, wo sie sind · unbekannter Typ = 105 min
 - Freigegebene Route bleibt bei Neuplanung unverändert
 - **Der Validator erkennt eingeschleuste Fehler** (Überlappung, Duplikat, verlorene Anfrage, falsche Pause)
-- Bestätigte Notiz „nur vormittags“ wird harte Grenze · offener Zeitwunsch wird nie automatisch geplant
+- **Zahlen stimmen:** jede Lücke = Fahrt + Pause + Warten, Routen- und Wochensummen addieren sich; falsche Summen werden erkannt
+- Notiz blockiert nichts – Anfrage mit „nur vormittags erreichbar“ wird normal geplant (Notiz ist Information)
 - Uhrzeit-Formatfehler („10.00“) wird gelesen, geplant und als Warnung gemeldet
 - Fixieren, Herausnehmen, Vorziehen, Tausch, Regelbruch mit/ohne Ausnahme
 - Optionen: regelkonforme Slots zuerst, freigegebene Routen am Ende
@@ -49,8 +50,8 @@ Alles läuft auch in GitHub Actions (`.github/workflows/ci.yml`) bei jedem Push.
 | `ApiService.test.ts` | Bearer-Header, Cache, **parallele GETs = 1 Request**, Cache leer nach Schreiben, verspätete Antworten landen nicht im geleerten Cache, 401 → Abmelden, Server-Fehlermeldung, Download |
 | `Resource.test.ts` | Laden, Fehler behalten alte Daten, **nur die jüngste Anfrage gewinnt**, aktiv nur mit Abonnenten |
 | `TechnikerInteractor.test.ts` | `getName`, `getShortName`, `getLabel`, `getAvailability`, Tage sortiert, stabile Farben, schreibt nur eigene Endpunkte |
-| `AnfragenInteractor.test.ts` | Regionsfilter inkl. „ohne Zuständigkeit“, Ort/Alter, KI-Hinweise, Entscheidungen POST/DELETE |
-| `RoutenInteractor.test.ts` | Verstöße je Stopp/Route, Tagesstatus, Plan-Status je Anfrage, Ausnahmen, Warteliste |
+| `AnfragenInteractor.test.ts` | Regionsfilter inkl. „ohne Zuständigkeit“, Ort/Alter, Notiz unverändert, Entscheidungen POST/DELETE |
+| `RoutenInteractor.test.ts` | **Bilanz: Töpfe ergeben die Gesamtzahl** (auch gefiltert), Verstöße je Stopp/Route, Tagesstatus, Plan-Status je Anfrage, Ausnahmen, Warteliste |
 | `CoreInteractor.test.ts` | Nach Änderung werden **nur angezeigte** Daten neu geladen, Freigabe/Rücknahme, Korrekturen gehen an das richtige Modul |
 | `ui.test.ts` | Token → Hex, Routenfarben, `cx`, Formatierung, System- und Termine-Modul |
 

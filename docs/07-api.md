@@ -35,8 +35,6 @@ Im Frontend ist der zuständige **Interactor** angegeben – Views rufen keine E
 | GET | `/api/requests/:id/options` | Mögliche Personen-Tage, sortiert (Vorschau, ändert nichts) | `anfragen.options()` |
 | POST | `/api/requests/:id/decision` | `{ mode: pin \| exclude \| prioritize, technicianId?, date?, reason, override? }` | `core.decideRequest()` |
 | DELETE | `/api/requests/:id/decision` | Entscheidung zurücknehmen → wieder automatisch geplant | `core.decideRequest(id, null)` |
-| GET | `/api/notes` | KI-Hinweise aus Notizen + bestätigte Zeitgrenzen | `anfragen.notes` |
-| POST | `/api/notes/:requestId/confirm` | Zeit-Hinweis als harte Regel (`{ earliest?, latest? }`, leer = zurücknehmen) | `core.confirmNote()` |
 
 ## Datenkorrekturen & Eskalation
 
@@ -49,7 +47,7 @@ Im Frontend ist der zuständige **Interactor** angegeben – Views rufen keine E
 | POST · DELETE | `/api/escalations/:requestId` | Kunde informieren / intern eskalieren (simuliert) | `core.escalateRequest()` · `core.withdrawRequestEscalation()` |
 | POST · DELETE | `/api/escalations/technicians/:id/:target` | Außendienst anfragen / Vertrieb informieren (`target` = `techniker` · `vertrieb`) | `core.escalateTechnician()` · `core.withdrawTechnicianEscalation()` |
 | GET | `/api/local-db` | Gespeicherte Korrekturen + bearbeitbare Felder | `system.localDb` |
-| POST | `/api/local-db/reset?scope=planning` | Nur für Tests: Freigaben, Entscheidungen, Notizen, Eskalationen löschen – Korrekturen bleiben | `core.resetPlanning()` |
+| POST | `/api/local-db/reset?scope=planning` | Nur für Tests: Freigaben, Entscheidungen, Eskalationen löschen – Korrekturen bleiben | `core.resetPlanning()` |
 | POST | `/api/local-db/reset` | Alles löschen, inkl. Korrekturen | – |
 
 ## Anmeldung

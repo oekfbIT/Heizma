@@ -38,7 +38,7 @@ flowchart LR
 | `danger` | Fehler, Regelverstoß, nicht planbar |
 | `warning` | Warnung, Warteliste, bewusste Ausnahme |
 | `info` | Hinweis, lokal korrigiert, fixiert |
-| `accent` | Vorgezogen (Priorität), KI-Hinweis |
+| `accent` | Vorgezogen (Priorität) |
 | `gray` | Flächen, Rahmen, Sekundärtext |
 | `route-1 … route-8` | Feste Farbe je Außendienstler auf Karte und Liste |
 
@@ -61,6 +61,7 @@ Alle aus `@/ui`:
 | `SegmentedControl` | `options`, `value`, `onChange` (typisiert) | Filter „Alle / Nur Probleme / Eingeplant“ |
 | `Loading` · `ErrorBox` · `Spinner` | `label`, `onRetry` | Ladezustände |
 | `Icon` | `name` | Inline-SVG, keine Icon-Library nötig |
+| `ActionList` | `items: { title, description, icon, tone, onSelect }[]` | Auswahl „Was möchtest du tun?“ im Dialog (siehe Aktionen) |
 
 ### Beispiel
 
@@ -83,6 +84,21 @@ import { Alert, Button, Modal } from '@/ui';
 ```
 
 Vorher hatten drei Dialoge je ~10 Zeilen kopiertes Overlay-Markup; jetzt ist es eine Komponente mit Escape-Taste und Barrierefreiheit (`role="dialog"`, `aria-modal`) für alle.
+
+## Aktionen: Karten zeigen, Dialoge ändern
+
+Ein Muster für alle Stellen, an denen der Planer etwas tut – damit nirgends eine Reihe gleich aussehender Buttons steht:
+
+| Regel | Umsetzung |
+|---|---|
+| **Karten zeigen nur den Status** | Badge + ein Satz „wann/bei wem“ oder „warum nicht“. Keine Aktions-Reihen. |
+| **Ein Einstieg je Karte** | `Planung ändern …` (bzw. ein klarer nächster Schritt wie `Koordinaten finden`). Höchstens ein Primär- und ein Sekundär-Button, `size="sm"`, links. |
+| **Änderungen laufen im Dialog** | `Modal` + `ActionList`: nur die Schritte, die im aktuellen Status möglich sind, je mit einem Satz, was danach passiert. |
+| **Jeder Schritt mit Vorschau oder Begründung** | Verschieben zeigt Uhrzeit und Zusatz-Fahrzeit; Herausnehmen und Regelbruch verlangen einen Grund. Fußzeile immer `Zurück` · Bestätigen. |
+| **„…“ heißt: es folgt ein Dialog** | `Planung ändern …`, `Verfügbarkeit anfragen …` – ohne Punkte passiert die Aktion sofort. |
+| **Ein großer Button pro Seite** | Nur der Seitenabschluss (z. B. „Routen freigeben“) ist `md` und vollbreit. |
+
+`Modal` hängt per Portal an `<body>` – ein Dialog kann einen weiteren öffnen (Stopp-Dialog → „Planung ändern“), `Escape` schließt nur den obersten.
 
 ## Styling-Regeln
 

@@ -5,9 +5,9 @@
  */
 import type { ApiService } from '@/core/ApiService';
 import { Resource } from '@/core/Resource';
-import { formatDay, isoWeek } from '@/lib/format';
+import { formatDay, isoWeek, reasonGroup } from '@/lib/format';
 import type { DayRoute, Plan } from '@/lib/types';
-import type { DayStatus, RequestPlanStatus, RouteGeometry } from './types';
+import type { DayStatus, PlanBalance, RequestPlanStatus, RouteGeometry } from './types';
 
 /** Schlüssel für Verstöße, die nicht an einem Stopp hängen */
 export const ROUTE_LEVEL = '__route';
@@ -68,10 +68,47 @@ export class RoutenInteractor {
     return { total: routes.length, approved, done: routes.length > 0 && approved === routes.length };
   }
 
-  /** „3 offen“, „✓ erledigt“, „keine Routen“ */
+  /** „3 zur Freigabe“, „✓ freigegeben“, „keine Routen“ – gezählt werden Routen, nicht Anfragen */
   dayStatusLabel(status: DayStatus): string {
     if (status.total === 0) return 'keine Routen';
-    return status.done ? '✓ erledigt' : `${status.total - status.approved} offen`;
+    return status.done ? '✓ freigegeben' : `${status.total - status.approved} zur Freigabe`;
+  }
+
+  /**
+   * Bilanz: jede Anfrage genau einmal (diese Woche · vorgeplant · Warteliste · nicht planbar · aus dem Plan).
+   * Die Plan-Prüfung (Regel „unique“) stellt sicher, dass jede Anfrage entweder in einer Route oder in `unassigned` steht.
+   * @param include optional nur Anfragen einer Region
+   */
+  balance(plan: Plan, preplanned: Record<string, { date: string }> = {}, include: (requestId: string) => boolean = () => true): PlanBalance {
+    const b: PlanBalance = { total: 0, thisWeek: 0, approved: 0, preplanned: 0, preplannedByWeek: [], waitlist: 0, unplannable: 0, unplannableByReason: [], excluded: 0 };
+    const weeks = new Map<number, number>();
+    const reasons = new Map<string, number>();
+    for (const r of plan.routes)
+      for (const s of r.stops) {
+        if (s.kind !== 'request' || !include(s.id)) continue;
+        b.thisWeek++;
+        if (r.approved) b.approved++;
+      }
+    for (const u of plan.unassigned) {
+      if (!include(u.requestId)) continue;
+      // ACHTUNG · GRUND-PRAEFIX: prüft den Anfang von `reason` – muss zu den Texten in planner.ts buildPlan() passen
+      if (u.reason.startsWith('Kapazität')) {
+        const pre = preplanned[u.requestId];
+        if (pre) {
+          b.preplanned++;
+          weeks.set(isoWeek(pre.date), (weeks.get(isoWeek(pre.date)) ?? 0) + 1);
+        } else b.waitlist++;
+      } else if (u.reason.startsWith('Aus dem Plan')) b.excluded++;
+      else {
+        b.unplannable++;
+        const key = reasonGroup(u.reason);
+        reasons.set(key, (reasons.get(key) ?? 0) + 1);
+      }
+    }
+    b.total = b.thisWeek + b.preplanned + b.waitlist + b.unplannable + b.excluded;
+    b.preplannedByWeek = [...weeks.entries()].sort((x, y) => x[0] - y[0]).map(([week, count]) => ({ week, count }));
+    b.unplannableByReason = [...reasons.entries()].sort((x, y) => y[1] - x[1]).map(([reason, count]) => ({ reason, count }));
+    return b;
   }
 
   /** Wo steht jede Anfrage? Eingeplant (Tag · Person), Warteliste, aus dem Plan genommen, nicht planbar. */
@@ -99,9 +136,7 @@ export class RoutenInteractor {
         ? ['Warteliste', 'waitlist']
         : u.reason.startsWith('Aus dem Plan')
           ? ['Aus dem Plan genommen', 'excluded']
-          : u.reason.startsWith('Zeitwunsch')
-            ? ['Zeitwunsch klären', 'review']
-            : ['Nicht planbar', 'unplannable'];
+          : ['Nicht planbar', 'unplannable'];
       const pre = tone === 'waitlist' ? preplanned[u.requestId] : undefined;
       if (pre) {
         map.set(u.requestId, {

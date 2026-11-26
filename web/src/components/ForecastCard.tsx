@@ -1,31 +1,39 @@
 /**
- * @file      ForecastCard.tsx – Prognose-Streifen: Wochen bis die Warteliste leer ist
+ * @file      ForecastCard.tsx – Bilanz-Streifen: alle Anfragen auf einen Blick (diese Woche · Folgewochen · Klärung)
  * @layer     Web · View-Komponente
  * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
  */
 import { Link } from 'react-router-dom';
 import { useCore, useResource } from '@/core';
-import { formatDay, isoWeek } from '@/lib/format';
+import { isoWeek } from '@/lib/format';
 import { Icon } from '@/ui';
 
 /**
- * Dezente Prognose unter dem Seitentitel: Wie lange dauert es, alle offenen Anfragen abzuarbeiten?
- * Ein Balken pro Woche (anteilig nach Anfragen), jede Woche öffnet die Routenplanung dieser Woche.
+ * Wo stehen alle Anfragen? Ein Segment je Woche (diese Woche + vorgeplante Folgewochen), dahinter, was Klärung braucht.
+ * Alle Zahlen kommen aus core.balance() – sie addieren sich exakt zur Gesamtzahl (gleiche Quelle wie Planer und Liste).
  */
 export default function ForecastStrip() {
   const core = useCore();
   const { data: f } = useResource(core.system.forecast);
-  if (!f) return null;
-  const total = f.weeks.reduce((n, w) => n + w.planned, 0) || 1;
-  const pending = f.needsAction.review + f.needsAction.dataErrors + f.needsAction.excluded;
+  const { data: plan } = useResource(core.routen.plan);
+  if (!f || !plan) return null;
+  const b = core.balance(plan);
+  const thisWeek = f.weeks[0]?.from;
+  const lastKw = b.preplannedByWeek.length ? b.preplannedByWeek[b.preplannedByWeek.length - 1].week : null;
+  const open = b.waitlist + b.unplannable + b.excluded;
   const headline =
-    f.weeks.length === 1 && f.weeks[0].remaining === 0 ? (
-      <>Alles passt in <strong className="text-ink">diese Woche</strong></>
-    ) : f.weeksNeeded ? (
-      <>Alle offenen Anfragen bis <strong className="text-ink">KW {isoWeek(f.weeks[f.weeks.length - 1].from)}</strong> vorgeplant</>
+    b.waitlist > 0 ? (
+      <><strong className="text-ink">{b.waitlist}</strong> finden auch in den nächsten Wochen keinen Platz</>
+    ) : lastKw ? (
+      <>{open ? 'Alles Planbare' : 'Alles'} bis <strong className="text-ink">KW {lastKw}</strong> verteilt</>
     ) : (
-      <><strong className="text-ink">{f.stuck}</strong> Anfragen kommen auch später nicht unter</>
+      <>{open ? 'Alles Planbare' : 'Alles'} passt in <strong className="text-ink">diese Woche</strong></>
     );
+  const segments = [
+    { key: 'now', label: thisWeek ? `KW ${isoWeek(thisWeek)}` : 'Diese Woche', count: b.thisWeek, to: '/planer', title: `Diese Woche eingeplant (davon ${b.approved} freigegeben)`, strong: true },
+    ...b.preplannedByWeek.map((w) => ({ key: `kw${w.week}`, label: `KW ${w.week}`, count: w.count, to: `/planer?week=${f.weeks.find((x) => isoWeek(x.from) === w.week)?.index ?? 1}`, title: 'Vorgeplant (vorläufig) – diese Woche ist voll', strong: false })),
+  ];
+  const max = Math.max(1, ...segments.map((s) => s.count));
 
   return (
     <div className="mt-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:gap-5">
@@ -35,8 +43,8 @@ export default function ForecastStrip() {
         </span>
         <div className="min-w-0 leading-tight">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-            Vorplanung{' '}
-            <span className="cursor-help font-normal normal-case tracking-normal text-gray-400" title={`Annahmen:\n• ${f.assumptions.join('\n• ')}`}>
+            {b.total} Anfragen{' '}
+            <span className="cursor-help font-normal normal-case tracking-normal text-gray-400" title={`Annahmen der Vorplanung:\n• ${f.assumptions.join('\n• ')}`}>
               ⓘ
             </span>
           </p>
@@ -44,34 +52,42 @@ export default function ForecastStrip() {
         </div>
       </div>
 
-      {/* Ein Segment pro Woche, Breite = Anteil der Anfragen */}
+      {/* Ein Segment pro Woche – Breite nach Anzahl */}
       <div className="flex min-w-0 flex-1 gap-1">
-        {f.weeks.map((w) => (
-          <Link
-            key={w.index}
-            to={`/planer${w.index ? `?week=${w.index}` : ''}`}
-            title={`${formatDay(w.from)}–${formatDay(w.to)} · ${w.planned} eingeplant${w.remaining ? ` · danach ${w.remaining} offen` : ''}${w.index ? ' (vorläufig)' : ''}`}
-            className="group min-w-[64px]"
-            style={{ flex: `${Math.max(w.planned, total * 0.12)} 1 0` }}
-          >
-            <div className={`h-1.5 rounded-full transition group-hover:opacity-80 ${w.index === 0 ? 'bg-brand-500' : 'bg-brand-200'}`} />
-            <p className="mt-1.5 flex items-baseline justify-between gap-1 text-xs">
-              <span className={w.index === 0 ? 'font-semibold text-gray-800' : 'text-gray-500'}>KW {isoWeek(w.from)}</span>
-              <span className="tabular-nums text-gray-500 group-hover:text-brand-700">{w.planned}</span>
-            </p>
+        {segments.map((s) => (
+          <Link key={s.key} to={s.to} title={s.title} className="group min-w-[64px]" style={{ flex: `${Math.max(s.count, max * 0.15)} 1 0` }}>
+            <p className={`text-sm tabular-nums group-hover:text-brand-700 ${s.strong ? 'font-semibold text-ink' : 'text-gray-600'}`}>{s.count}</p>
+            <div className={`mt-1 h-1.5 rounded-full transition group-hover:opacity-80 ${s.strong ? 'bg-brand-500' : 'bg-brand-200'}`} />
+            <p className="mt-1 whitespace-nowrap text-[11px] text-gray-500">{s.label}</p>
           </Link>
         ))}
       </div>
 
-      {pending > 0 && (
-        <Link
-          to={`/stammdaten/anfragen?filter=${f.needsAction.review ? "review" : "unplannable"}`}
-          className="shrink-0 rounded-lg px-2 py-1 text-xs text-gray-500 transition hover:bg-gray-50 hover:text-gray-800"
-          title="Offener Zeitwunsch, Datenfehler oder aus dem Plan genommen – nicht vorgeplant"
-        >
-          + {pending} warten auf Entscheidung →
-        </Link>
+      {/* Was nicht in einer Woche steht – je Topf ein Link auf die gefilterte Liste */}
+      {open > 0 && (
+        <div className="flex shrink-0 flex-wrap gap-1.5 text-xs">
+          {b.waitlist > 0 && <Chip to="/stammdaten/anfragen?filter=waitlist" tone="warning" label="Warteliste" count={b.waitlist} />}
+          {b.unplannable > 0 && (
+            <Chip
+              to="/stammdaten/anfragen?filter=unplannable"
+              tone="danger"
+              label="Nicht planbar"
+              count={b.unplannable}
+              title={b.unplannableByReason.map((r) => `${r.count} × ${r.reason}`).join('\n')}
+            />
+          )}
+          {b.excluded > 0 && <Chip to="/stammdaten/anfragen?filter=excluded" tone="neutral" label="Aus dem Plan" count={b.excluded} />}
+        </div>
       )}
     </div>
+  );
+}
+
+function Chip({ to, label, count, tone, title }: { to: string; label: string; count: number; tone: 'danger' | 'warning' | 'neutral'; title?: string }) {
+  const cls = tone === 'danger' ? 'bg-danger-50 text-danger-700 ring-danger-200' : tone === 'warning' ? 'bg-warning-50 text-warning-800 ring-warning-200' : 'bg-gray-50 text-gray-600 ring-gray-200';
+  return (
+    <Link to={to} title={title} className={`rounded-full px-2.5 py-1 font-medium ring-1 transition hover:opacity-80 ${cls}`}>
+      {label} <span className="tabular-nums">{count}</span> →
+    </Link>
   );
 }

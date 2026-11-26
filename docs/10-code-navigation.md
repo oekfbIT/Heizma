@@ -25,7 +25,7 @@ Jede Datei in `api/src`, `web/src` und `scripts` beginnt so:
  * @file      planner.ts – Kern der Einsatzplanung (Anfragen → Personen-Tage → Tagesrouten)
  * @layer     Backend · Domäne (reine Funktionen, kein I/O)
  * @einstieg  buildPlan() · rankOptions() · swapOptions() · forecast()
- * @nutzt     travelMatrix, validation, timeWish
+ * @nutzt     travelMatrix, validation
  * @genutzt   index.ts, verify.ts
  * @siehe     docs/03-planung-und-regeln.md · docs/10-code-navigation.md
  */
@@ -62,7 +62,6 @@ Tags stehen am Anfang eines Kommentars, in GROSSBUCHSTABEN, mit Doppelpunkt. Meh
 | `TRADE-OFF:` | Bewusster Kompromiss – mit Begründung | Heuristik statt Solver |
 | `ACHTUNG:` | Stolperfalle beim Ändern | Cache-Schlüssel, Endlosschleifen-Schutz |
 | `SICHERHEIT:` | Token, Login, Datenschutz | Heizma-Token bleibt auf dem Server |
-| `KI:` | Stelle mit KI – und wo der Mensch entscheidet | Notizen → Vorschläge |
 | `AUSBLICK:` | Was mit mehr Zeit käme (Detail in [Trade-offs & Ausblick](08-trade-offs-und-ausblick.md)) | OR-Tools, CRM statt JSON |
 | `EINSTIEG` | Öffentliche Haupt-Funktion eines Moduls | `buildPlan` |
 | `GRUND-PRAEFIX` | Code prüft den Anfang eines Wartelisten-Grunds per `startsWith`/Regex – siehe [Warteliste-Gründe](#8--warteliste-gründe) | `reason.startsWith('Kapazität')` |
@@ -107,14 +106,12 @@ Jede Regel steht an drei Stellen: **umgesetzt** im Planer, **unabhängig nachger
 | `planner.ts` | Domäne | Planung: Simulation, Greedy, 2-opt/Relocate, Tausch, Vorschauen, Prognose |
 | `verify.ts` | Domäne | Unabhängige Regelprüfung + bewusste Ausnahmen |
 | `validation.ts` | Domäne | Datenbefunde (error/warning/info) + Zuständigkeit |
-| `timeWish.ts` | Domäne | Zeitwünsche aus Notizen (regelbasiert) |
 | `geo.ts` · `time.ts` | Domäne | Distanz, Polygon, Fahrzeit-Schätzung · Uhrzeiten |
 | `types.ts` | Typen | Gemeinsames Modell für API und Web |
 | `heizmaClient.ts` | Infrastruktur | Heizma-API bzw. Fixtures (einzige Stelle mit Token) |
 | `travelMatrix.ts` | Infrastruktur | Fahrzeitmatrix aus `/travel/path`, Datei-Cache |
 | `localStore.ts` | Infrastruktur | Korrekturen, Freigaben, Entscheidungen, Protokoll (JSON) |
 | `geocode.ts` · `towns.ts` | Infrastruktur | Geocoding mit Offline-Fallback |
-| `notesAi.ts` | Infrastruktur | KI-Hinweise aus Notizen (optional) |
 | `config.ts` | Infrastruktur | `.env`-Konfiguration |
 | `mockauth/*` | Auth | Login, Token, `requireAuth` |
 
@@ -153,14 +150,13 @@ Lokal läuft dasselbe Gate in `npm run check`.
 |---|---|---|
 | `Kapazität erschöpft` | Passt grundsätzlich, aber diese Woche ist kein Platz – zählt für „ältere zuerst“ (REGEL-8) | Kunde informieren / Prognose |
 | `Passt in keinen Tag` | Passt selbst an einem leeren Tag nicht (z. B. Kunde erst ab 17 Uhr + weite Anfahrt) | Andere Zeit mit Kunde/Vertrieb klären |
-| `Zeitwunsch klären` | Notiz enthält einen Zeitwunsch, noch nicht bestätigt | Bestätigen oder verwerfen |
 | `Aus dem Plan genommen` | Planer hat sie bewusst herausgenommen | – |
 | `Datenfehler` · `Keine Koordinaten` | Daten zuerst korrigieren | Stammdaten bearbeiten / geokodieren |
 | `Nicht zuordenbar` | Außerhalb aller Gebiete und > 15 km (REGEL-5) | Eskalation an den Vertrieb |
 | `Zuständige Außendienstler ohne Verfügbarkeit` | Zuständige Person hat diese Woche keinen Tag | Techniker-Eskalation |
 | `Fixierung nicht möglich` | Fixierter Tag ist nicht verfügbar oder schon freigegeben | Anderen Tag wählen |
 
-**Neuen Grund einführen:** Text in `planner.ts` → dann `npm run code:index -- GRUND-PRAEFIX` und jede Fundstelle prüfen (mindestens `Waitlist.tsx` → `ORDER`).
+**Neuen Grund einführen:** Text in `planner.ts` → dann `npm run code:index -- GRUND-PRAEFIX` und jede Fundstelle prüfen (mindestens `RoutenInteractor.balance()` und `RequestPlanningCard`).
 
 ## 9 · Regeln für neue Kommentare
 

@@ -105,9 +105,7 @@ export function validateDataset(data: Dataset): Issue[] {
     if (hasCoords(r) && eligibleTechnicians(r, data.technicians).length === 0) {
       push('address', 'error', 'NOT_ASSIGNABLE', 'Außerhalb aller Einsatzgebiete und > 15 km von jedem Wohnort – nicht zuordenbar.');
     }
-    if (r.notes) {
-      push('notes', 'info', 'HAS_NOTES', `Notiz aus dem Vertrieb prüfen: „${r.notes}“`);
-    }
+    // DATEN: Freitext-Notizen sind kein Datenproblem – sie stehen in der Anfrage und in der Tagesroute beim Termin.
   }
 
   // MARK: Fixe Termine – REGEL-6: werden nie verschoben, nur Konflikte gemeldet

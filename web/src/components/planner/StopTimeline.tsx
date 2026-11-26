@@ -4,7 +4,6 @@
  * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
  */
 import { Icon } from '@/ui';
-import type { NoteInfo } from '@/modules';
 import { formatMinutes } from '@/lib/format';
 import type { DayRoute, Technician } from '@/lib/types';
 
@@ -20,11 +19,12 @@ interface Props {
   violations?: Map<string, string[]>;
   /** Anfragen mit bewusster Ausnahme des Planers (gelb) */
   exceptions?: Set<string>;
-  notes?: NoteInfo;
+  /** Freitext-Notiz aus dem Vertrieb je Anfrage – wird beim Prüfen der Route mitgelesen */
+  noteFor?: (requestId: string) => string | null;
 }
 
 /** Tagesablauf als einfache Liste: links die Uhrzeit, rechts wer/wo. Klick = auf der Karte zeigen. */
-export default function StopTimeline({ route, technician, color, selectedStopId, hoveredStopId, onSelectStop, onHover, violations, exceptions, notes }: Props) {
+export default function StopTimeline({ route, technician, color, selectedStopId, hoveredStopId, onSelectStop, onHover, violations, exceptions, noteFor }: Props) {
   const lunchBefore = route.lunch ? route.stops.findIndex((s) => s.start >= route.lunch!.end) : -1;
 
   return (
@@ -32,7 +32,7 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
       <Fixed time={route.departure} icon="home" title="Abfahrt" subtitle={technician.home.label} />
 
       {route.stops.map((stop, idx) => {
-        const insight = notes?.insights.find((i) => i.requestId === stop.id);
+        const note = stop.kind === 'request' ? noteFor?.(stop.id) : null;
         const bad = violations?.get(stop.id);
         const selected = selectedStopId === stop.id;
         return (
@@ -72,8 +72,12 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
                   {stop.manual?.mode === 'pin' && <Tag className="bg-info-100 text-info-800">📌 manuell</Tag>}
                   {stop.manual?.mode === 'prioritize' && <Tag className="bg-accent-100 text-accent-800">⇡ vorgezogen</Tag>}
                   {exceptions?.has(stop.id) && <Tag className="bg-warning-100 text-warning-800" >Ausnahme</Tag>}
-                  {insight && <Tag className="bg-accent-50 text-accent-700">{insight.hint}</Tag>}
                 </span>
+                {note && (
+                  <span className="mt-1 block truncate text-[11px] text-info-700" title={note}>
+                    📝 „{note}“
+                  </span>
+                )}
                 {bad?.map((m) => (
                   <span key={m} className="mt-1 block text-[11px] font-medium text-danger-600">
                     ⚠ {m}
@@ -87,9 +91,25 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
       })}
 
       <p className="ml-[58px] py-0.5 text-[11px] text-gray-400">↓ Heimfahrt</p>
-      <Fixed time={route.returnHome} icon="home" title="Ankunft zu Hause" subtitle={`${formatMinutes(route.driveMinutes)} Fahrt · ${formatMinutes(route.workMinutes)} beim Kunden`} />
+      <Fixed time={route.returnHome} icon="home" title="Ankunft zu Hause" subtitle={daySummary(route)} />
     </ol>
   );
+}
+
+/** Arbeitstag lückenlos: Fahrt + vor Ort + Pause + Warten = Abfahrt bis Ankunft (die Plan-Prüfung „totals“ sichert das ab) */
+function daySummary(route: DayRoute): string {
+  const toMin = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3);
+  const dep = toMin(route.departure), ret = toMin(route.returnHome);
+  const pause = route.lunch && toMin(route.lunch.start) >= dep && toMin(route.lunch.end) <= ret ? 60 : 0;
+  const wait = route.stops.reduce((n, s) => n + s.waitMinutes, 0);
+  return [
+    `${formatMinutes(route.driveMinutes)} Fahrt`,
+    `${formatMinutes(route.workMinutes)} vor Ort`,
+    pause && `${formatMinutes(pause)} Pause`,
+    wait && `${formatMinutes(wait)} Warten`,
+  ]
+    .filter(Boolean)
+    .join(' + ') + ` = ${formatMinutes(ret - dep)} Arbeitstag`;
 }
 
 function Tag({ className, children }: { className: string; children: React.ReactNode }) {
