@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import Icon from '@/components/ui/Icon';
 import AvailabilityWeek from '@/components/ui/AvailabilityWeek';
+import LocationAssist from '@/components/LocationAssist';
 import PolygonEditor from '@/components/ui/PolygonEditor';
 import { SeverityPill } from '@/components/ui/IssueBadge';
 import { ErrorBox, Loading } from '@/components/ui/PageState';
 import { apiSend, useApi, type LocalDb, type Stammdaten } from '@/lib/api';
+import Waitlist from '@/components/planner/Waitlist';
 import TechnicianEscalation from '@/components/TechnicianEscalation';
 import { entityBySlug } from '@/lib/entities';
-import type { EntityKind, Issue, Technician } from '@/lib/types';
+import type { Plan } from '@/lib/types';
+import type { EntityKind, Issue, ServiceRequest, Technician } from '@/lib/types';
 
 const FIELD_STYLE: Record<string, string> = {
   error: 'border-red-400 bg-red-50/50 focus:border-red-500 focus:ring-red-100',
@@ -32,6 +35,7 @@ export default function EntityEdit() {
   const id = decodeURIComponent(rawId ?? '');
   const { data, error, reload } = useApi<Stammdaten>('/api/stammdaten');
   const localDb = useApi<LocalDb>('/api/local-db');
+  const plan = useApi<Plan>('/api/plan');
   const def = entityBySlug(slug);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -149,6 +153,29 @@ export default function EntityEdit() {
       )}
 
       {def.kind === 'technician' && <TechnicianEscalation technician={record as unknown as Technician} issues={issues} data={data} />}
+
+      {def.kind === 'request' && (
+        <LocationAssist
+          key={id}
+          request={record as unknown as ServiceRequest}
+          address={draft.address ?? String(record.address ?? '')}
+          lat={draft.lat ?? (record.lat == null ? '' : String(record.lat))}
+          lng={draft.lng ?? (record.lng == null ? '' : String(record.lng))}
+          onFill={(patch) => setDraft({ ...draft, ...patch })}
+          escalated={!!data.escalations?.[id]}
+          onEscalated={reload}
+        />
+      )}
+
+      {/* Wartet trotz gültiger Daten (Kapazität) → Kunde über Verzögerung informieren */}
+      {def.kind === 'request' && (() => {
+        const u = plan.data?.unassigned.filter((x) => x.requestId === id && x.reason.startsWith('Kapazität')) ?? [];
+        return u.length > 0 ? (
+          <div className="mt-6">
+            <Waitlist items={u} requests={data.requests} escalations={data.escalations ?? {}} nextWorkday={data.range.to} onChanged={() => { reload(); plan.reload(); }} />
+          </div>
+        ) : null;
+      })()}
 
       <form
         className="card mt-6 space-y-5 p-4 md:p-6"

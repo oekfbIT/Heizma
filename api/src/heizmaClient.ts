@@ -98,6 +98,12 @@ export async function loadDataset(): Promise<Dataset> {
   });
 }
 
+/** Ein einzelner /travel/path-Call (2–14 Punkte), ungecacht – für die Fahrzeitmatrix */
+export async function travelPathRaw(points: LatLng[]): Promise<TravelResult[]> {
+  const res = await request<{ legs: TravelResult[] }>('/travel/path', { method: 'POST', body: JSON.stringify({ points }) });
+  return res.legs;
+}
+
 /** Fahrtabschnitte für eine Punktfolge (max. 14 Punkte pro Call → wird gestückelt). */
 export async function travelPath(points: LatLng[]): Promise<TravelResult[]> {
   if (points.length < 2) return [];

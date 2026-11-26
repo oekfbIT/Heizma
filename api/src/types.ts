@@ -91,7 +91,13 @@ export interface PlannedStop {
   lat: number;
   lng: number;
   visitationType: string | null;
+  /** Art des Termins laut API: neue Anfrage = Besichtigung, fixe Termine = Besichtigung | Inbetriebnahme */
+  appointmentType: 'Besichtigung' | 'Inbetriebnahme';
+  /** Dauer vor Ort in Minuten */
+  durationMinutes: number;
   travelMinutes: number;
+  /** true = Luftlinien-Schätzung statt echter Fahrzeit */
+  travelEstimated: boolean;
   arrival: string; // HH:MM
   start: string; // HH:MM
   end: string; // HH:MM
@@ -109,6 +115,10 @@ export interface DayRoute {
   stops: PlannedStop[];
   driveMinutes: number;
   workMinutes: number;
+  /** Auslastung des Fensters (vor Ort + Fahrt) in % */
+  utilization: number;
+  /** gesetzt = vom Planer freigegeben und gesperrt */
+  approved: { at: string } | null;
 }
 
 export interface UnassignedRequest {
@@ -118,7 +128,15 @@ export interface UnassignedRequest {
 
 export interface Plan {
   generatedAt: string;
-  travelSource: 'estimate';
+  travelSource: 'heizma' | 'estimate' | 'mixed';
+  travel: {
+    source: 'heizma' | 'estimate' | 'mixed';
+    pairsNeeded: number;
+    pairsReal: number;
+    pairsEstimated: number;
+    apiCalls: number;
+    builtAt: string;
+  } | null;
   routes: DayRoute[];
   unassigned: UnassignedRequest[];
   stats: {
@@ -126,5 +144,36 @@ export interface Plan {
     planned: number;
     unassigned: number;
     driveMinutes: number;
+    /** Fahrzeit nach Phase 1 (Greedy), vor 2-opt/Relocate */
+    greedyDriveMinutes: number;
+    improvements: number;
+    avgDrivePerVisit: number;
+    approvedRoutes: number;
+    routesWithStops: number;
   };
+  verification?: Verification;
+}
+
+// ---------- Plan-Prüfung ----------
+
+export interface Violation {
+  rule: string;
+  technicianId?: string;
+  date?: string;
+  stopId?: string;
+  message: string;
+}
+
+export interface RuleCheck {
+  rule: string;
+  label: string;
+  checks: number;
+  violations: Violation[];
+}
+
+export interface Verification {
+  ok: boolean;
+  totalViolations: number;
+  rules: RuleCheck[];
+  notes: string[];
 }

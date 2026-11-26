@@ -4,3 +4,6 @@ dist/
 .DS_Store
 *.log
 api/data/local-db.json
+api/.test-dist/
+api/_run.ts
+api/_to_delete/

@@ -32,14 +32,18 @@ export interface LocalDb {
   overrides: Record<EntityKey, Record<string, Patch>>;
   /** Eskalationen zu nicht eingeplanten Anfragen (simuliert – es wird nichts versendet) */
   escalations: Record<string, Escalation>;
-  log: { at: string; entity: EntityKey | 'escalations'; id: string; action: 'update' | 'reset' | 'escalate'; changes?: Patch }[];
+  /** Freigegebene Tagesrouten, key "techId@date" – gesperrt für die Neuplanung */
+  approvals: Record<string, { at: string; stops: { id: string; start: string }[] }>;
+  /** Vom Planer bestätigte KI-Hinweise aus den Notizen (requestId → Felder) */
+  noteConfirmations: Record<string, { earliest?: string; latest?: string; confirmedAt: string }>;
+  log: { at: string; entity: EntityKey | 'escalations' | 'approvals'; id: string; action: 'update' | 'reset' | 'escalate' | 'approve' | 'unapprove'; changes?: Patch }[];
 }
 
 const DB_PATH = resolve(
   process.env.LOCAL_DB_PATH ?? (process.env.VERCEL ? '/tmp/heizma-local-db.json' : resolve(process.cwd(), 'data/local-db.json')),
 );
 
-const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, log: [] });
+const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, approvals: {}, noteConfirmations: {}, log: [] });
 
 let db: LocalDb | null = null;
 let revision = 0;
@@ -54,6 +58,8 @@ function load(): LocalDb {
   db.overrides = { ...empty().overrides, ...db.overrides };
   db.log ??= [];
   db.escalations ??= {};
+  db.approvals ??= {};
+  db.noteConfirmations ??= {};
   return db;
 }
 
@@ -220,4 +226,44 @@ export function withdrawEscalation(requestId: string) {
 
 export function listEscalations(): Record<string, Escalation> {
   return load().escalations;
+}
+
+// ---- Freigaben ----
+
+export function listApprovals() {
+  return load().approvals;
+}
+
+export function approveRoutes(routes: { key: string; stops: { id: string; start: string }[] }[]) {
+  const d = load();
+  const at = new Date().toISOString();
+  for (const r of routes) {
+    d.approvals[r.key] = { at, stops: r.stops };
+    d.log.push({ at, entity: 'approvals', id: r.key, action: 'approve' });
+  }
+  persist();
+}
+
+export function unapproveRoutes(keys: string[]) {
+  const d = load();
+  for (const k of keys) {
+    delete d.approvals[k];
+    d.log.push({ at: new Date().toISOString(), entity: 'approvals', id: k, action: 'unapprove' });
+  }
+  persist();
+}
+
+// ---- Bestätigte Notiz-Hinweise ----
+
+export function listNoteConfirmations() {
+  return load().noteConfirmations;
+}
+
+export function confirmNote(requestId: string, c: { earliest?: string; latest?: string } | null) {
+  const d = load();
+  if (c) {
+    for (const v of [c.earliest, c.latest]) if (v !== undefined && !HHMM.test(v)) throw new ValidationError('Uhrzeit im Format HH:MM');
+    d.noteConfirmations[requestId] = { ...c, confirmedAt: new Date().toISOString() };
+  } else delete d.noteConfirmations[requestId];
+  persist();
 }

@@ -4,10 +4,13 @@ import { config } from './config.js';
 import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
 import { geocode, reverseGeocode } from './geocode.js';
 import { buildPlan } from './planner.js';
+import { getTravelMatrix, resetTravelMatrix } from './travelMatrix.js';
+import { verifyPlan } from './verify.js';
+import { getNoteInsights } from './notesAi.js';
 import type { Dataset, Plan } from './types.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
-import { applyOverrides, dumpDb, editableFields, escalate, listEscalations, resetAll, resetEntity, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+import { applyOverrides, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, resetAll, resetEntity, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
 
 /** Erster Werktag nach dem Planungszeitraum – Vorschlag für verschobene Termine */
 function nextWorkday(date: string): string {
@@ -26,11 +29,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Plan wird pro geladenem Datenstand einmal berechnet
-let planCache: { loadedAt: string; plan: Plan } | null = null;
-function getPlan(data: Dataset): Plan {
+// Plan wird pro Datenstand (inkl. Korrekturen & Freigaben) einmal berechnet und danach unabhängig geprüft
+let planCache: { loadedAt: string; plan: Promise<Plan> } | null = null;
+function getPlan(data: Dataset): Promise<Plan> {
   if (!planCache || planCache.loadedAt !== data.loadedAt) {
-    planCache = { loadedAt: data.loadedAt, plan: buildPlan(data) };
+    const plan = (async () => {
+      const { lookup, stats } = await getTravelMatrix(data);
+      const t0 = Date.now();
+      const noteConstraints = listNoteConfirmations();
+      const p = buildPlan(data, { travel: lookup, travelStats: stats, approvals: listApprovals(), noteConstraints });
+      p.verification = verifyPlan(p, data, lookup, noteConstraints);
+      console.log(`[plan] ${p.stats.planned}/${p.stats.totalRequests} geplant, ${p.verification.totalViolations} Regelverstöße, ${Date.now() - t0} ms, Fahrzeiten: ${stats.source}`);
+      return p;
+    })();
+    plan.catch(() => (planCache = null));
+    planCache = { loadedAt: data.loadedAt, plan };
   }
   return planCache.plan;
 }
@@ -68,7 +81,7 @@ app.get('/api/stammdaten', route(async (_req, res) => {
 app.get('/api/overview', route(async (_req, res) => {
   const data = await loadWorkingDataset();
   const issues = validateDataset(data);
-  const plan = getPlan(data);
+  const plan = await getPlan(data);
   const actionable = issues.filter((i) => i.severity !== 'info');
   const uniq = (kind: string) => new Set(actionable.filter((i) => i.entity === kind).map((i) => i.entityId)).size;
   res.json({
@@ -89,19 +102,20 @@ app.get('/api/overview', route(async (_req, res) => {
       warnings: issues.filter((i) => i.severity === 'warning').length,
     },
     driveMinutes: plan.stats.driveMinutes,
+    violations: plan.verification?.totalViolations ?? null,
   });
 }));
 
 /** Tourenplan (Entwurf) */
 app.get('/api/plan', route(async (_req, res) => {
   const data = await loadWorkingDataset();
-  res.json(getPlan(data));
+  res.json(await getPlan(data));
 }));
 
 /** Straßengeometrie einer Tagesroute (Polylines aus /travel/path, gecacht) */
 app.get('/api/plan/:technicianId/:date/geometry', route(async (req, res) => {
   const data = await loadWorkingDataset();
-  const plan = getPlan(data);
+  const plan = await getPlan(data);
   const dayRoute = plan.routes.find((r) => r.technicianId === req.params.technicianId && r.date === req.params.date);
   const tech = data.technicians.find((t) => t.id === req.params.technicianId);
   if (!dayRoute || !tech) return res.status(404).json({ error: 'Route nicht gefunden' });
@@ -110,6 +124,66 @@ app.get('/api/plan/:technicianId/:date/geometry', route(async (req, res) => {
   res.json({ points, legs });
 }));
 
+/**
+ * Freigabe: Tagesrouten werden mit Reihenfolge und Startzeiten eingefroren.
+ * Body { keys: ["tech_01@2026-11-23", ...] } – ohne keys = alle Routen mit Stopps (optional ?date=).
+ * Nur regelkonforme Routen sind freigebbar.
+ */
+app.post('/api/approvals', route(async (req, res) => {
+  const data = await loadWorkingDataset();
+  const plan = await getPlan(data);
+  const date = typeof req.query.date === 'string' ? req.query.date : null;
+  const wanted: string[] | null = Array.isArray(req.body?.keys) ? req.body.keys.map(String) : null;
+  const bad = new Set((plan.verification?.rules ?? []).flatMap((r) => r.violations).map((v) => `${v.technicianId}@${v.date}`));
+  const candidates = plan.routes.filter((r) => r.stops.length && !r.approved && (!date || r.date === date) && (!wanted || wanted.includes(`${r.technicianId}@${r.date}`)));
+  const blocked = candidates.filter((r) => bad.has(`${r.technicianId}@${r.date}`)).map((r) => `${r.technicianId}@${r.date}`);
+  const ok = candidates.filter((r) => !bad.has(`${r.technicianId}@${r.date}`));
+  approveRoutes(ok.map((r) => ({ key: `${r.technicianId}@${r.date}`, stops: r.stops.map((s) => ({ id: s.id, start: s.start })) })));
+  res.json({ ok: true, approved: ok.length, blocked });
+}));
+
+app.delete('/api/approvals', route(async (req, res) => {
+  const keys: string[] = Array.isArray(req.body?.keys) ? req.body.keys.map(String) : Object.keys(listApprovals());
+  unapproveRoutes(keys);
+  res.json({ ok: true, removed: keys.length });
+}));
+
+/** Export einer freigegebenen Tagesroute als Kalenderdatei (.ics) für die Techniker:in */
+app.get('/api/plan/:technicianId/:date/ics', route(async (req, res) => {
+  const data = await loadWorkingDataset();
+  const plan = await getPlan(data);
+  const r = plan.routes.find((x) => x.technicianId === req.params.technicianId && x.date === req.params.date);
+  if (!r) return res.status(404).json({ error: 'Route nicht gefunden' });
+  const dt = (hhmm: string) => `${r.date.replace(/-/g, '')}T${hhmm.replace(':', '')}00`;
+  const esc = (x: string) => x.replace(/[,;\\]/g, (m) => `\\${m}`);
+  const events = r.stops.map((s, i) => [
+    'BEGIN:VEVENT',
+    `UID:${s.id}-${r.date}@heizma-routenplanung`,
+    `DTSTART;TZID=Europe/Vienna:${dt(s.start)}`,
+    `DTEND;TZID=Europe/Vienna:${dt(s.end)}`,
+    `SUMMARY:${i + 1}. ${esc(s.customer)} (${s.visitationType ?? 'Termin'})`,
+    `LOCATION:${esc(s.address)}`,
+    `DESCRIPTION:Anfahrt ${s.travelMinutes} min · https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,
+    'END:VEVENT',
+  ].join('\r\n'));
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="route-${r.technicianId}-${r.date}.ics"`);
+  res.send(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Heizma Routenplanung//DE', ...events, 'END:VCALENDAR'].join('\r\n'));
+}));
+
+/** KI-Hinweise aus den Vertriebsnotizen (Vorschläge) + vom Planer bestätigte Zeitgrenzen */
+app.get('/api/notes', route(async (_req, res) => {
+  const data = await loadWorkingDataset();
+  res.json({ insights: await getNoteInsights(data.requests), confirmed: listNoteConfirmations(), ai: !!process.env.ANTHROPIC_API_KEY });
+}));
+
+/** Zeit-Hinweis bestätigen → wird harte Regel in Planung & Prüfung. Body { earliest?, latest? } oder null zum Zurücknehmen */
+app.post('/api/notes/:requestId/confirm', route(async (req, res) => {
+  const data = await loadDataset();
+  if (!data.requests.some((r) => r.id === req.params.requestId)) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
+  confirmNote(req.params.requestId, req.body && (req.body.earliest || req.body.latest) ? { earliest: req.body.earliest || undefined, latest: req.body.latest || undefined } : null);
+  res.json({ ok: true });
+}));
 
 // ---- Lokale Korrekturen (simulierte Schreib-API, siehe README „Lokale Korrekturen“) ----
 const ENTITY_KEYS: EntityKey[] = ['requests', 'technicians', 'appointments'];
@@ -164,7 +238,7 @@ app.delete('/api/escalations/:requestId', (req, res) => {
 app.get('/api/geocode', route(async (req, res) => {
   const address = String(req.query.address ?? '').trim();
   if (!address) return res.status(400).json({ error: 'Adresse fehlt' });
-  const result = await geocode(address);
+  const result = await geocode(address, await loadWorkingDataset());
   if (!result) return res.status(404).json({ error: 'Adresse nicht gefunden' });
   res.json(result);
 }));
@@ -194,6 +268,7 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
 /** Cache leeren und neu laden */
 app.post('/api/reload', (_req, res) => {
   clearCache();
+  resetTravelMatrix();
   planCache = null;
   res.json({ ok: true });
 });

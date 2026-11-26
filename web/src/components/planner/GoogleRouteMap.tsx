@@ -1,8 +1,9 @@
 import polyline from '@mapbox/polyline';
 import { AdvancedMarker, APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { DayRoute } from '@/lib/types';
 import type { RouteMapProps } from './LeafletRouteMap';
+import StopPopover from './StopPopover';
 
 /**
  * Kartenansicht mit Google Maps (Maps JavaScript API).
@@ -38,10 +39,22 @@ function RouteLines({ lines }: { lines: { path: LatLng[]; color: string; weight:
   return null;
 }
 
-function FitBounds({ points }: { points: LatLng[] }) {
+/**
+ * Kamera-Steuerung, ohne dem Nutzer die Karte "wegzuziehen":
+ * - Neu einpassen nur, wenn sich die angezeigten Punkte wirklich ändern (Tag, Techniker, Region, Plan)
+ * - Stopp gewählt → einmal hinfliegen; Popover schließen → Kamera bleibt, wo sie ist
+ * - Hover, Re-Render oder Neuladen der Daten bewegen die Karte nicht
+ */
+function MapFocus({ points, focus }: { points: LatLng[]; focus: LatLng | null }) {
   const map = useMap();
+  const pointsKey = points.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
+  const focusKey = focus ? `${focus.lat},${focus.lng}` : null;
+  const lastPoints = useRef<string | null>(null);
+
+  // Ansicht gewechselt → alles einpassen
   useEffect(() => {
-    if (!map) return;
+    if (!map || lastPoints.current === pointsKey) return;
+    lastPoints.current = pointsKey;
     if (!points.length) {
       map.setCenter(AUSTRIA_CENTER);
       map.setZoom(7);
@@ -54,7 +67,16 @@ function FitBounds({ points }: { points: LatLng[] }) {
     google.maps.event.addListenerOnce(map, 'idle', () => {
       if ((map.getZoom() ?? 0) > 12) map.setZoom(12);
     });
-  }, [map, points]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, pointsKey]);
+
+  // Stopp gewählt → hinfliegen (nur beim Wechsel der Auswahl)
+  useEffect(() => {
+    if (!map || !focus) return;
+    map.panTo(focus);
+    if ((map.getZoom() ?? 0) < 13) map.setZoom(13);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, focusKey]);
   return null;
 }
 
@@ -67,7 +89,7 @@ function Tooltip({ children }: { children: React.ReactNode }) {
 }
 
 export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; mapId: string }) {
-  const { routes, technicians, colors, selectedId, geometry, office, hoveredStopId } = props;
+  const { routes, technicians, colors, selectedId, geometry, office, hoveredStopId, selectedStopId } = props;
   const techById = useMemo(() => new globalThis.Map(technicians.map((t) => [t.id, t])), [technicians]);
   const visible = selectedId ? routes.filter((r) => r.technicianId === selectedId) : routes;
 
@@ -81,6 +103,8 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
     return pts;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, routes, techById]);
+
+  const focusStop = selectedStopId ? visible.flatMap((r) => r.stops).find((s) => s.id === selectedStopId) : null;
 
   const lines = useMemo(() => {
     const out: { path: LatLng[]; color: string; weight: number; opacity: number; dashed: boolean; onClick: () => void }[] = [];
@@ -96,7 +120,8 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
       }
       return [[tech.home, ...route.stops.map((s) => ({ lat: s.lat, lng: s.lng })), tech.home].map((p) => ({ lat: p.lat, lng: p.lng }))];
     };
-    visible.forEach((route) => {
+    // Alle Routen des Tages zeichnen; nicht gewählte nur blass → anklickbar zum Wechseln
+    routes.forEach((route) => {
       const active = route.technicianId === selectedId;
       const hasRoadGeometry = active && !!geometry?.legs.some((l) => l.polyline);
       pathsFor(route).forEach((path) =>
@@ -112,7 +137,7 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, geometry, selectedId, colors, techById]);
+  }, [routes, geometry, selectedId, colors, techById]);
 
   return (
     <APIProvider apiKey={props.apiKey} language="de" region="AT">
@@ -126,12 +151,12 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
         clickableIcons={false}
         className="h-full w-full"
       >
-        <FitBounds points={boundsPoints} />
+        <MapFocus points={boundsPoints} focus={focusStop ? { lat: focusStop.lat, lng: focusStop.lng } : null} />
         <RouteLines lines={lines} />
 
         {/* Wohnorte */}
         {technicians.map((t) => {
-          if (selectedId && t.id !== selectedId) return null;
+          const dimmed = !!selectedId && t.id !== selectedId;
           const color = colors[t.id] ?? '#9ca3af';
           const active = t.id === selectedId;
           const hasRoute = routes.some((r) => r.technicianId === t.id);
@@ -139,7 +164,7 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
             <AdvancedMarker key={t.id} position={t.home} onClick={() => props.onSelect(t.id)} title={`${t.name} · ${t.home.label}`}>
               <div
                 className="flex items-center justify-center rounded-lg border-[3px] bg-white shadow-md"
-                style={{ borderColor: color, width: active ? 34 : 26, height: active ? 34 : 26, opacity: hasRoute ? 1 : 0.5 }}
+                style={{ borderColor: color, width: active ? 34 : 26, height: active ? 34 : 26, opacity: dimmed ? 0.35 : hasRoute ? 1 : 0.5 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
                   <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -149,39 +174,68 @@ export default function GoogleRouteMap(props: RouteMapProps & { apiKey: string; 
           );
         })}
 
-        {/* Stopps */}
-        {visible.map((route) =>
+        {/* Stopps – andere Techniker blass, Klick wechselt dorthin */}
+        {routes.map((route) =>
           route.stops.map((stop, idx) => {
+            const dimmed = !!selectedId && route.technicianId !== selectedId;
+            const selected = selectedStopId === stop.id;
             const hovered = hoveredStopId === stop.id;
-            const size = hovered ? 34 : 28;
+            const size = selected || hovered ? 34 : 28;
             return (
               <AdvancedMarker
                 key={`${route.technicianId}-${stop.id}`}
                 position={{ lat: stop.lat, lng: stop.lng }}
-                zIndex={hovered ? 1000 : idx}
-                onClick={() => props.onSelect(route.technicianId)}
+                zIndex={selected ? 2000 : hovered ? 1000 : idx}
+                onClick={(e) => {
+                  // Klicks im Popover (Details/Schließen) nicht als Marker-Klick werten
+                  const target = (e as unknown as { domEvent?: Event }).domEvent?.target as HTMLElement | undefined;
+                  if (target?.closest?.('[data-popover]')) return;
+                  props.onSelectStop(route.technicianId, stop.id);
+                }}
                 onMouseEnter={() => props.onHoverStop(stop.id)}
                 onMouseLeave={() => props.onHoverStop(null)}
               >
-                <div className="relative">
-                  <div
-                    className="flex items-center justify-center rounded-full border-[3px] border-white text-xs font-semibold text-white shadow-md transition-all"
-                    style={{ width: size, height: size, background: stop.fixed ? '#20242d' : colors[route.technicianId] }}
-                  >
-                    {idx + 1}
-                  </div>
-                  {hovered && (
-                    <Tooltip>
-                      <strong>
-                        {idx + 1}. {stop.customer}
-                      </strong>
-                      {stop.fixed && ' · fixer Termin'}
-                      <br />
-                      Ankunft {stop.arrival} · Termin {stop.start}–{stop.end}
-                      {stop.waitMinutes > 0 && ` · ${stop.waitMinutes} min Wartezeit`}
-                      <br />
-                      <span className="text-gray-500">{stop.address}</span>
-                    </Tooltip>
+                <div className="relative transition-opacity" style={{ opacity: dimmed && !hovered ? 0.4 : 1 }}>
+                  {stop.fixed ? (
+                    /* Fixer Termin: dunkles Quadrat mit Schloss – nicht verschiebbar */
+                    <div
+                      className={`relative flex items-center justify-center rounded-md border-[3px] bg-ink text-xs font-semibold text-white shadow-md transition-all ${selected ? 'border-brand-400' : 'border-white'}`}
+                      style={{ width: size, height: size }}
+                    >
+                      {idx + 1}
+                      <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-white shadow">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#20242d" strokeWidth="3"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                      </span>
+                    </div>
+                  ) : (
+                    /* Neu eingeplante Anfrage: Kreis in Technikerfarbe */
+                    <div
+                      className={`flex items-center justify-center rounded-full border-[3px] text-xs font-semibold text-white shadow-md transition-all ${selected ? 'border-ink' : 'border-white'}`}
+                      style={{ width: size, height: size, background: colors[route.technicianId] }}
+                    >
+                      {idx + 1}
+                    </div>
+                  )}
+                  {selected ? (
+                    <div data-popover className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 cursor-default rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+                      <StopPopover
+                        stop={stop}
+                        index={idx}
+                        color={colors[route.technicianId]}
+                        onDetails={() => props.onOpenDetails(stop.id)}
+                        onClose={() => props.onSelectStop(route.technicianId, null)}
+                      />
+                    </div>
+                  ) : (
+                    hovered && (
+                      <Tooltip>
+                        <strong>
+                          {idx + 1}. {stop.customer}
+                        </strong>
+                        <br />
+                        {stop.start}–{stop.end} · Klick für Details
+                      </Tooltip>
+                    )
                   )}
                 </div>
               </AdvancedMarker>

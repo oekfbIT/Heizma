@@ -37,3 +37,13 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   warning: 'Warnung',
   info: 'Hinweis',
 };
+
+/** Anlagentyp aus der API (visitationType) in Klartext */
+export const VISITATION_LABEL: Record<string, string> = {
+  WP: 'Wärmepumpe',
+  PV: 'Photovoltaik',
+  'WP+PV': 'Wärmepumpe + Photovoltaik',
+};
+export function visitationLabel(type: string | null | undefined): string {
+  return type ? VISITATION_LABEL[type] ?? type : 'Typ unbekannt';
+}

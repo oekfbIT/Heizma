@@ -96,6 +96,24 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
   return res;
 }
 
+export interface NoteInfo {
+  insights: { requestId: string; note: string; category: string; hint: string; earliest?: string; latest?: string; source: 'claude' | 'rules' }[];
+  confirmed: Record<string, { earliest?: string; latest?: string; confirmedAt: string }>;
+  ai: boolean;
+}
+
+/** Datei-Download mit Auth-Header (z. B. .ics) */
+export async function downloadFile(path: string, filename: string) {
+  const res = await authFetch(path);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   if (cache.has(path)) return cache.get(path) as T;
   const res = await authFetch(path);

@@ -1,4 +1,5 @@
 import Icon from '@/components/ui/Icon';
+import type { NoteInfo } from '@/lib/api';
 import { formatMinutes } from '@/lib/format';
 import type { DayRoute, Technician } from '@/lib/types';
 
@@ -6,97 +7,96 @@ interface Props {
   route: DayRoute;
   technician: Technician;
   color: string;
-  checked: Set<string>;
+  selectedStopId: string | null;
   hoveredStopId: string | null;
-  onToggle: (stopId: string) => void;
+  onSelectStop: (stopId: string) => void;
   onHover: (stopId: string | null) => void;
-  approved: boolean;
-  onApprove: () => void;
+  /** Stopp-IDs mit Regelverstoß (aus der Plan-Prüfung) */
+  violations?: Map<string, string[]>;
+  notes?: NoteInfo;
 }
 
-const TYPE_STYLE: Record<string, string> = {
-  WP: 'bg-orange-50 text-orange-700',
-  PV: 'bg-yellow-50 text-yellow-700',
-  'WP+PV': 'bg-brand-50 text-brand-700',
-};
-
-/** Tagesablauf einer Route: Abfahrt → Stopps (mit Pause) → Heimfahrt */
-export default function StopTimeline({ route, technician, color, checked, hoveredStopId, onToggle, onHover, approved, onApprove }: Props) {
-  const lunchAfter = route.lunch ? route.stops.findIndex((s) => s.start >= route.lunch!.end) : -1;
-  const allChecked = route.stops.length > 0 && route.stops.every((s) => checked.has(s.id));
+/** Tagesablauf als einfache Liste: links die Uhrzeit, rechts wer/wo. Klick = auf der Karte zeigen. */
+export default function StopTimeline({ route, technician, color, selectedStopId, hoveredStopId, onSelectStop, onHover, violations, notes }: Props) {
+  const lunchBefore = route.lunch ? route.stops.findIndex((s) => s.start >= route.lunch!.end) : -1;
 
   return (
-    <div>
-      <ol className="relative ml-3 border-l-2 border-dashed border-gray-200">
-        <TimelineRow time={route.departure} icon={<Icon name="home" className="h-3.5 w-3.5" />} color={color} title="Abfahrt Wohnort" subtitle={technician.home.label} />
+    <ol className="space-y-1">
+      <Fixed time={route.departure} icon="home" title="Abfahrt" subtitle={technician.home.label} />
 
-        {route.stops.map((stop, idx) => (
-          <div key={stop.id}>
-            {lunchAfter === idx && route.lunch && (
-              <TimelineRow time={route.lunch.start} icon={<Icon name="coffee" className="h-3.5 w-3.5" />} color="#9ca3af" title="Mittagspause" subtitle={`${route.lunch.start}–${route.lunch.end}`} muted />
-            )}
-            <li
+      {route.stops.map((stop, idx) => {
+        const insight = notes?.insights.find((i) => i.requestId === stop.id);
+        const bad = violations?.get(stop.id);
+        const selected = selectedStopId === stop.id;
+        return (
+          <li key={stop.id}>
+            {lunchBefore === idx && route.lunch && <Fixed time={route.lunch.start} icon="coffee" title="Mittagspause" subtitle={`${route.lunch.start}–${route.lunch.end}`} muted />}
+            {/* Fahrt dorthin */}
+            <p className="ml-[58px] py-0.5 text-[11px] text-gray-400">
+              ↓ {stop.travelEstimated ? 'ca. ' : ''}
+              {stop.travelMinutes} min Fahrt{stop.waitMinutes > 0 && <span className="text-amber-600"> · {stop.waitMinutes} min warten</span>}
+            </p>
+            <button
+              ref={selected ? (el) => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) : undefined}
+              onClick={() => onSelectStop(stop.id)}
               onMouseEnter={() => onHover(stop.id)}
               onMouseLeave={() => onHover(null)}
-              className={`relative -ml-[13px] mb-1 flex gap-3 rounded-lg py-2 pl-0 pr-2 transition ${hoveredStopId === stop.id ? 'bg-gray-50' : ''}`}
+              className={`flex w-full gap-3 rounded-xl border px-2 py-2 text-left transition ${
+                bad ? 'border-red-200 bg-red-50' : selected ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : hoveredStopId === stop.id ? 'border-gray-200 bg-gray-50' : 'border-transparent'
+              }`}
             >
-              <span
-                className="z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-white text-[11px] font-semibold text-white shadow"
-                style={{ background: stop.fixed ? '#20242d' : color }}
-              >
+              <span className="w-[46px] shrink-0 pt-0.5 text-right text-xs font-semibold tabular-nums text-gray-700">
+                {stop.start}
+                <span className="block font-normal text-gray-400">{stop.end}</span>
+              </span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white" style={{ background: stop.fixed ? '#20242d' : color }}>
                 {idx + 1}
               </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="truncate text-sm font-semibold">{stop.customer}</p>
-                  <p className="shrink-0 text-xs font-medium tabular-nums text-gray-700">
-                    {stop.start}–{stop.end}
-                  </p>
-                </div>
-                <p className="truncate text-xs text-gray-500">{stop.address}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                  {stop.visitationType && (
-                    <span className={`rounded px-1.5 py-0.5 font-medium ${TYPE_STYLE[stop.visitationType] ?? 'bg-gray-100 text-gray-600'}`}>{stop.visitationType}</span>
-                  )}
-                  {stop.fixed && (
-                    <span className="inline-flex items-center gap-1 rounded bg-gray-900 px-1.5 py-0.5 font-medium text-white">
-                      <Icon name="lock" className="h-3 w-3" /> fix
-                    </span>
-                  )}
-                  <span className="text-gray-500">🚗 {stop.travelMinutes} min · Ankunft {stop.arrival}</span>
-                  {stop.waitMinutes > 0 && <span className="text-amber-600">⏳ {stop.waitMinutes} min warten</span>}
-                </div>
-              </div>
-              <label className="flex shrink-0 cursor-pointer items-start pt-0.5" title="Stopp bestätigen">
-                <input type="checkbox" checked={checked.has(stop.id)} onChange={() => onToggle(stop.id)} className="h-4 w-4 rounded border-gray-300 accent-brand-500" />
-              </label>
-            </li>
-          </div>
-        ))}
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate text-sm font-semibold">{stop.customer}</span>
+                  {stop.fixed && <Icon name="lock" className="h-3 w-3 shrink-0 text-gray-500" />}
+                </span>
+                <span className="block truncate text-xs text-gray-500">{stop.address}</span>
+                <span className="mt-0.5 flex flex-wrap gap-1 text-[11px]">
+                  <Tag className={stop.appointmentType === 'Inbetriebnahme' ? 'bg-gray-900 text-white' : 'bg-brand-50 text-brand-700'}>{stop.appointmentType}</Tag>
+                  {(stop.appointmentType === 'Besichtigung' || stop.visitationType) && <Tag className="bg-gray-100 text-gray-600">{stop.visitationType ?? 'Typ ?'}</Tag>}
+                  {stop.fixed && <Tag className="border border-gray-300 text-gray-600">fix</Tag>}
+                  {insight && <Tag className="bg-violet-50 text-violet-700">{insight.hint}</Tag>}
+                </span>
+                {bad?.map((m) => (
+                  <span key={m} className="mt-1 block text-[11px] font-medium text-red-600">
+                    ⚠ {m}
+                  </span>
+                ))}
+              </span>
+              <span className="self-center text-gray-300">›</span>
+            </button>
+          </li>
+        );
+      })}
 
-        <TimelineRow time={route.returnHome} icon={<Icon name="home" className="h-3.5 w-3.5" />} color={color} title="Ankunft Wohnort" subtitle={`Fahrzeit gesamt ${formatMinutes(route.driveMinutes)} · vor Ort ${formatMinutes(route.workMinutes)}`} />
-      </ol>
-
-      <button onClick={onApprove} className={`${approved ? 'btn-secondary' : 'btn-primary'} mt-4 w-full`} disabled={!route.stops.length}>
-        {approved ? 'Freigabe zurücknehmen' : allChecked ? 'Route freigeben' : 'Route freigeben (alle Stopps bestätigen)'}
-      </button>
-    </div>
+      <p className="ml-[58px] py-0.5 text-[11px] text-gray-400">↓ Heimfahrt</p>
+      <Fixed time={route.returnHome} icon="home" title="Zurück zuhause" subtitle={`${formatMinutes(route.driveMinutes)} Fahrt · ${formatMinutes(route.workMinutes)} beim Kunden`} />
+    </ol>
   );
 }
 
-function TimelineRow({ time, icon, color, title, subtitle, muted }: { time: string; icon: React.ReactNode; color: string; title: string; subtitle: string; muted?: boolean }) {
+function Tag({ className, children }: { className: string; children: React.ReactNode }) {
+  return <span className={`rounded px-1.5 py-0.5 font-medium ${className}`}>{children}</span>;
+}
+
+function Fixed({ time, icon, title, subtitle, muted }: { time: string; icon: string; title: string; subtitle: string; muted?: boolean }) {
   return (
-    <li className="relative -ml-[13px] mb-1 flex gap-3 py-2">
-      <span className="z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 bg-white" style={{ borderColor: color, color }}>
-        {icon}
+    <div className="flex items-center gap-3 px-2 py-1.5">
+      <span className="w-[46px] shrink-0 text-right text-xs font-semibold tabular-nums text-gray-500">{time}</span>
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-gray-500">
+        <Icon name={icon} className="h-3 w-3" />
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className={`text-sm font-medium ${muted ? 'text-gray-500' : ''}`}>{title}</p>
-          <p className="text-xs font-medium tabular-nums text-gray-700">{time}</p>
-        </div>
-        <p className="truncate text-xs text-gray-500">{subtitle}</p>
-      </div>
-    </li>
+      <span className="min-w-0 flex-1">
+        <span className={`block text-sm ${muted ? 'text-gray-500' : 'font-medium'}`}>{title}</span>
+        <span className="block truncate text-xs text-gray-400">{subtitle}</span>
+      </span>
+    </div>
   );
 }
