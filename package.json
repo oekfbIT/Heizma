@@ -14,7 +14,9 @@
     "test": "npm test -w api && npm test -w web",
     "test:coverage": "npm run test:coverage -w api && npm run test:coverage -w web",
     "check:architecture": "node scripts/check-architecture.mjs",
-    "check": "npm run typecheck && npm run check:architecture && npm test"
+    "check": "npm run typecheck && npm run check:architecture && npm run check:code-index && npm test",
+    "code:index": "node scripts/code-index.mjs",
+    "check:code-index": "node scripts/code-index.mjs check"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

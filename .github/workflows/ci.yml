@@ -10,5 +10,16 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run check:architecture
+      - name: Code-Navigation prüfen (Dateiköpfe, REGEL-Tags, Doku)
+        run: npm run check:code-index
+      - name: Code-Landkarte ausgeben
+        run: |
+          npm run --silent code:index -- tags
+          npm run --silent code:index > code-index.txt
+          { echo '## Code-Landkarte'; echo '```'; npm run --silent code:index -- tags; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: code-index
+          path: code-index.txt
       - run: npm run test:coverage
       - run: npm run build

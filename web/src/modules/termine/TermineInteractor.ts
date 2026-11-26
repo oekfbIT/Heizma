@@ -1,3 +1,8 @@
+/**
+ * @file      TermineInteractor.ts – Modul Termine: fixe Termine (REGEL-6 – nicht verschiebbar)
+ * @layer     Web · Modul-Interactor
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import type { ApiService } from '@/core/ApiService';
 import { Resource } from '@/core/Resource';
 import type { Appointment } from '@/lib/types';

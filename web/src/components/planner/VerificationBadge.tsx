@@ -1,3 +1,8 @@
+/**
+ * @file      VerificationBadge.tsx – Badge „✓ 0 Regelverstöße“ – zeigt das Ergebnis von api/src/verify.ts
+ * @layer     Web · View-Komponente (Planer)
+ * @siehe     docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis · docs/10-code-navigation.md
+ */
 import { useState } from 'react';
 import type { Plan } from '@/lib/types';
 

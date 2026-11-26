@@ -73,7 +73,7 @@ Eskalationen und Benachrichtigungen sind simuliert: Die Nachricht wird gespeiche
 
 ## KI für die Freitext-Notizen
 
-`api/src/notesAi.ts`: Mit `ANTHROPIC_API_KEY` werden alle Notizen in **einem** Claude-Aufruf (JSON-Schema im Prompt) in Kategorien und Hinweise übersetzt („Vorher anrufen“, „Nur vormittags“), Ergebnis gecacht. Ohne Schlüssel greift ein regelbasierter Fallback – die Demo läuft auch offline.
+`api/src/notesAi.ts`: Mit `OPENAI_API_KEY` werden alle Notizen in **einem** OpenAI-Aufruf (JSON-Modus) in Kategorien und Hinweise übersetzt („Vorher anrufen“, „Nur vormittags“), Ergebnis gecacht. Ohne Schlüssel greift ein regelbasierter Fallback – die Demo läuft auch offline.
 
 **Die KI schlägt nur vor.** Eine Zeitgrenze wird erst zur harten Regel, wenn der Planer sie bestätigt. Danach plant das System neu und prüft sie wie jede andere Regel.
 

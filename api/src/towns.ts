@@ -1,4 +1,9 @@
 /**
+ * @file      towns.ts – Offline-Ortsverzeichnis AT – letzter Geocoding-Fallback (Ortsmitte)
+ * @layer     Backend · Daten
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
+/**
  * Offline-Ortsverzeichnis (Bezirkshauptorte & größere Gemeinden in AT).
  * Letzter Fallback fürs Geocoding, wenn Google/OSM nicht erreichbar sind → Ortsmitte.
  * [Name, PLZ, lat, lng]

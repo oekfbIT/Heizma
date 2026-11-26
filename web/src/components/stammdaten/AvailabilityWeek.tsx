@@ -1,3 +1,8 @@
+/**
+ * @file      AvailabilityWeek.tsx – Wochenübersicht der Verfügbarkeit einer Person
+ * @layer     Web · View-Komponente (Stammdaten)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import type { Stammdaten } from '@/modules';
 import { formatDay } from '@/lib/format';
 

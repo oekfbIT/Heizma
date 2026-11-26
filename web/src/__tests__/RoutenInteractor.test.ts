@@ -1,3 +1,8 @@
+/**
+ * @file      RoutenInteractor.test.ts – Tests Modul Routen (Vitest)
+ * @layer     Web · Tests
+ * @siehe     docs/06-tests-und-qualitaet.md · docs/10-code-navigation.md
+ */
 import { describe, expect, it } from 'vitest';
 import { ROUTE_LEVEL, RoutenInteractor } from '@/modules/routen/RoutenInteractor';
 import { fakeApi, plan } from './helpers';

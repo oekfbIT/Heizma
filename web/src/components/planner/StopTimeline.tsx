@@ -1,3 +1,8 @@
+/**
+ * @file      StopTimeline.tsx – Tagesablauf einer Person als Liste (Uhrzeit · Kunde · Fahrt · Pause)
+ * @layer     Web · View-Komponente (Planer)
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
+ */
 import { Icon } from '@/ui';
 import type { NoteInfo } from '@/modules';
 import { formatMinutes } from '@/lib/format';

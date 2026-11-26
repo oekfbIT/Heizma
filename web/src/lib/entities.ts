@@ -1,3 +1,8 @@
+/**
+ * @file      entities.ts – Beschreibung der Stammdaten-Bereiche (Spalten, Felder) für generische Listen/Edit-Seiten
+ * @layer     Web · Lib
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import type { Stammdaten } from '@/modules';
 import { formatDateTime } from './format';
 import type { EntityKind } from './types';

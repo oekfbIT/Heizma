@@ -1,3 +1,8 @@
+/**
+ * @file      RouteMap.tsx – Wählt zur Laufzeit die Kartenquelle (Google oder Leaflet)
+ * @layer     Web · View-Komponente (Karte)
+ * @siehe     docs/09-setup.md · docs/10-code-navigation.md
+ */
 import { useCore, useResource } from '@/core';
 import GoogleRouteMap from './GoogleRouteMap';
 import LeafletRouteMap, { type RouteMapProps } from './LeafletRouteMap';

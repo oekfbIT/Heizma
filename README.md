@@ -23,7 +23,15 @@ Der Planer schaut drauf und gibt frei, statt selbst zu rechnen.
 | **Alle 8 Regeln** eingehalten | Jede Regel im Planer umgesetzt **und** unabhängig nachgeprüft: Badge „✓ 0 Regelverstöße · 10 Regeln“ | [Regeln & Nachweis](docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis) |
 | **Unsaubere Daten** (fehlende Koordinaten, Tippfehler, ohne Gebiet, ohne Verfügbarkeit …) | Validierung mit Fehler / Warnung / Hinweis, Korrektur direkt in der App, Geocoding, Eskalation | [Datenqualität](docs/04-datenqualitaet.md) |
 | **Ältere Anfragen zuerst**, wenn die Kapazität nicht reicht | Einplanung strikt nach Eingang, Warteliste mit Platz X von Y, „Kunde informieren“ | [Priorität](docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis) |
-| „Lieber wenige Kernfunktionen sauber als alles halb“ | Saubere Schichten, Design-System, 65 automatisierte Tests, Architektur-Wächter in CI | [Architektur](docs/02-architektur.md) · [Tests](docs/06-tests-und-qualitaet.md) |
+| „Lieber wenige Kernfunktionen sauber als alles halb“ | Saubere Schichten, Design-System, 84 automatisierte Tests, Architektur-Wächter und Code-Navigations-Gate in CI | [Architektur](docs/02-architektur.md) · [Tests](docs/06-tests-und-qualitaet.md) |
+
+### Bewusste Annahmen
+
+Die vollständige Liste steht in der App unter **Hilfe → Annahmen**. Die wichtigsten:
+
+- **`customerAvailableFrom = null` heißt „ganztägig verfügbar“.** Das Feld ist laut API „string oder null“ und definiert nur, dass ein Termin *nicht früher* beginnen darf. Ohne Wert gibt es keine Untergrenze. Fehlt die Zeit, ist das daher kein Datenfehler, sondern der Normalfall (im Datensatz bei der Mehrheit der Anfragen). Mit einer Freigabe steht der Termin fest; eine erneute Bestätigung durch den Kunden ist nicht vorgesehen. Zeitwünsche aus den Vertriebsnotizen („nur vormittags“, „ab 14 Uhr“) werden nach Bestätigung durch den Planer zur harten Grenze.
+- **Folgewochen werden vorgeplant.** Was diese Woche keinen Platz hat, wird in die nächsten Wochen vorgeplant (vorläufig). Die Case-API liefert Verfügbarkeiten nur für diese Woche; in Produktion kämen sie für jede Woche aus der API – bis dahin werden die Zeiten dieser Woche übernommen. Freigegeben wird erst mit echter Verfügbarkeit.
+- **Uhrzeit im falschen Format** (z. B. „10.00“, „10 Uhr“) wird eindeutig als 10:00 gelesen und geplant – gelbe Warnung mit Korrektur per Klick. Nur unlesbare Werte (z. B. „morgens“) sind ein Datenfehler.
 
 ---
 
@@ -74,8 +82,10 @@ Login: `planner@heizma.at` / `1nvite0nly` · Lokale Entwicklung, alle Befehle un
 | Befehl | Zweck |
 |---|---|
 | `npm run dev` | API + Web mit Hot Reload |
-| `npm run check` | Typecheck + Architektur-Wächter + alle Tests |
+| `npm run check` | Typecheck + Architektur-Wächter + Code-Navigation + alle Tests |
 | `npm run test:coverage` | Tests mit Coverage-Report (API + Web) |
+| `npm run code:index` | Code-Landkarte: Dateien, Abschnitte, Tags ([Code-Navigation](docs/10-code-navigation.md)) |
+| `npm run check:code-index` | Gate für die Code-Navigation (läuft auch in der CI) |
 
 ---
 
@@ -92,3 +102,4 @@ Login: `planner@heizma.at` / `1nvite0nly` · Lokale Entwicklung, alle Befehle un
 | 7 | [API-Referenz](docs/07-api.md) | Alle Endpunkte der eigenen API |
 | 8 | [Trade-offs & Ausblick](docs/08-trade-offs-und-ausblick.md) | Bewusste Vereinfachungen, Grenzen, was mit mehr Zeit käme |
 | 9 | [Setup](docs/09-setup.md) | Installation, Docker, Konfiguration, Mock-Modus |
+| 10 | [Code-Navigation](docs/10-code-navigation.md) | Dateiköpfe, `MARK`-Abschnitte, Tags (`REGEL-1…8`, `DATEN`, `TRADE-OFF` …), Regel-Index, `npm run code:index` |

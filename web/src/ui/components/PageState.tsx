@@ -1,3 +1,8 @@
+/**
+ * @file      PageState.tsx – UI-Baustein PageState
+ * @layer     Web · Design-System (Komponente)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import { Alert } from './Alert';
 import { Button } from './Button';
 

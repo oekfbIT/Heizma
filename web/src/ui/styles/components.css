@@ -1,3 +1,8 @@
+/**
+ * @file      components.css – Semantische Komponenten-Klassen (.btn, .card …)
+ * @layer     Web · Design-System
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 /*
  * Semantische Komponenten-Klassen. Nur die React-Komponenten in ui/components benutzen sie.
  * Farben ausschließlich über Token-Namen (brand, gray, danger, warning, info, accent).
@@ -163,10 +168,10 @@
 
   /* ---------- Umschalter ---------- */
   .segmented {
-    @apply inline-flex rounded-lg border border-gray-200 bg-white p-1 text-sm;
+    @apply inline-flex max-w-full overflow-x-auto rounded-lg border border-gray-200 bg-white p-1 text-sm;
   }
   .segmented-item {
-    @apply rounded-md px-3 py-1.5 font-medium text-gray-600 transition hover:bg-gray-50;
+    @apply shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 font-medium text-gray-600 transition hover:bg-gray-50;
   }
   .segmented-item--active {
     @apply bg-brand-500 text-white hover:bg-brand-500;

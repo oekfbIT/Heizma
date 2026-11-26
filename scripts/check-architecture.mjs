@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * @file      check-architecture.mjs – Architektur-Wächter: erzwingt die Schichtregeln des Frontends (läuft in CI)
+ * @layer     Werkzeug
+ * @siehe     docs/06-tests-und-qualitaet.md · docs/10-code-navigation.md
+ */
+/**
  * Architektur-Wächter: prüft die Schichtregeln des Frontends.
  * Läuft in Sekunden, ohne Abhängigkeiten – gedacht für CI und vor jedem Commit.
  *

@@ -29,19 +29,21 @@
 1. **Gleichmäßigere Auslastung** als zweites Ziel neben der Fahrzeit (Balancing über die Woche).
 2. **Tageszeit-abhängige Fahrzeiten** und ein Puffer pro Stopp.
 3. **VRPTW-Solver** (z. B. OR-Tools) als Alternative für größere Mengen – die Prüfung bliebe dieselbe.
+4. **Mehrere Wochen planen.** Heute ist der Planungszeitraum fest auf eine Woche (23.–27.11.) eingestellt; was diese Woche keinen Platz hat, wird bereits in die Folgewochen **vorgeplant** (vorläufig, Status „Vorgeplant KW …“, Wochen-Umschalter im Planer). Annahme: Die Verfügbarkeit der Folgewochen käme aus der API; bis dahin gelten die Zeiten dieser Woche. Nächster Schritt: Woche per Pfeil/Auswahl wechseln (Übersicht, Anfragen, Kartenansicht samt Seitenleiste). Die Planung einer Woche startet dann mit dem, was übrig bleibt: freigegebene Routen der Vorwoche bleiben gesperrt, ihre Anfragen gelten als erledigt, die Warteliste rückt in die nächste Woche nach – weiterhin „ältere zuerst“.
+5. **Prüfung gesperrter Routen beim Wochenwechsel.** Freigegebene Routen werden erneut gegen den aktuellen Datenstand geprüft (z. B. Verfügbarkeit nachträglich gesperrt, fixer Termin verschoben). Konflikte erscheinen als Handlungsbedarf, statt still bestehen zu bleiben.
 
 **Daten**
-4. **Adress-Tippfehler per LLM + Geocoding vorschlagen** (mit Freigabe), statt nur zu markieren.
-5. **Schreibende Anbindung an CRM und Kalender** statt lokaler JSON-Datei – derselbe `PATCH`-Endpunkt.
+6. **Adress-Tippfehler per LLM + Geocoding vorschlagen** (mit Freigabe), statt nur zu markieren.
+7. **Schreibende Anbindung an CRM und Kalender** statt lokaler JSON-Datei – derselbe `PATCH`-Endpunkt.
 
 **Bedienung**
-6. **Drag & Drop** auf Karte und Zeitleiste als zweiter Weg zu „Verschieben“ (gleiche Endpunkte).
-7. **Rollen und Benutzer** im Änderungsprotokoll.
+8. **Drag & Drop** auf Karte und Zeitleiste als zweiter Weg zu „Verschieben“ (gleiche Endpunkte).
+9. **Rollen und Benutzer** im Änderungsprotokoll.
 
 **Qualität**
-8. **Playwright-End-to-End-Tests** für die Hauptabläufe in CI (der visuelle Vergleich existiert schon als Skript).
-9. **Ein Endpunkt pro Modul** (`/api/techniker`, `/api/anfragen` …), damit jedes Interactor-Modul nur seine Daten lädt.
-10. **Mock-Server für die Heizma-API**, um `heizmaClient` und `travelMatrix` zu testen.
+10. **Playwright-End-to-End-Tests** für die Hauptabläufe in CI (der visuelle Vergleich existiert schon als Skript).
+11. **Ein Endpunkt pro Modul** (`/api/techniker`, `/api/anfragen` …), damit jedes Interactor-Modul nur seine Daten lädt.
+12. **Mock-Server für die Heizma-API**, um `heizmaClient` und `travelMatrix` zu testen.
 
 ---
 

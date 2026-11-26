@@ -1,3 +1,8 @@
+/**
+ * @file      ApiService.test.ts – Tests ApiService (fetch, Auth-Header, Cache, Fehler) (Vitest)
+ * @layer     Web · Tests
+ * @siehe     docs/06-tests-und-qualitaet.md · docs/10-code-navigation.md
+ */
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, ApiService } from '@/core/ApiService';
 import { fakeApi } from './helpers';

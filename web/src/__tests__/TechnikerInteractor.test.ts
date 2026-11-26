@@ -1,3 +1,8 @@
+/**
+ * @file      TechnikerInteractor.test.ts – Tests Modul Techniker (Vitest)
+ * @layer     Web · Tests
+ * @siehe     docs/06-tests-und-qualitaet.md · docs/10-code-navigation.md
+ */
 import { describe, expect, it } from 'vitest';
 import { TechnikerInteractor } from '@/modules/techniker/TechnikerInteractor';
 import { fakeApi, stammdaten } from './helpers';

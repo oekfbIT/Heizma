@@ -1,8 +1,13 @@
+/**
+ * @file      geo.ts – Geometrie-Helfer: Haversine-Distanz, Punkt-in-Polygon (REGEL-5), Fahrzeit-Schätzung
+ * @layer     Backend · Domäne (reine Funktionen)
+ * @siehe     docs/03-planung-und-regeln.md · docs/10-code-navigation.md
+ */
 import type { LatLng } from './types.js';
 
 const EARTH_RADIUS_KM = 6371;
 
-/** Luftlinie in km (Haversine) */
+/** REGEL-5: Luftlinie in km (Haversine) – für den 15-km-Umkreis */
 export function haversineKm(a: LatLng, b: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);

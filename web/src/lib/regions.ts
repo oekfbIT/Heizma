@@ -1,3 +1,8 @@
+/**
+ * @file      regions.ts – Regionsfilter (?region=) und Gebietsnamen
+ * @layer     Web · Lib
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import { useSearchParams } from 'react-router-dom';
 import { NO_REGION, regionName } from '@/modules';
 
@@ -18,5 +23,3 @@ export function useRegion(): [string, (value: string) => void] {
   return [region, setRegion];
 }
 
-/** Link-Ziel mit aktuellem Regionsfilter */
-export const withRegion = (path: string, region: string) => (region ? `${path}?region=${region}` : path);

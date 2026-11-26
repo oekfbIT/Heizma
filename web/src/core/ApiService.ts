@@ -1,4 +1,9 @@
 /**
+ * @file      ApiService.ts – Einzige Stelle im Frontend mit fetch: Auth-Header, Fehler, GET-Cache
+ * @layer     Web · Core (Service)
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
+/**
  * ApiService – die einzige Stelle im Frontend, die `fetch` aufruft.
  *
  * Generisch: kennt keine Module, nur Pfade. Aufgaben:

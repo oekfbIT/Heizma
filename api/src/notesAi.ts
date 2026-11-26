@@ -1,11 +1,23 @@
+/**
+ * @file      notesAi.ts – KI: Vertriebsnotizen (Freitext) → strukturierte Hinweise für Route und Planer
+ * @layer     Backend · Infrastruktur (optional I/O: OpenAI · Datei-Cache api/data/notes-cache.json)
+ * @einstieg  getNoteInsights(requests) · notesAiEnabled()
+ * @genutzt   index.ts → GET /api/notes → Web: Hinweise in StopTimeline/StopDetailsModal
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ *
+ * KI · SICHERHEIT: Das Modell schlägt nur vor. Planungsrelevant werden Zeitgrenzen erst nach Bestätigung
+ *                   (POST /api/notes/:id/confirm). Für die Planung selbst gilt timeWish.ts (deterministisch).
+ * DATEN: 37 Freitext-Notizen im Datensatz. Cache-Schlüssel = SHA1 der Notiz → gleiche Notiz = ein Aufruf.
+ */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { ServiceRequest } from './types.js';
+import { parseTimeWish } from './timeWish.js';
 
 /**
  * Freitext-Notizen aus dem Vertrieb → strukturierte Hinweise.
- * - Mit ANTHROPIC_API_KEY: ein Claude-Call für alle Notizen (JSON-Schema im Prompt), Ergebnis gecacht.
+ * - Mit OPENAI_API_KEY: ein OpenAI-Call für alle Notizen (JSON-Modus), Ergebnis gecacht.
  * - Ohne Key: regelbasierter Fallback (Schlüsselwörter), damit die Demo offline läuft.
  * Wichtig: Die KI schlägt nur vor. Zeitliche Einschränkungen werden erst nach Bestätigung
  * durch den Planer zur harten Regel (Mensch entscheidet, nicht das Modell).
@@ -22,12 +34,16 @@ export interface NoteInsight {
   /** Vorgeschlagene Zeit-Einschränkung (HH:MM), nur bei category=time */
   earliest?: string;
   latest?: string;
-  source: 'claude' | 'rules';
+  source: 'ai' | 'rules';
 }
 
 const CACHE_PATH = resolve(process.env.NOTES_CACHE_PATH ?? (process.env.VERCEL ? '/tmp/heizma-notes-cache.json' : resolve(process.cwd(), 'data/notes-cache.json')));
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const aiEnabled = () => !!process.env.OPENAI_API_KEY;
+export const notesAiEnabled = aiEnabled;
 const hash = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 12);
+
+// MARK: - Cache
 
 type Cache = Record<string, Omit<NoteInsight, 'requestId' | 'note'>>;
 function readCache(): Cache {
@@ -46,29 +62,24 @@ function writeCache(c: Cache) {
   }
 }
 
+// MARK: - Regelbasierter Fallback (ohne API-Key / bei Fehlern)
+
 /** Regelbasierter Fallback */
-export function ruleInsight(note: string): Omit<NoteInsight, 'requestId' | 'note'> {
+function ruleInsight(note: string): Omit<NoteInsight, 'requestId' | 'note'> {
   const n = note.toLowerCase();
-  const time = n.match(/(?:ab|nach)\s*(\d{1,2})(?::(\d{2}))?\s*uhr/);
-  const until = n.match(/(?:bis|vor)\s*(\d{1,2})(?::(\d{2}))?\s*uhr/);
-  const hh = (h: string, m?: string) => `${h.padStart(2, '0')}:${m ?? '00'}`;
-  if (/vormittag/.test(n)) return { category: 'time', hint: 'Nur vormittags', latest: '12:00', source: 'rules' };
-  if (/nachmittag/.test(n)) return { category: 'time', hint: 'Nur nachmittags', earliest: '12:00', source: 'rules' };
-  if (time || until)
-    return {
-      category: 'time',
-      hint: [time && `ab ${hh(time[1], time[2])}`, until && `bis ${hh(until[1], until[2])}`].filter(Boolean).join(' ') || 'Zeitwunsch',
-      earliest: time ? hh(time[1], time[2]) : undefined,
-      latest: until ? hh(until[1], until[2]) : undefined,
-      source: 'rules',
-    };
+  // Zeitwünsche: derselbe Parser wie in der Planung (timeWish.ts) – eine Quelle, keine zwei Regelwerke
+  const wish = parseTimeWish(note);
+  if (wish) return { category: 'time', hint: wish.hint, earliest: wish.earliest, latest: wish.latest, source: 'rules' };
   if (/anruf|telefon|melden/.test(n)) return { category: 'call', hint: 'Vorher anrufen', source: 'rules' };
   if (/hund|katze|tier/.test(n)) return { category: 'animal', hint: 'Tier am Grundstück', source: 'rules' };
   if (/zufahrt|parken|einfahrt|hof|tor|stiege|klingel/.test(n)) return { category: 'access', hint: 'Zufahrt beachten', source: 'rules' };
   return { category: 'other', hint: note.length > 40 ? `${note.slice(0, 40)}…` : note, source: 'rules' };
 }
 
-async function claudeInsights(notes: { key: string; note: string }[]): Promise<Cache> {
+// MARK: - KI-Aufruf (ein Call für alle fehlenden Notizen)
+
+/** KI: temperature 0 + JSON-Modus; Antwort wird streng geprüft (Kategorie-Whitelist, HH:MM-Format). */
+async function aiInsights(notes: { key: string; note: string }[]): Promise<Cache> {
   const prompt = `Du bekommst Freitext-Notizen aus dem Vertrieb eines Wärmepumpen-/PV-Installateurs zu Vor-Ort-Besichtigungen.
 Extrahiere für jede Notiz:
 - category: "time" (zeitliche Einschränkung), "call" (vorher anrufen), "access" (Zufahrt/Parken/Zugang), "animal" (Tiere), "other"
@@ -78,14 +89,19 @@ Erfinde nichts. Antworte NUR mit JSON: {"items":[{"key":"...","category":"...","
 
 Notizen:
 ${notes.map((x) => `${x.key}: ${x.note}`).join('\n')}`;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 4000, messages: [{ role: 'user', content: prompt }] }),
+    headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'user', content: prompt }],
+    }),
   });
-  if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
-  const body = (await res.json()) as { content: { type: string; text?: string }[] };
-  const text = body.content.find((c) => c.type === 'text')?.text ?? '';
+  if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
+  const body = (await res.json()) as { choices: { message: { content: string | null } }[] };
+  const text = body.choices[0]?.message?.content ?? '';
   const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)) as { items: (Omit<NoteInsight, 'requestId' | 'note' | 'source'> & { key: string })[] };
   const HHMM = /^\d{2}:\d{2}$/;
   const out: Cache = {};
@@ -96,12 +112,15 @@ ${notes.map((x) => `${x.key}: ${x.note}`).join('\n')}`;
       hint: String(it.hint ?? '').slice(0, 60),
       earliest: it.earliest && HHMM.test(it.earliest) ? it.earliest : undefined,
       latest: it.latest && HHMM.test(it.latest) ? it.latest : undefined,
-      source: 'claude',
+      source: 'ai',
     };
   }
   return out;
 }
 
+// MARK: - EINSTIEG
+
+// Parallele Aufrufe teilen sich einen laufenden Ladevorgang
 let pending: Promise<NoteInsight[]> | null = null;
 
 export async function getNoteInsights(requests: ServiceRequest[]): Promise<NoteInsight[]> {
@@ -109,13 +128,13 @@ export async function getNoteInsights(requests: ServiceRequest[]): Promise<NoteI
   pending = (async () => {
     const cache = readCache();
     const withNotes = requests.filter((r) => r.notes && r.notes.trim());
-    const missing = [...new Map(withNotes.map((r) => [hash(r.notes!), r.notes!])).entries()].filter(([k]) => !cache[k] || (cache[k].source === 'rules' && process.env.ANTHROPIC_API_KEY));
+    const missing = [...new Map(withNotes.map((r) => [hash(r.notes!), r.notes!])).entries()].filter(([k]) => !cache[k] || (cache[k].source === 'rules' && aiEnabled()));
     if (missing.length) {
-      if (process.env.ANTHROPIC_API_KEY) {
+      if (aiEnabled()) {
         try {
-          Object.assign(cache, await claudeInsights(missing.map(([key, note]) => ({ key, note }))));
+          Object.assign(cache, await aiInsights(missing.map(([key, note]) => ({ key, note }))));
         } catch (e) {
-          console.warn('[notes] Claude nicht erreichbar, Fallback auf Regeln:', (e as Error).message);
+          console.warn('[notes] OpenAI nicht erreichbar, Fallback auf Regeln:', (e as Error).message);
         }
       }
       for (const [k, note] of missing) cache[k] ??= ruleInsight(note);

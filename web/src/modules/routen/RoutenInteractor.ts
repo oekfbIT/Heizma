@@ -1,6 +1,11 @@
+/**
+ * @file      RoutenInteractor.ts – Modul Routen: Wochenplan, Geometrie, Freigaben, .ics-Export, Tagesstatus
+ * @layer     Web · Modul-Interactor
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import type { ApiService } from '@/core/ApiService';
 import { Resource } from '@/core/Resource';
-import { formatDay } from '@/lib/format';
+import { formatDay, isoWeek } from '@/lib/format';
 import type { DayRoute, Plan } from '@/lib/types';
 import type { DayStatus, RequestPlanStatus, RouteGeometry } from './types';
 
@@ -22,9 +27,13 @@ export class RoutenInteractor {
     return [this.plan];
   }
 
-  // ---------- Lesen & Aufbereiten ----------
-
+  // MARK: - Lesen & Aufbereiten
   /** Straßengeometrie nur für die ausgewählte Route (spart API-Calls) */
+  /** Prognose-Woche (+1, +2 …): projizierter Plan, nur lesen */
+  projected(week: number) {
+    return this.api.get<Plan>(`/api/plan?week=${week}`);
+  }
+
   geometry(technicianId: string, date: string) {
     return this.api.get<RouteGeometry>(`/api/plan/${technicianId}/${date}/geometry`);
   }
@@ -66,7 +75,12 @@ export class RoutenInteractor {
   }
 
   /** Wo steht jede Anfrage? Eingeplant (Tag · Person), Warteliste, aus dem Plan genommen, nicht planbar. */
-  requestStatuses(plan: Plan, shortName: (technicianId: string) => string): Map<string, RequestPlanStatus> {
+  requestStatuses(
+    plan: Plan,
+    shortName: (technicianId: string) => string,
+    /** Vorplanung der Folgewochen: wartende Anfrage → vorläufiger Termin */
+    preplanned: Record<string, { date: string; technicianId: string; start: string; end: string }> = {},
+  ): Map<string, RequestPlanStatus> {
     const map = new Map<string, RequestPlanStatus>();
     for (const r of plan.routes)
       for (const s of r.stops) {
@@ -80,11 +94,24 @@ export class RoutenInteractor {
         });
       }
     for (const u of plan.unassigned) {
+      // ACHTUNG · GRUND-PRAEFIX: prüft den Anfang von `reason` – muss zu den Texten in planner.ts buildPlan() passen
       const [label, tone]: [string, RequestPlanStatus['tone']] = u.reason.startsWith('Kapazität')
         ? ['Warteliste', 'waitlist']
         : u.reason.startsWith('Aus dem Plan')
           ? ['Aus dem Plan genommen', 'excluded']
-          : ['Nicht planbar', 'unplannable'];
+          : u.reason.startsWith('Zeitwunsch')
+            ? ['Zeitwunsch klären', 'review']
+            : ['Nicht planbar', 'unplannable'];
+      const pre = tone === 'waitlist' ? preplanned[u.requestId] : undefined;
+      if (pre) {
+        map.set(u.requestId, {
+          planned: false,
+          label: `KW ${isoWeek(pre.date)} · ${formatDay(pre.date)} · ${shortName(pre.technicianId)}`,
+          tone: 'preplanned',
+          title: `Vorgeplant (vorläufig): ${pre.start}–${pre.end}. Diese Woche voll – wird mit der echten Verfügbarkeit der Woche bestätigt.`,
+        });
+        continue;
+      }
       map.set(u.requestId, { planned: false, label, tone, title: u.reason });
     }
     return map;
@@ -99,8 +126,7 @@ export class RoutenInteractor {
     return `${technicianId}@${date}`;
   }
 
-  // ---------- Aktionen ----------
-
+  // MARK: - Aktionen
   setApproval(keys: string[], approved: boolean) {
     return this.api.send('/api/approvals', approved ? 'POST' : 'DELETE', { keys });
   }

@@ -1,4 +1,14 @@
-import { Link } from 'react-router-dom';
+/**
+ * @file      Planner.tsx – Hauptansicht „Routenplanung“: Tag wählen → Route prüfen → freigeben
+ * @layer     Web · View (Seite) – spricht nur mit dem CoreInteractor (useCore), nie direkt mit fetch
+ * @route     /planer (?week=N für Prognose-Wochen, nur lesen)
+ * @nutzt     routen/techniker/anfragen/termine-Interactor · components/planner/* (Karte, Timeline, KPIs, Prüf-Badge)
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/02-architektur.md · docs/10-code-navigation.md
+ *
+ * Aufbau dieser Datei: State → Laden → Abgeleitete Werte → Aktionen → Render (Sidebar | Karte | Mobil-Umschalter)
+ */
+import { Link, useSearchParams } from 'react-router-dom';
+import WeekSwitcher from '@/components/WeekSwitcher';
 import { CapacityLegend } from '@/components/planner/CapacityBar';
 import { useEffect, useMemo, useState } from 'react';
 import PlanKpis from '@/components/planner/PlanKpis';
@@ -8,10 +18,12 @@ import StopTimeline from '@/components/planner/StopTimeline';
 import TechnicianCell from '@/components/planner/TechnicianCell';
 import VerificationBadge from '@/components/planner/VerificationBadge';
 import RegionFilter from '@/components/stammdaten/RegionFilter';
+import { useResizableSidebar } from '@/hooks/useResizableSidebar';
 import { useCore, useResource } from '@/core';
-import { formatDay, formatMinutes } from '@/lib/format';
+import { formatDay, formatMinutes, isoWeek } from '@/lib/format';
 import { NO_REGION, regionLabel, useRegion } from '@/lib/regions';
 import { ROUTE_LEVEL, type RouteGeometry } from '@/modules';
+import type { Plan } from '@/lib/types';
 import { Alert, Button, ErrorBox, Icon, IconButton, Loading } from '@/ui';
 
 /**
@@ -19,6 +31,7 @@ import { Alert, Button, ErrorBox, Icon, IconButton, Loading } from '@/ui';
  * Links die Liste, rechts die Karte. Klick auf einen Stopp zoomt hin und öffnet das Popover.
  */
 export default function Planner() {
+  // MARK: - Daten (Resources) & UI-State
   const core = useCore();
   const { routen, techniker, anfragen, termine } = core;
   const plan = useResource(routen.plan);
@@ -27,6 +40,12 @@ export default function Planner() {
   useResource(termine.data);
   const meta = useResource(core.system.meta);
   const notes = useResource(anfragen.notes);
+  const forecast = useResource(core.system.forecast);
+  // Woche: 0 = echte Planung, ab 1 = Prognose der Warteliste (nur lesen)
+  const [params, setParams] = useSearchParams();
+  const week = Math.max(0, Number(params.get('week') ?? 0) || 0);
+  const [projected, setProjected] = useState<{ week: number; plan: Plan } | null>(null);
+  const [projError, setProjError] = useState<string | null>(null);
 
   const [day, setDay] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -35,29 +54,52 @@ export default function Planner() {
   const [hoveredStopId, setHoveredStopId] = useState<string | null>(null);
   const [geometry, setGeometry] = useState<RouteGeometry | null>(null);
   const [busy, setBusy] = useState(false);
+  const sidebar = useResizableSidebar();
   const [actionError, setActionError] = useState<string | null>(null);
   const [region, setRegion] = useRegion();
   // Mobil: Liste und Karte im Wechsel (Karte bleibt gemountet, damit sie sauber rendert)
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
 
-  // Neu berechnen, sobald die Außendienst-Daten da sind
-  const days = useMemo(() => techniker.days(), [techniker, team.data]);
+  // MARK: - Laden (Prognose-Woche, Tage, Geometrie)
   useEffect(() => {
-    if (!day && days.length) setDay(days[0]);
+    setProjError(null);
+    if (!week) return;
+    routen
+      .projected(week)
+      .then((pl) => setProjected({ week, plan: pl }))
+      .catch((e: Error) => setProjError(e.message));
+  }, [routen, week, forecast.data]);
+  const isProjection = week > 0;
+  const activePlan = isProjection ? (projected?.week === week ? projected.plan : null) : plan.data;
+
+  // Tage der gewählten Woche (Prognose: aus den projizierten Routen)
+  const realDays = useMemo(() => techniker.days(), [techniker, team.data]);
+  const days = useMemo(
+    () => (isProjection ? [...new Set((activePlan?.routes ?? []).map((r) => r.date))].sort() : realDays),
+    [isProjection, activePlan, realDays],
+  );
+  useEffect(() => {
+    if (days.length && (!day || !days.includes(day))) setDay(days[0]);
   }, [day, days]);
+  const changeWeek = (w: number) => {
+    setParams(w ? { week: String(w) } : {});
+    setSelectedId(null);
+    setSelectedStopId(null);
+  };
 
   // Straßengeometrie nur für die ausgewählte Route laden (spart API-Calls)
   useEffect(() => {
     setGeometry(null);
-    if (!selectedId || !day) return;
+    if (!selectedId || !day || isProjection) return;
     routen.geometry(selectedId, day).then(setGeometry).catch(() => setGeometry(null));
-  }, [routen, selectedId, day]);
+  }, [routen, selectedId, day, isProjection]);
 
-  const loadError = plan.error ?? team.error ?? requests.error;
+  const loadError = plan.error ?? team.error ?? requests.error ?? projError;
   if (loadError) return <ErrorBox message={loadError} onRetry={() => { plan.reload(); team.reload(); requests.reload(); }} />;
-  if (!plan.data || !team.data || !requests.data || !day) return <Loading label="Routenplanung wird berechnet …" />;
+  if (!activePlan || !team.data || !requests.data || !day) return <Loading label={isProjection ? 'Vorplanung wird berechnet …' : 'Routenplanung wird berechnet …'} />;
 
-  const p = plan.data;
+  // MARK: - Abgeleitete Werte (Region-Filter, Routen des Tages, Warteliste)
+  const p = activePlan;
   const technicians = techniker.list();
   const colors = techniker.colors();
   const inRegion = (techId: string) => !region || (region !== NO_REGION && techId === region);
@@ -68,7 +110,7 @@ export default function Planner() {
   const selectedTech = selectedId ? techniker.byId(selectedId) : undefined;
   const violationsFor = (techId: string, date = day) => routen.violationsFor(p, techId, date);
 
-  // ---- Aktionen: der CoreInteractor lädt danach alles Sichtbare neu ----
+  // MARK: - Aktionen: der CoreInteractor lädt danach alles Sichtbare neu
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
@@ -103,11 +145,13 @@ export default function Planner() {
   const dayStatus = (date: string) => routen.dayStatus(p, date, inRegion);
   const today = dayStatus(day);
 
+  // MARK: - Render
   return (
     <div className="relative flex h-[calc(100dvh-60px)] overflow-hidden md:h-[calc(100vh-72px)]">
-      {/* ---------- Sidebar ---------- */}
+      {/* MARK: - Sidebar */}
       <aside
-        className={`${mobileView === 'list' ? 'flex' : 'hidden'} absolute inset-0 z-sidebar w-full flex-col bg-white md:relative md:z-auto md:flex md:w-[420px] md:shrink-0 md:border-r md:border-gray-200`}
+        className={`${mobileView === 'list' ? 'flex' : 'hidden'} absolute inset-0 z-sidebar w-full flex-col bg-white md:relative md:z-auto md:flex md:w-[var(--sidebar-w)] md:shrink-0 md:border-r md:border-gray-200`}
+        style={{ '--sidebar-w': sidebar.width } as React.CSSProperties}
       >
         {/* Kopf: was ist der Stand? */}
         <div className="border-b border-gray-100 px-4 pb-3 pt-4 md:px-5">
@@ -115,21 +159,24 @@ export default function Planner() {
             <h1 className="text-lg font-semibold">Routenplanung</h1>
             <IconButton icon="refresh" label="Daten neu laden und neu planen" onClick={() => void run(() => core.reloadAll())} />
           </div>
-          <button
-            className="mt-1 text-[11px] font-medium text-gray-400 underline-offset-2 transition hover:text-danger-600 hover:underline disabled:opacity-50"
-            title="Nur für Tests: Freigaben, Planer-Entscheidungen, bestätigte Notizen und Eskalationen löschen. Datenkorrekturen bleiben erhalten."
-            disabled={busy}
-            onClick={() => {
-              if (!window.confirm('Planungsstand zurücksetzen?\n\nAlle Freigaben, Planer-Entscheidungen, bestätigten Notizen und Eskalationen werden gelöscht. Datenkorrekturen bleiben erhalten.')) return;
-              void run(() => core.resetPlanning());
-            }}
-          >
-            Test: Planungsstand zurücksetzen
-          </button>
+          {forecast.data && forecast.data.weeks.length > 1 && <WeekSwitcher className="mt-2" weeks={forecast.data.weeks} value={week} onChange={changeWeek} />}
+          {isProjection ? (
+            <>
+              <p className="mt-0.5 text-sm text-gray-600">
+                <strong>{p.stats.planned}</strong> von {p.stats.planned + p.stats.unassigned} übrigen Anfragen sind vorgeplant
+                {p.stats.unassigned > 0 && <>, {p.stats.unassigned} warten</>}.
+              </p>
+              <p className="mt-1.5 rounded-lg bg-info-50 px-2.5 py-1.5 text-xs text-info-800">
+                <strong>Vorläufig:</strong> Anfragen, die in den Wochen davor keinen Platz haben. Verfügbarkeit wie diese Woche angenommen – in Produktion
+                kommt sie aus der API. Freigabe, sobald die echte Verfügbarkeit vorliegt.
+              </p>
+            </>
+          ) : (
           <p className="mt-0.5 text-sm text-gray-600">
             <strong>{p.stats.planned}</strong> von {p.stats.totalRequests} Anfragen sind automatisch eingeplant
             {p.stats.unassigned > 0 && <>, {p.stats.unassigned} warten</>}.
           </p>
+          )}
           <div className="mt-2">
             <VerificationBadge
               plan={p}
@@ -220,7 +267,7 @@ export default function Planner() {
                       key={t.id}
                       technician={t}
                       route={r}
-                      status={techniker.statusOn(t.id, day)}
+                      status={isProjection ? (r ? 'available' : 'none') : techniker.statusOn(t.id, day)}
                       color={colors[t.id]}
                       selected={false}
                       approved={!!r?.approved}
@@ -256,7 +303,14 @@ export default function Planner() {
               {actionError}
             </Alert>
           )}
-          {selectedRoute && selectedTech ? (
+          {isProjection ? (
+            <p className="text-center text-xs text-gray-500">
+              Vorgeplante Woche – freigeben, sobald die echte Verfügbarkeit dieser Woche vorliegt.{' '}
+              <button className="font-medium text-brand-600 hover:underline" onClick={() => changeWeek(0)}>
+                Zur aktuellen Woche
+              </button>
+            </p>
+          ) : selectedRoute && selectedTech ? (
             (() => {
               const bad = violationsFor(selectedTech.id).size > 0;
               const approved = !!selectedRoute.approved;
@@ -306,8 +360,18 @@ export default function Planner() {
         </div>
       </aside>
 
-      {/* ---------- Karte ---------- */}
-      <section className="absolute inset-0 md:relative md:inset-auto md:flex-1">
+      {/* Ziehgriff: Breite der Sidebar anpassen, Doppelklick = zurück auf 40 % */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        title="Ziehen zum Anpassen · Doppelklick: zurücksetzen"
+        onPointerDown={sidebar.startDrag}
+        onDoubleClick={sidebar.reset}
+        className={`group relative z-map-overlay hidden w-1.5 shrink-0 -ml-[3px] -mr-[3px] cursor-col-resize md:block ${sidebar.dragging ? 'bg-brand-500/50' : 'hover:bg-brand-500/30'}`}
+      />
+
+      {/* MARK: - Karte */}
+      <section className={`absolute inset-0 md:relative md:inset-auto md:min-w-0 md:flex-1 ${sidebar.dragging ? 'pointer-events-none' : ''}`}>
         <RouteMap
           routes={dayRoutes}
           technicians={visibleTechs}
@@ -323,6 +387,7 @@ export default function Planner() {
           onOpenDetails={setDetailsStopId}
         />
         <div className="pointer-events-none absolute left-3 top-3 z-map-overlay max-w-[calc(100%-1.5rem)] truncate rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md md:left-4 md:top-4">
+          {isProjection && <span className="mr-1 rounded bg-info-100 px-1.5 py-0.5 text-[11px] font-semibold text-info-700">Vorgeplant · KW {p.routes[0] ? isoWeek(p.routes[0].date) : ''}</span>}
           {formatDay(day)} · {selectedTech ? selectedTech.name : `${dayRoutes.filter((r) => r.stops.length).length} Routen`}
           {region && !selectedTech && ` · ${region === NO_REGION ? 'Ohne Zuständigkeit' : `Region ${regionLabel(techniker.byId(region)!)}`}`}
         </div>
@@ -343,7 +408,7 @@ export default function Planner() {
         {mobileView === 'list' ? 'Karte' : 'Liste'}
       </button>
 
-      {detailsRoute && detailsTech && detailsIndex >= 0 && (
+      {!isProjection && detailsRoute && detailsTech && detailsIndex >= 0 && (
         <StopDetailsModal
           stop={detailsRoute.stops[detailsIndex]}
           index={detailsIndex}

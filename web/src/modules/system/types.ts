@@ -1,3 +1,8 @@
+/**
+ * @file      types.ts – Typen des System-Moduls (Stammdaten-Read-Model, Prognose, Übersicht)
+ * @layer     Web · Modul-Typen
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import type { AvailabilityEntry, Appointment, Issue, ServiceRequest, Technician } from '@/lib/types';
 import type { Escalation } from '@/modules/anfragen/types';
 
@@ -30,6 +35,16 @@ export interface LocalDb {
   overrides: Record<string, Record<string, Record<string, unknown>>>;
   log: { at: string; entity: string; id: string; action: string; changes?: Record<string, unknown> }[];
   editableFields: Record<EntityKey, string[]>;
+}
+
+export interface Forecast {
+  weeks: { index: number; from: string; to: string; planned: number; remaining: number; driveMinutes: number }[];
+  weeksNeeded: number | null;
+  stuck: number;
+  needsAction: { review: number; dataErrors: number; excluded: number };
+  byTechnician: { technicianId: string; name: string; weeks: number; requests: number }[];
+  placements: Record<string, { week: number; date: string; technicianId: string; start: string; end: string }>;
+  assumptions: string[];
 }
 
 export interface Overview {
@@ -66,4 +81,32 @@ export interface MapConfig {
 
 export interface AppConfig {
   map: MapConfig;
+}
+
+/** Rohdaten aus GET /api/log */
+export interface LogEntry {
+  at: string;
+  entity: string;
+  id: string;
+  action: string;
+  reason?: string;
+  changes?: Record<string, unknown>;
+}
+
+export type LogCategory = 'freigabe' | 'planung' | 'eskalation' | 'korrektur' | 'notiz' | 'system';
+
+/** Aufbereiteter Protokolleintrag für die Ansicht */
+export interface LogItem {
+  key: string;
+  at: string;
+  category: LogCategory;
+  /** „Route freigegeben“ */
+  action: string;
+  /** Worauf sich der Eintrag bezieht, z. B. „Nord · Mo 23.11.“ oder „req_1046“ */
+  target: { label: string; to: string | null };
+  /** Kurz: „5 Stopps“, „→ Süd · Di 24.11.“ */
+  detail: string;
+  reason?: string;
+  /** Bewusste Ausnahme (Regelbruch mit Begründung) */
+  exception?: boolean;
 }

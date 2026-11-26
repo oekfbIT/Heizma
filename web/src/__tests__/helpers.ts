@@ -1,3 +1,8 @@
+/**
+ * @file      helpers.ts – Test-Helfer: Fake-ApiService und Beispieldaten für die Interactor-Tests (Vitest)
+ * @layer     Web · Tests
+ * @siehe     docs/06-tests-und-qualitaet.md · docs/10-code-navigation.md
+ */
 import { ApiService } from '@/core/ApiService';
 import type { Plan } from '@/lib/types';
 import type { Stammdaten } from '@/modules';

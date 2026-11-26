@@ -1,3 +1,8 @@
+/**
+ * @file      SegmentedControl.tsx – UI-Baustein SegmentedControl
+ * @layer     Web · Design-System (Komponente)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import { cx } from '../cx';
 
 export interface SegmentOption<T extends string> {

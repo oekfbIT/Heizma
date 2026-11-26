@@ -1,3 +1,8 @@
+/**
+ * @file      CoreProvider.tsx – React-Context: stellt den CoreInteractor bereit (useCore)
+ * @layer     Web · Core
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { ApiService } from './ApiService';
 import { getToken, handleUnauthorized } from './auth';

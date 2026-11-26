@@ -1,3 +1,8 @@
+/**
+ * @file      placeLabel.ts – Lesbare Ortsbezeichnung für Koordinaten ohne Geocoding
+ * @layer     Web · Lib (reine Funktionen)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import type { Stammdaten } from '@/modules';
 
 /** Grobe Ortsreferenzen (AT + Grenzregionen) – damit Eckpunkte ohne Geocoding lesbar sind */

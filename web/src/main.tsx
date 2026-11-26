@@ -1,3 +1,8 @@
+/**
+ * @file      main.tsx – Einstiegspunkt: React mounten, Provider (Auth, Core, Router) setzen
+ * @layer     Web · App-Rahmen
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

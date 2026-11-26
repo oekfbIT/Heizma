@@ -1,16 +1,31 @@
+/**
+ * @file      index.ts – Express-Server: alle HTTP-Endpunkte der eigenen API (/api/*)
+ * @layer     Backend · Schnittstelle (dünn: lädt Daten, ruft Domäne auf, formt JSON)
+ * @einstieg  getPlan() (Plan-Cache) · Endpunkte nach Bereich, siehe MARK-Abschnitte unten
+ * @nutzt     heizmaClient → localStore → validation → planner → verify (Pipeline, docs/02-architektur.md)
+ * @siehe     docs/07-api.md (Endpunkt-Referenz) · docs/10-code-navigation.md
+ *
+ * SICHERHEIT: Der Heizma-Bearer-Token wird nur in heizmaClient.ts verwendet und nie an den Browser gegeben.
+ *             Alles unter /api außer /api/health und /api/auth braucht eine gültige Sitzung (requireAuth).
+ * Neuer Endpunkt: in den passenden MARK-Abschnitt, mit route(...) wrappen (Fehler → Error-Middleware),
+ *                 in docs/07-api.md eintragen und im Web über ApiService → Modul-Interactor anbinden.
+ */
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { config } from './config.js';
 import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
 import { geocode, reverseGeocode } from './geocode.js';
-import { buildPlan, rankOptions, requestErrors } from './planner.js';
+import { buildPlan, forecastWithPlans, rankOptions, requestErrors, swapOptions } from './planner.js';
 import { getTravelMatrix, resetTravelMatrix } from './travelMatrix.js';
 import { applyExceptions, verifyPlan } from './verify.js';
-import { getNoteInsights } from './notesAi.js';
+import { getNoteInsights, notesAiEnabled } from './notesAi.js';
 import type { Appointment, Dataset, Plan, RequestPlanning, ServiceRequest, SlotOption } from './types.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
+import { parseTimeWish } from './timeWish.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
-import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, resetAll, resetEntity, resetPlanning, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, listLog, resetAll, resetEntity, resetPlanning, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+
+// MARK: - Hilfsfunktionen
 
 /** Erster Werktag nach dem Planungszeitraum – Vorschlag für verschobene Termine */
 function nextWorkday(date: string): string {
@@ -25,10 +40,14 @@ async function loadWorkingDataset() {
   return applyOverrides(await loadDataset());
 }
 
+// MARK: - App-Setup & Plan-Cache
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ACHTUNG: Cache-Schlüssel ist data.loadedAt. localStore.applyOverrides() hängt bei jeder lokalen Änderung
+// eine Revision an (`#r<n>`) → jede Korrektur/Entscheidung/Freigabe erzwingt eine Neuplanung.
 // Plan wird pro Datenstand (inkl. Korrekturen & Freigaben) einmal berechnet und danach unabhängig geprüft
 let planCache: { loadedAt: string; plan: Promise<Plan> } | null = null;
 function getPlan(data: Dataset): Promise<Plan> {
@@ -39,7 +58,7 @@ function getPlan(data: Dataset): Promise<Plan> {
       const noteConstraints = listNoteConfirmations();
       const decisions = listDecisions();
       const p = buildPlan(data, { travel: lookup, travelStats: stats, approvals: listApprovals(), noteConstraints, decisions });
-      p.verification = applyExceptions(verifyPlan(p, data, lookup, noteConstraints), p, decisions);
+      p.verification = applyExceptions(verifyPlan(p, data, lookup, noteConstraints, decisions), p, decisions);
       console.log(`[plan] ${p.stats.planned}/${p.stats.totalRequests} geplant, ${p.verification.totalViolations} Regelverstöße, ${Date.now() - t0} ms, Fahrzeiten: ${stats.source}`);
       return p;
     })();
@@ -49,6 +68,7 @@ function getPlan(data: Dataset): Promise<Plan> {
   return planCache.plan;
 }
 
+/** Wrapper für async-Handler: reicht abgelehnte Promises an die Error-Middleware weiter (Express 4 tut das nicht selbst). */
 type Handler = (req: Request, res: Response) => Promise<unknown>;
 const route = (fn: Handler) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
 
@@ -56,7 +76,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, source: config.dataSource });
 });
 
-// Mock-Login (fest hinterlegt) – alles darunter erfordert eine gültige Sitzung (2 h)
+// MARK: - Auth-Grenze
+// SICHERHEIT: Mock-Login (fest hinterlegt) – alles darunter erfordert eine gültige Sitzung (2 h)
 app.use('/api/auth', authRouter);
 app.use('/api', requireAuth);
 
@@ -65,13 +86,15 @@ app.get('/api/config', (_req, res) => {
   res.json({ map: config.map });
 });
 
+// MARK: - Stammdaten & Meta
+
 app.get('/api/meta', route(async (_req, res) => {
   const data = await loadWorkingDataset();
   res.json({ source: data.source, range: data.range, loadedAt: data.loadedAt, office: config.office, nextWorkday: nextWorkday(data.range.to) });
 }));
 
 /**
- * Freigegebene Touren → Anfragen werden (simuliert) zu Terminen.
+ * ANNAHME: Freigegebene Touren → Anfragen werden (simuliert) zu Terminen.
  * Annahme: In Produktion legt die Freigabe die Termine im Heizma-Backend an; die Anfrage verschwindet
  * aus der Anfragenliste. Hier nur eine Sicht auf die Daten – Freigabe zurücknehmen macht sie wieder zur Anfrage.
  */
@@ -108,7 +131,7 @@ app.get('/api/stammdaten', route(async (_req, res) => {
   res.json({ ...data, requests: view.requests, appointments: view.appointments, convertedRequests: view.converted, issues: validateDataset(data), responsibility, escalations: listEscalations() });
 }));
 
-// ---- Planer-Entscheidungen je Anfrage (Status, Optionen, fixieren / aus Plan nehmen / vorziehen) ----
+// MARK: - Planer-Entscheidungen je Anfrage (Status, Optionen, fixieren / aus Plan nehmen / vorziehen)
 
 async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; info: RequestPlanning } | null> {
   const data = await loadWorkingDataset();
@@ -118,6 +141,7 @@ async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; inf
   const decision = listDecisions()[id] ?? null;
   const hit = plan.routes.find((r) => r.stops.some((s) => s.id === id));
   const unassigned = plan.unassigned.find((u) => u.requestId === id) ?? null;
+  // ACHTUNG · GRUND-PRAEFIX: prüft den Anfang von `reason` – muss zu den Texten in planner.ts buildPlan() passen
   const waiting = plan.unassigned
     .filter((u) => u.reason.startsWith('Kapazität'))
     .map((u) => data.requests.find((r) => r.id === u.requestId)!)
@@ -132,6 +156,7 @@ async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; inf
     const tech = data.technicians.find((t) => t.id === hit.technicianId);
     route = { technicianId: hit.technicianId, technicianName: tech?.name ?? hit.technicianId, date: hit.date, start: hit.stops[i].start, end: hit.stops[i].end, position: i + 1, stops: hit.stops.length, approved: !!hit.approved };
   }
+  // Status-Ableitung (Reihenfolge ist wichtig): Termin > aus Plan > fixiert > geplant > Warteliste > Zeitwunsch klären > nicht planbar
   const status: RequestPlanning['status'] = route?.approved
     ? 'termin'
     : decision?.mode === 'exclude'
@@ -142,12 +167,17 @@ async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; inf
           ? 'planned'
           : unassigned?.reason.startsWith('Kapazität')
             ? 'waitlist'
-            : 'unplannable';
+            : unassigned?.reason.startsWith('Zeitwunsch')
+              ? 'review'
+              : 'unplannable';
+  const wish = parseTimeWish(request.notes);
+  const conf = listNoteConfirmations()[id] as { earliest?: string; latest?: string } | undefined;
   const info: RequestPlanning = {
     requestId: id,
     status,
     route,
     reason: unassigned?.reason ?? null,
+    timeWish: wish ? { ...wish, status: !conf ? 'offen' : conf.earliest || conf.latest ? 'bestaetigt' : 'verworfen' } : null,
     decision,
     waitlist: pos >= 0 ? { position: pos + 1, total: waiting.length } : null,
     olderWaiting,
@@ -174,6 +204,16 @@ app.get('/api/requests/:id/options', route(async (req, res) => {
   res.json({ options: rankOptions(r.data, r.plan, req.params.id, { travel: lookup, noteConstraints: listNoteConfirmations() }) });
 }));
 
+/** Tausch-Vorschläge für eine wartende Anfrage (Vorschau, ändert nichts) */
+app.get('/api/requests/:id/swap-options', route(async (req, res) => {
+  const r = await planningFor(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
+  const errors = requestErrors(r.data, req.params.id);
+  if (errors.length) return res.json({ options: [], blockedReason: `Datenfehler – erst korrigieren: ${errors[0]}` });
+  const { lookup } = await getTravelMatrix(r.data);
+  res.json({ options: swapOptions(r.data, r.plan, req.params.id, { travel: lookup, noteConstraints: listNoteConfirmations(), decisions: listDecisions() }) });
+}));
+
 /**
  * Entscheidung des Planers. Body { mode: 'pin'|'exclude'|'prioritize', technicianId?, date?, reason?, override? }
  * Grundsatz: Der Planer darf alles – aber ein Regelbruch braucht override + Begründung und bleibt im Plan sichtbar.
@@ -193,11 +233,11 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
     if (reason.length < 3) throw new ValidationError('Bitte kurz begründen, warum die Anfrage aus dem Plan genommen wird');
     return res.json({ ok: true, decision: setDecision(id, { mode, reason, override: false }) });
   }
-  // Fehlerhafte Daten können nicht eingeplant werden – auch nicht als Ausnahme. Erst korrigieren.
+  // DATEN: Fehlerhafte Daten können nicht eingeplant werden – auch nicht als Ausnahme. Erst korrigieren.
   const errors = requestErrors(r.data, id);
   if (errors.length) return res.status(409).json({ error: `Datenfehler – erst korrigieren: ${errors[0]}` });
   if (mode === 'prioritize') {
-    // Bricht "ältere zuerst" bewusst → immer mit Begründung
+    // REGEL-8: Bricht "ältere zuerst" bewusst → immer mit Begründung
     if (reason.length < 3) throw new ValidationError(r.info.olderWaiting ? `Bitte begründen – ${r.info.olderWaiting} ältere Anfragen warten noch` : 'Bitte kurz begründen, warum die Anfrage vorgezogen wird');
     return res.json({ ok: true, decision: setDecision(id, { mode, reason, override: true }) });
   }
@@ -205,9 +245,18 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   const technicianId = String(body.technicianId ?? '');
   const date = String(body.date ?? '');
   const { lookup } = await getTravelMatrix(r.data);
+  if (body.replaces) {
+    // Tausch: nur regelkonforme Vorschläge, nie fixe Termine – Begründung Pflicht
+    const replaces = String(body.replaces);
+    const swap = swapOptions(r.data, r.plan, id, { travel: lookup, noteConstraints: listNoteConfirmations(), decisions: listDecisions() }).find((o) => o.technicianId === technicianId && o.date === date && o.displaced.id === replaces);
+    if (!swap) return res.status(409).json({ error: 'Tausch nicht (mehr) regelkonform möglich – bitte Vorschläge neu laden' });
+    if (reason.length < 3) throw new ValidationError('Bitte den Tausch kurz begründen');
+    return res.json({ ok: true, decision: setDecision(id, { mode: 'pin', technicianId, date, reason, override: swap.displacesOlder, replaces }) });
+  }
   const option: SlotOption | undefined = rankOptions(r.data, r.plan, id, { travel: lookup, noteConstraints: listNoteConfirmations() }).find((o) => o.technicianId === technicianId && o.date === date);
   if (!option) return res.status(400).json({ error: `${technicianId} ist am ${date} nicht verfügbar` });
   if (option.blocked) return res.status(409).json({ error: option.blocked });
+  // Regelbruch nur mit override + Begründung → wird in verify.applyExceptions() gelb statt rot geführt
   if (option.warnings.length && !override) return res.status(409).json({ error: 'Regelbruch – nur als bewusste Ausnahme möglich', warnings: option.warnings, needsOverride: true });
   if (option.warnings.length && reason.length < 3) throw new ValidationError('Bitte die Ausnahme kurz begründen');
   res.json({ ok: true, decision: setDecision(id, { mode: 'pin', technicianId, date, reason, override: option.warnings.length > 0 }) });
@@ -217,6 +266,8 @@ app.delete('/api/requests/:id/decision', route(async (req, res) => {
   clearDecision(req.params.id);
   res.json({ ok: true });
 }));
+
+// MARK: - Plan, Übersicht & Prognose
 
 /** Übersichtszahlen für die Kacheln */
 app.get('/api/overview', route(async (_req, res) => {
@@ -247,10 +298,33 @@ app.get('/api/overview', route(async (_req, res) => {
   });
 }));
 
+/** Prognose (zwischengespeichert je Planstand): Wochen bis die Warteliste leer ist + projizierte Wochenpläne */
+let forecastCache: { key: string; value: ReturnType<typeof forecastWithPlans> } | null = null;
+async function getForecast(data: Dataset) {
+  const plan = await getPlan(data);
+  if (forecastCache?.key === plan.generatedAt) return forecastCache.value;
+  const { lookup } = await getTravelMatrix(data);
+  const noteConstraints = listNoteConfirmations();
+  const value = forecastWithPlans(data, plan, { travel: lookup, noteConstraints, decisions: listDecisions() });
+  // Auch die Prognose-Wochen werden unabhängig geprüft
+  for (const w of value.plans) w.plan.verification = verifyPlan(w.plan, w.data, lookup, noteConstraints, listDecisions());
+  forecastCache = { key: plan.generatedAt, value };
+  return value;
+}
+
+app.get('/api/forecast', route(async (_req, res) => {
+  res.json((await getForecast(await loadWorkingDataset())).forecast);
+}));
+
 /** Tourenplan (Entwurf) */
-app.get('/api/plan', route(async (_req, res) => {
+app.get('/api/plan', route(async (req, res) => {
   const data = await loadWorkingDataset();
-  res.json(await getPlan(data));
+  const week = Number(req.query.week ?? 0);
+  if (!week) return res.json(await getPlan(data));
+  // Prognose-Woche: nur lesen, nicht freigebbar
+  const w = (await getForecast(data)).plans[week - 1];
+  if (!w) return res.status(404).json({ error: `Keine Prognose für Woche +${week} – die Warteliste ist vorher leer` });
+  res.json({ ...w.plan, projected: { week, from: w.data.range.from, to: w.data.range.to } });
 }));
 
 /** Straßengeometrie einer Tagesroute (Polylines aus /travel/path, gecacht) */
@@ -264,6 +338,8 @@ app.get('/api/plan/:technicianId/:date/geometry', route(async (req, res) => {
   const legs = await travelPath(points);
   res.json({ points, legs });
 }));
+
+// MARK: - Freigaben & Export
 
 /**
  * Freigabe: Tagesrouten werden mit Reihenfolge und Startzeiten eingefroren.
@@ -312,21 +388,24 @@ app.get('/api/plan/:technicianId/:date/ics', route(async (req, res) => {
   res.send(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Heizma Routenplanung//DE', ...events, 'END:VCALENDAR'].join('\r\n'));
 }));
 
-/** KI-Hinweise aus den Vertriebsnotizen (Vorschläge) + vom Planer bestätigte Zeitgrenzen */
+// MARK: - Notizen & Zeitwünsche (KI optional)
+
+/** KI: Hinweise aus den Vertriebsnotizen (Vorschläge) + vom Planer bestätigte Zeitgrenzen */
 app.get('/api/notes', route(async (_req, res) => {
   const data = await loadWorkingDataset();
-  res.json({ insights: await getNoteInsights(data.requests), confirmed: listNoteConfirmations(), ai: !!process.env.ANTHROPIC_API_KEY });
+  res.json({ insights: await getNoteInsights(data.requests), confirmed: listNoteConfirmations(), ai: notesAiEnabled() });
 }));
 
 /** Zeit-Hinweis bestätigen → wird harte Regel in Planung & Prüfung. Body { earliest?, latest? } oder null zum Zurücknehmen */
 app.post('/api/notes/:requestId/confirm', route(async (req, res) => {
   const data = await loadDataset();
   if (!data.requests.some((r) => r.id === req.params.requestId)) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
-  confirmNote(req.params.requestId, req.body && (req.body.earliest || req.body.latest) ? { earliest: req.body.earliest || undefined, latest: req.body.latest || undefined } : null);
+  // { ignore: true } = Planer hat den Zeitwunsch gelesen und verworfen → Anfrage wird ohne Zeitgrenze geplant
+  confirmNote(req.params.requestId, req.body?.ignore ? {} : req.body && (req.body.earliest || req.body.latest) ? { earliest: req.body.earliest || undefined, latest: req.body.latest || undefined } : null);
   res.json({ ok: true });
 }));
 
-// ---- Lokale Korrekturen (simulierte Schreib-API, siehe README „Lokale Korrekturen“) ----
+// MARK: - Lokale Korrekturen (simulierte Schreib-API – die Heizma-API ist read-only)
 const ENTITY_KEYS: EntityKey[] = ['requests', 'technicians', 'appointments'];
 const entityParam = (req: Request) => {
   const e = req.params.entity as EntityKey;
@@ -348,7 +427,7 @@ app.delete('/api/stammdaten/:entity/:id', route(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ---- Eskalationen (simuliert: Nachricht wird gespeichert, nicht versendet) ----
+// MARK: - Eskalationen (simuliert: Nachricht wird gespeichert, nicht versendet)
 // Techniker-Eskalation: ziel = "techniker" (Verfügbarkeit/Gebiet anfragen) oder "vertrieb" (Lösung nötig)
 const TECH_TARGETS = { techniker: 'technician_request', vertrieb: 'internal' } as const;
 app.post('/api/escalations/technicians/:id/:target', route(async (req, res) => {
@@ -376,6 +455,8 @@ app.delete('/api/escalations/:requestId', (req, res) => {
   res.json({ ok: true });
 });
 
+// MARK: - Geocoding (DATEN: fehlende Koordinaten, Tippfehler in Adressen)
+
 app.get('/api/geocode', route(async (req, res) => {
   const address = String(req.query.address ?? '').trim();
   if (!address) return res.status(400).json({ error: 'Adresse fehlt' });
@@ -392,6 +473,13 @@ app.get('/api/geocode/reverse', route(async (req, res) => {
   res.json(result);
 }));
 
+// MARK: - Protokoll & lokale Datenbank (Debug/Demo)
+
+/** Internes Aktivitätsprotokoll (Freigaben, Eingriffe, Eskalationen, Korrekturen) – neueste zuerst */
+app.get('/api/log', (_req, res) => {
+  res.json({ entries: listLog() });
+});
+
 app.get('/api/local-db', (_req, res) => {
   res.json({ ...dumpDb(), editableFields: editableFields() });
 });
@@ -403,12 +491,15 @@ app.post('/api/local-db/reset', (req, res) => {
   res.json({ ok: true, scope: req.query.scope === 'planning' ? 'planning' : 'all' });
 });
 
+// MARK: - Fehlerbehandlung & Start
+// Reihenfolge: ValidationError → 400, HeizmaApiError → 502, Rest → 500
+
 app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (err instanceof ValidationError) return res.status(400).json({ error: err.message });
   next(err);
 });
 
-/** Cache leeren und neu laden */
+/** Cache leeren und neu laden (Express ignoriert Error-Middleware für normale Requests – Position hier ist unkritisch) */
 app.post('/api/reload', (_req, res) => {
   clearCache();
   resetTravelMatrix();

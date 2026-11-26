@@ -1,3 +1,8 @@
+/**
+ * @file      GoogleRouteMap.tsx – Karte mit Google Maps (aktiv, wenn GOOGLE_MAPS_API_KEY gesetzt)
+ * @layer     Web · View-Komponente (Karte)
+ * @siehe     docs/09-setup.md · docs/10-code-navigation.md
+ */
 import polyline from '@mapbox/polyline';
 import { AdvancedMarker, APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { useEffect, useMemo, useRef } from 'react';

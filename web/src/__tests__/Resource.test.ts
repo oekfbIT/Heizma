@@ -1,3 +1,8 @@
+/**
+ * @file      Resource.test.ts – Tests Resource/ResourceFamily (Ladezustand) (Vitest)
+ * @layer     Web · Tests
+ * @siehe     docs/06-tests-und-qualitaet.md · docs/10-code-navigation.md
+ */
 import { describe, expect, it } from 'vitest';
 import { Resource, ResourceFamily } from '@/core/Resource';
 

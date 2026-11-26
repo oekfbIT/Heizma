@@ -1,3 +1,8 @@
+/**
+ * @file      tokens.css – Design-Tokens: einzige Quelle für Farben, Radien, Schatten
+ * @layer     Web · Design-System
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 /*
  * Design-Tokens – einzige Quelle für Farben, Radien, Schatten und Ebenen.
  * Farben als RGB-Kanäle („77 165 71“), damit Tailwind-Opacity wie `bg-brand-50/50` funktioniert.

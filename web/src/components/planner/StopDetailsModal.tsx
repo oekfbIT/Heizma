@@ -1,3 +1,8 @@
+/**
+ * @file      StopDetailsModal.tsx – Dialog mit allen Infos zu einem Stopp inkl. Planungs-Karte
+ * @layer     Web · View-Komponente (Planer)
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
+ */
 import type { NoteInfo } from '@/modules';
 import { Alert, Button, Modal } from '@/ui';
 import RequestPlanningCard from '@/components/RequestPlanningCard';
@@ -101,7 +106,7 @@ export default function StopDetailsModal({ stop, index, route, technician, color
               {insight && (
                 <div className="mt-2 rounded-lg border border-accent-200 bg-accent-50/50 p-3 text-xs">
                   <p className="text-accent-800">
-                    <strong>{insight.source === 'claude' ? '✦ KI-Hinweis' : 'Erkannter Hinweis'}:</strong> {insight.hint}
+                    <strong>{insight.source === 'ai' ? '✦ KI-Hinweis' : 'Erkannter Hinweis'}:</strong> {insight.hint}
                   </p>
                   {constraint && (
                     <div className="mt-2 flex items-center justify-between gap-2">

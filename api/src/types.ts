@@ -1,3 +1,8 @@
+/**
+ * @file      types.ts – Gemeinsames Typ-Modell (API-Daten + Plan) – wird auch vom Web importiert
+ * @layer     Backend · Typen (eine Quelle der Wahrheit)
+ * @siehe     docs/02-architektur.md · docs/07-api.md · docs/10-code-navigation.md
+ */
 // Datentypen der Heizma Case-Study-API (read-only, eingefrorener Datenstand)
 
 export interface LatLng {
@@ -70,8 +75,7 @@ export interface Dataset {
   loadedAt: string;
 }
 
-// ---------- Validierung ----------
-
+// MARK: - Validierung
 export type Severity = 'error' | 'warning' | 'info';
 export type EntityKind = 'technician' | 'request' | 'appointment' | 'availability';
 
@@ -82,10 +86,11 @@ export interface Issue {
   severity: Severity;
   code: string;
   message: string;
+  /** Eindeutige Korrektur, die der Planer per Klick übernehmen kann (z. B. „10:00“ statt „10.00“) */
+  suggestion?: string;
 }
 
-// ---------- Planung ----------
-
+// MARK: - Planung
 export interface PlannedStop {
   kind: 'request' | 'appointment';
   id: string;
@@ -117,8 +122,7 @@ export interface ManualMark {
   override: boolean;
 }
 
-// ---------- Planer-Entscheidungen (manuelle Eingriffe) ----------
-
+// MARK: - Planer-Entscheidungen (manuelle Eingriffe)
 export type DecisionMode = 'pin' | 'exclude' | 'prioritize';
 
 export interface Decision {
@@ -128,6 +132,8 @@ export interface Decision {
   date?: string;
   reason: string;
   override: boolean;
+  /** nur bei pin: diese Anfrage wurde für den Platz bewusst aus dieser Tour genommen (Tausch) */
+  replaces?: string;
   at: string;
 }
 
@@ -152,7 +158,45 @@ export interface SlotOption {
   current: boolean;
 }
 
-export type RequestPlanningStatus = 'termin' | 'pinned' | 'planned' | 'waitlist' | 'excluded' | 'unplannable';
+/** Tausch-Kandidat: geplante Anfrage, die für eine vorgezogene Platz machen könnte */
+export interface SwapOption {
+  technicianId: string;
+  technicianName: string;
+  date: string;
+  /** Wer weichen müsste */
+  displaced: { id: string; customer: string; address: string; createdAt: string; start: string; end: string; notes: string | null; timeWish: string | null };
+  /** true = die verdrängte Anfrage ist älter → „ältere zuerst“ wird übergangen */
+  displacesOlder: boolean;
+  /** Neue Uhrzeit der vorgezogenen Anfrage */
+  start: string;
+  end: string;
+  /** Fahrzeit der Tour: vorher → nachher (Differenz = Mehr-/Minderfahrzeit gegenüber der optimalen Tour) */
+  driveBefore: number;
+  driveAfter: number;
+  deltaDrive: number;
+  /** Passt die verdrängte Anfrage regelkonform in einen anderen Tag? (null = Warteliste) */
+  fallback: { technicianName: string; date: string; deltaDrive: number } | null;
+  recommended: boolean;
+  /** Vorschau der Tagesroute vorher/nachher */
+  before: RoutePreview;
+  after: RoutePreview;
+  /** Regelprüfung der neuen Tagesroute (aus der Vorschau berechnet) */
+  checks: { label: string; ok: boolean; detail?: string }[];
+}
+
+export interface RoutePreview {
+  window: { start: string; end: string };
+  departure: string;
+  returnHome: string;
+  /** Abfahrt bis Heimkehr in Minuten */
+  totalMinutes: number;
+  driveMinutes: number;
+  workMinutes: number;
+  lunch: { start: string; end: string } | null;
+  stops: { id: string; customer: string; address: string; start: string; end: string; travelMinutes: number; kind: 'request' | 'appointment'; isNew: boolean }[];
+}
+
+export type RequestPlanningStatus = 'termin' | 'pinned' | 'planned' | 'waitlist' | 'review' | 'excluded' | 'unplannable';
 
 export interface RequestPlanning {
   requestId: string;
@@ -169,6 +213,8 @@ export interface RequestPlanning {
   } | null;
   /** Grund, wenn nicht eingeplant */
   reason: string | null;
+  /** Zeitwunsch aus der Notiz (Regel-Parser, ohne KI) und ob der Planer ihn schon entschieden hat */
+  timeWish: (import('./timeWish.js').TimeWish & { status: 'offen' | 'bestaetigt' | 'verworfen' }) | null;
   decision: Decision | null;
   /** Warteliste: Platz nach Eingang und ältere Wartende */
   waitlist: { position: number; total: number } | null;
@@ -211,6 +257,8 @@ export interface UnassignedRequest {
 }
 
 export interface Plan {
+  /** Nur bei Prognose-Wochen (GET /api/plan?week=N): Projektion, nicht freigebbar */
+  projected?: { week: number; from: string; to: string };
   generatedAt: string;
   travelSource: 'heizma' | 'estimate' | 'mixed';
   travel: {
@@ -231,6 +279,8 @@ export interface Plan {
     /** Fahrzeit nach Phase 1 (Greedy), vor 2-opt/Relocate */
     greedyDriveMinutes: number;
     improvements: number;
+    /** Tausche „ältere zuerst“: wartende ältere Anfrage hat eine jüngere ersetzt */
+    prioritySwaps?: number;
     avgDrivePerVisit: number;
     approvedRoutes: number;
     routesWithStops: number;
@@ -238,8 +288,7 @@ export interface Plan {
   verification?: Verification;
 }
 
-// ---------- Plan-Prüfung ----------
-
+// MARK: - Plan-Prüfung
 export interface Violation {
   rule: string;
   technicianId?: string;

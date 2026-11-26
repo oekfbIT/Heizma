@@ -1,3 +1,8 @@
+/**
+ * @file      config.ts – Zentrale Konfiguration aus der .env (Datenquelle, Zeitraum, Token, Karten-Key)
+ * @layer     Backend · Infrastruktur
+ * @siehe     docs/09-setup.md · docs/10-code-navigation.md
+ */
 // Zentrale Konfiguration – alle Werte kommen aus der .env (siehe .env.example)
 
 function num(value: string | undefined, fallback: number): number {

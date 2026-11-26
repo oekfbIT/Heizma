@@ -1,3 +1,8 @@
+/**
+ * @file      EntityList.tsx – Seite: Liste eines Stammdaten-Bereichs mit Validierungsstatus
+ * @layer     Web · View (Seite)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import { useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import IssueBadge, { SeverityPill } from '@/components/stammdaten/IssueBadge';
@@ -38,14 +43,19 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
   const navigate = useNavigate();
   const core = useCore();
   const [params] = useSearchParams();
-  const [filter, setFilter] = useState<'all' | 'problems' | 'planned'>(params.get('filter') === 'problems' ? 'problems' : 'all');
+  type Filter = 'all' | 'problems' | 'planned' | 'approved' | 'preplanned' | 'waitlist' | 'review' | 'unplannable' | 'excluded';
+  const initial = params.get('filter') as Filter | null;
+  // Bei Anfragen gibt es kein „Nur Probleme“: jedes Problem landet in einem Plan-Status
+  const [filter, setFilter] = useState<Filter>(initial && !(def.kind === 'request' && initial === 'problems') && ['problems', 'planned', 'approved', 'preplanned', 'waitlist', 'review', 'unplannable', 'excluded'].includes(initial) ? initial : 'all');
   const [query, setQuery] = useState('');
   const [region, setRegion] = useRegion();
   const colors = core.techniker.colors(data.technicians);
   // Nur bei Anfragen: Stand im Plan je Zeile
   const plan = useResource(def.kind === 'request' ? core.routen.plan : null);
   useResource(def.kind === 'request' ? core.techniker.data : null); // Kurznamen für den Plan-Status
-  const planStatus = useMemo(() => (plan.data ? core.requestStatuses(plan.data) : null), [core, plan.data, data]);
+  // Vorplanung der Folgewochen (für den Status „Vorgeplant KW …“)
+  const forecast = useResource(def.kind === 'request' ? core.system.forecast : null);
+  const planStatus = useMemo(() => (plan.data ? core.requestStatuses(plan.data) : null), [core, plan.data, data, forecast.data]);
 
   /** Gehört der Datensatz zur gewählten Region? */
   const inRegion = (id: string) => {
@@ -68,6 +78,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
     const problems = (issuesById.get(row.id) ?? []).some((i) => i.severity !== 'info');
     if (filter === 'problems' && !problems) return false;
     if (filter === 'planned' && !planStatus?.get(row.id)?.planned) return false;
+    if (['approved', 'preplanned', 'waitlist', 'review', 'unplannable', 'excluded'].includes(filter) && planStatus?.get(row.id)?.tone !== filter) return false;
     if (!query) return true;
     return Object.values(row.cells).join(' ').toLowerCase().includes(query.toLowerCase());
   });
@@ -91,8 +102,24 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
           onChange={setFilter}
           options={[
             { value: 'all' as const, label: `Alle (${def.rows(data).length})` },
-            { value: 'problems' as const, label: `Nur Probleme (${problemCount})` },
-            ...(def.kind === 'request' ? [{ value: 'planned' as const, label: `Eingeplant (${planStatus ? def.rows(data).filter((r) => planStatus.get(r.id)?.planned).length : '…'})` }] : []),
+            ...(def.kind !== 'request' ? [{ value: 'problems' as const, label: `Nur Probleme (${problemCount})` }] : []),
+            ...(def.kind === 'request'
+              ? (() => {
+                  const all = def.rows(data);
+                  const n = (f: (st: ReturnType<NonNullable<typeof planStatus>['get']>) => boolean) => (planStatus ? all.filter((r) => f(planStatus.get(r.id))).length : null);
+                  const tabs: { value: Filter; label: string; count: number | null }[] = [
+                    { value: 'planned', label: 'Diese Woche', count: n((st) => !!st?.planned) },
+                    { value: 'approved', label: 'Freigegeben', count: n((st) => st?.tone === 'approved') },
+                    { value: 'preplanned', label: 'Vorgeplant', count: n((st) => st?.tone === 'preplanned') },
+                    { value: 'waitlist', label: 'Warteliste', count: n((st) => st?.tone === 'waitlist') },
+                    { value: 'review', label: 'Zeitwunsch klären', count: n((st) => st?.tone === 'review') },
+                    { value: 'unplannable', label: 'Nicht planbar', count: n((st) => st?.tone === 'unplannable') },
+                    { value: 'excluded', label: 'Aus dem Plan', count: n((st) => st?.tone === 'excluded') },
+                  ];
+                  // Leere Status ausblenden (außer dem aktiven), damit die Leiste kurz bleibt
+                  return tabs.filter((t) => t.count !== 0 || t.value === filter).map((t) => ({ value: t.value, label: `${t.label} (${t.count ?? '…'})` }));
+                })()
+              : []),
           ]}
         />
       </div>
@@ -185,7 +212,9 @@ function IssueList({ data }: { data: Stammdaten }) {
 const PLAN_TONE: Record<RequestPlanStatus['tone'], BadgeTone> = {
   approved: 'solid',
   proposed: 'success',
+  preplanned: 'info-soft',
   waitlist: 'warning-soft',
+  review: 'info-soft',
   excluded: 'neutral',
   unplannable: 'danger',
 };
@@ -194,6 +223,7 @@ function PlanChip({ s }: { s?: RequestPlanStatus }) {
   if (!s) return <span className="text-xs text-gray-300">—</span>;
   return (
     <Badge tone={PLAN_TONE[s.tone]} title={s.title}>
+      {s.tone === 'preplanned' && <span className="mr-1 font-semibold">Vorgeplant</span>}
       {s.label}
     </Badge>
   );

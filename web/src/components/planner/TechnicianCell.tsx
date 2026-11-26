@@ -1,3 +1,8 @@
+/**
+ * @file      TechnicianCell.tsx – Zeile einer Person in der Tagesliste (Termine, Fahrt, Status)
+ * @layer     Web · View-Komponente (Planer)
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
+ */
 import { formatMinutes } from '@/lib/format';
 import CapacityBar from './CapacityBar';
 import type { DayRoute, Technician } from '@/lib/types';

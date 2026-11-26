@@ -1,3 +1,8 @@
+/**
+ * @file      LeafletRouteMap.tsx – Karte mit Leaflet/OSM – Fallback ohne Google-Key; definiert RouteMapProps
+ * @layer     Web · View-Komponente (Karte)
+ * @siehe     docs/09-setup.md · docs/10-code-navigation.md
+ */
 import polyline from '@mapbox/polyline';
 import L from 'leaflet';
 import { useEffect, useMemo, useRef } from 'react';

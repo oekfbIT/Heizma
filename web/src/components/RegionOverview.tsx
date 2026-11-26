@@ -1,3 +1,8 @@
+/**
+ * @file      RegionOverview.tsx – Auslastung je Einsatzgebiet über die Woche
+ * @layer     Web · View-Komponente
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
+ */
 import { Link } from 'react-router-dom';
 import { dayCapacity } from '@/components/planner/CapacityBar';
 import type { Stammdaten } from '@/modules';

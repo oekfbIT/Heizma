@@ -1,4 +1,4 @@
-[← 8 Trade-offs & Ausblick](08-trade-offs-und-ausblick.md) · **9 Setup** · [Übersicht ↑](../README.md)
+[← 8 Trade-offs & Ausblick](08-trade-offs-und-ausblick.md) · **9 Setup** · [10 Code-Navigation →](10-code-navigation.md)
 
 # Setup
 
@@ -67,7 +67,7 @@ Mock-Login ohne externe Dienste (`api/src/mockauth/`):
 | `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_MAP_ID` | Google Maps; leer → Leaflet mit freien Kacheln | leer |
 | `MAP_TILE_URL`, `MAP_ATTRIBUTION` | Kacheln für Leaflet | Esri |
 | `OFFICE_LAT`, `OFFICE_LNG` | Firmensitz als Referenzpunkt | Wien |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | KI-Hinweise aus Notizen; leer → Regel-Fallback | leer |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | KI-Hinweise aus Notizen; leer → Regel-Fallback | leer |
 | `MOCK_AUTH_EMAIL`, `MOCK_AUTH_PASSWORD`, `MOCK_AUTH_TTL_HOURS`, `MOCK_AUTH_SECRET` | Mock-Login | siehe oben |
 | `LOCAL_DB_PATH`, `TRAVEL_CACHE_PATH`, `NOTES_CACHE_PATH` | Speicherorte | `api/data/…` |
 
@@ -84,4 +84,4 @@ Mock-Login ohne externe Dienste (`api/src/mockauth/`):
 
 ---
 
-[← 8 Trade-offs & Ausblick](08-trade-offs-und-ausblick.md) · [Übersicht ↑](../README.md)
+[← 8 Trade-offs & Ausblick](08-trade-offs-und-ausblick.md) · [10 Code-Navigation →](10-code-navigation.md)

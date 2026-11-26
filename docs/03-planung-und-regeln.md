@@ -19,7 +19,7 @@ flowchart LR
 
 **Warum eine Heuristik statt eines Solvers?** Für ~150 Anfragen × 7 Personen × 5 Tage ist das in unter einer Sekunde fertig, jeder Schritt ist nachvollziehbar, und jede Regel steckt in genau einer Tages-Simulation. Ein VRPTW-Solver (z. B. OR-Tools) wäre der nächste Schritt für größere Mengen – siehe [Ausblick](08-trade-offs-und-ausblick.md).
 
-**Mittagspause:** wird in jede passende Lücke gelegt – vor der Weiterfahrt, in eine Wartezeit, vor Abfahrt oder nach Heimkehr. Passt sie nicht, entfällt sie (laut Regel).
+**Mittagspause:** wird in jede passende Lücke gelegt – vor der Weiterfahrt, in eine Wartezeit, vor Abfahrt oder nach Heimkehr. Passt sie nicht, entfällt sie (laut Regel) – aber nur, wenn schon die fixen Termine des Tages sie verhindern. **Für einen zusätzlichen Besuch wird sie nie geopfert.**
 
 **Vorgaben des Planers** gehen als harte Randbedingungen ein: freigegebene Routen (unverändert), fixierte Anfragen (Tag + Person), bestätigte Notiz-Zeitgrenzen, herausgenommene und vorgezogene Anfragen.
 
@@ -31,12 +31,12 @@ Jede Regel ist im Planer umgesetzt **und** wird von `verify.ts` mit eigenem Code
 |---|---|---|---|---|
 | 1 | Arbeitstag im Verfügbarkeitsfenster, Start/Ende am Wohnort | Tages-Simulation startet und endet am Wohnort | `window` | ✓ |
 | 2 | Termin inkl. Anfahrt im Fenster, nur Heimfahrt bis +60 min | Abbruch, wenn Anfahrt oder Termin über das Fenster ragt | `window`, `returnHome` | ✓ |
-| 3 | Mittagspause 60 min, Beginn 11:30–13:00, nur ganze Tage | Pause in passende Lücke, sonst entfällt sie | `lunch` (inkl. „hätte gepasst“) | ✓ |
+| 3 | Mittagspause 60 min, Beginn 11:30–13:00, nur ganze Tage | Pause in passende Lücke; entfällt nur, wenn fixe Termine sie verhindern – nie für einen weiteren Besuch | `lunch` (inkl. „hätte gepasst“) | ✓ |
 | 4 | `customerAvailableFrom` ist harte Grenze | Früher da → Wartezeit, nie früherer Beginn | `customerFrom` | ✓ |
 | 5 | Zuständigkeit: Gebiet → sonst ≤ 15 km → sonst nicht zuordenbar | Punkt-in-Polygon, Haversine-Distanz zum Wohnort | `responsibility` | ✓ |
 | 6 | Bestehende Termine bleiben, wo sie sind | Fixe Termine als unverrückbare Stopps | `fixed` | ✓ |
 | 7 | Nichts überlappt, auch nicht Fahrzeiten | Lückenlose Zeitkette pro Tag | `travel` | ✓ |
-| 8 | Ältere Anfragen zuerst, wenn Kapazität nicht reicht | Einplanung strikt nach `createdAt` | `priority` | ✓ |
+| 8 | Ältere Anfragen zuerst, wenn Kapazität nicht reicht | Einplanung nach `createdAt`; nach der Optimierung Tausch-Durchgang: wartende ältere ersetzt eine jüngere, wo sie regelkonform passt | `priority` – prüft für jede wartende Anfrage jeden möglichen Tausch | ✓ |
 | + | Dauer passt zum Typ (unbekannt = 105 min) | Dauer aus Typ, Fallback 105 | `duration` | ✓ |
 | + | Jede Anfrage genau einmal: eingeplant oder Warteliste | – | `unique` | ✓ |
 

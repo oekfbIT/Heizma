@@ -3,7 +3,7 @@
 # Tests & Qualität
 
 ```bash
-npm run check           # Typecheck + Architektur-Wächter + alle Tests
+npm run check           # Typecheck + Architektur-Wächter + Code-Navigation + alle Tests
 npm run test:coverage   # Tests mit Coverage (API + Web)
 ```
 
@@ -13,29 +13,32 @@ Alles läuft auch in GitHub Actions (`.github/workflows/ci.yml`) bei jedem Push.
 
 | Ebene | Werkzeug | Umfang |
 |---|---|---|
-| **Planung & Prüfung** (API) | Node Test Runner | 17 Tests |
-| **Core, Module, Tokens** (Web) | Vitest | 48 Tests |
+| **Planung & Prüfung** (API) | Node Test Runner | 26 Tests |
+| **Core, Module, Tokens** (Web) | Vitest | 58 Tests |
 | **Architektur-Regeln** | `scripts/check-architecture.mjs` | 6 Regeln |
 | **Typen** | `tsc --noEmit` | API + Web, `strict` |
 | **Visueller Vergleich** | Playwright | Alter vs. neuer Build, 8 Ansichten ([Ergebnis](05-design-system.md#ohne-sichtbare-änderung-umgestellt)) |
 
 ## API: die Planung
 
-`api/src/__tests__/planner.test.ts` – fachliche Tests in der Sprache der Case Study:
+`api/src/__tests__/planner.test.ts` – fachliche Tests in der Sprache der Case Study. Jeder Test trägt den Tag der Regel, die er absichert (`// REGEL-2`); die CI prüft, dass jede Regel mindestens einen Test hat ([Code-Navigation](10-code-navigation.md)).
 
 - Gesamter Datensatz: **0 Regelverstöße**
 - Optimierung ist **nie schlechter als Greedy** und plant nicht weniger ein
 - `customerAvailableFrom` ist eine harte Grenze
-- Mittagspause nur an ganzen Tagen, 60 min, Beginn 11:30–13:00
+- Termin muss im Fenster enden, nur die **Heimfahrt darf bis 60 min drüber**; > 60 min → „Passt in keinen Tag“
+- Mittagspause nur an ganzen Tagen, 60 min, Beginn 11:30–13:00 · wird **nie für einen weiteren Besuch geopfert**
 - Zuständigkeit: außerhalb des Gebiets ≤ 15 km wird eingeplant, > 15 km nicht zuordenbar
-- Kapazität knapp: **ältere Anfrage gewinnt**
+- Kapazität knapp: **ältere Anfrage gewinnt** · Tausch-Durchgang: wartende ältere ersetzt eine jüngere
 - Fixe Termine bleiben, wo sie sind · unbekannter Typ = 105 min
 - Freigegebene Route bleibt bei Neuplanung unverändert
 - **Der Validator erkennt eingeschleuste Fehler** (Überlappung, Duplikat, verlorene Anfrage, falsche Pause)
-- Bestätigte Notiz „nur vormittags“ wird harte Grenze
-- Fixieren, Herausnehmen, Vorziehen, Regelbruch mit/ohne Ausnahme
+- Bestätigte Notiz „nur vormittags“ wird harte Grenze · offener Zeitwunsch wird nie automatisch geplant
+- Uhrzeit-Formatfehler („10.00“) wird gelesen, geplant und als Warnung gemeldet
+- Fixieren, Herausnehmen, Vorziehen, Tausch, Regelbruch mit/ohne Ausnahme
 - Optionen: regelkonforme Slots zuerst, freigegebene Routen am Ende
 - Datenfehler sperren die Planung – nach Korrektur wird geplant
+- Prognose: Warteliste wird über Folgewochen abgearbeitet
 
 ## Web: die Schichten
 

@@ -1,3 +1,8 @@
+/**
+ * @file      CapacityBar.tsx – Auslastungsleiste eines Personen-Tags (Arbeit · Fahrt · Rest · frei)
+ * @layer     Web · View-Komponente (Planer)
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
+ */
 import { formatMinutes } from '@/lib/format';
 import type { DayRoute } from '@/lib/types';
 
@@ -21,7 +26,7 @@ export function dayCapacity(route: DayRoute) {
 export default function CapacityBar({ route }: { route: DayRoute }) {
   const c = dayCapacity(route);
   const pct = (v: number) => `${Math.min(100, (v / Math.max(c.window, c.busy)) * 100)}%`;
-  // Heimfahrt darf laut Case bis 60 min über das Fenster – erst darüber ist es ein Regelverstoß
+  // REGEL-2: Heimfahrt darf laut Case bis 60 min über das Fenster – erst darüber ist es ein Regelverstoß
   const label =
     c.overtime > 60 ? `Heimfahrt +${c.overtime} min – über dem Limit` : c.overtime > 0 ? `voll · Heimfahrt +${c.overtime} min (erlaubt)` : c.free < 30 ? 'voll' : `${formatMinutes(c.free)} frei`;
   const tone = c.overtime > 60 ? 'text-danger-600' : c.free < 60 || c.overtime > 0 ? 'text-warning-600' : 'text-brand-700';

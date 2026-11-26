@@ -1,11 +1,16 @@
 /**
+ * @file      theme.ts – Brücke Design-Tokens → JS-Farbwerte (für Karten)
+ * @layer     Web · Design-System
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
+/**
  * Brücke von den Design-Tokens (ui/styles/tokens.css) zu JavaScript.
  * Karten (Google Maps, Leaflet) brauchen echte Farbwerte statt CSS-Klassen –
  * sie lesen dieselben CSS-Variablen, damit es nur eine Quelle der Wahrheit gibt.
  */
 
 /** Anzahl der Routenfarben in tokens.css (--color-route-1 … --color-route-8) */
-export const ROUTE_COLOR_COUNT = 8;
+const ROUTE_COLOR_COUNT = 8;
 
 /** Token als Hex-Farbe. Ohne DOM (Tests, SSR) die CSS-Variable selbst. */
 export function tokenColor(name: string): string {

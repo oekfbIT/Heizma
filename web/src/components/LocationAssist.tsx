@@ -1,3 +1,8 @@
+/**
+ * @file      LocationAssist.tsx – DATEN: Hilfe bei fehlenden/falschen Koordinaten – Geocoding, Reverse-Geocoding, Eskalation
+ * @layer     Web · View-Komponente
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import { useState } from 'react';
 import EscalationDialog from '@/components/planner/EscalationDialog';
 import { useCore } from '@/core';

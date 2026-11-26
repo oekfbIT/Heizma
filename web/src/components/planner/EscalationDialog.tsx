@@ -1,3 +1,8 @@
+/**
+ * @file      EscalationDialog.tsx – Benachrichtigungs-Entwurf (Kunde/Vertrieb) – wird gespeichert, nicht versendet
+ * @layer     Web · View-Komponente (Planer)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import { useState } from 'react';
 import { useCore } from '@/core';
 import { formatDay } from '@/lib/format';
@@ -7,7 +12,7 @@ import { Button, Field, Input, Modal, Textarea } from '@/ui';
 
 const TYPE_LABEL: Record<string, string> = { WP: 'Wärmepumpe', PV: 'Photovoltaikanlage', 'WP+PV': 'Wärmepumpe und Photovoltaikanlage' };
 
-export function customerDelayText(r: ServiceRequest, date: string) {
+function customerDelayText(r: ServiceRequest, date: string) {
   return `Guten Tag,
 
 vielen Dank für Ihr Vertrauen in Heizma. Aufgrund der aktuell hohen Nachfrage können wir die Besichtigung für Ihre ${
@@ -22,7 +27,7 @@ Freundliche Grüße
 Ihr Heizma-Team`;
 }
 
-export function internalText(r: ServiceRequest, reason: string) {
+function internalText(r: ServiceRequest, reason: string) {
   return `Anfrage ${r.id} (${r.customer}, ${r.address}) kann nicht eingeplant werden.
 
 Grund: ${reason}

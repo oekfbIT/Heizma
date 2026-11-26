@@ -1,4 +1,9 @@
 /**
+ * @file      Resource.ts – Beobachtbarer Ladezustand (wie ObservableObject in Swift)
+ * @layer     Web · Core
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
+/**
  * Resource – beobachtbarer Ladezustand für einen Datensatz (wie ein ObservableObject in Swift).
  *
  * Ein Interactor hält seine Daten in Resources. Views abonnieren sie über `useResource`

@@ -1,3 +1,8 @@
+/**
+ * @file      Button.tsx – UI-Baustein Button
+ * @layer     Web · Design-System (Komponente)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cx } from '../cx';
 import Icon from './Icon';

@@ -1,3 +1,8 @@
+/**
+ * @file      prewarmTravel.ts – CLI: Fahrzeitmatrix vorab laden (npm run travel:prewarm -w api)
+ * @layer     Backend · Skript
+ * @siehe     docs/09-setup.md · docs/10-code-navigation.md
+ */
 /** Fahrzeitmatrix vorab laden: npm run travel:prewarm -w api  (dauert beim ersten Mal einige Minuten) */
 import { loadDataset } from './heizmaClient.js';
 import { applyOverrides } from './localStore.js';

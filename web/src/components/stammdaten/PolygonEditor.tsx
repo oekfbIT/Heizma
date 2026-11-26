@@ -1,3 +1,8 @@
+/**
+ * @file      PolygonEditor.tsx – Editor für Einsatzgebiete (Eckpunkte „lat, lng“)
+ * @layer     Web · View-Komponente (Stammdaten)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import { useMemo } from 'react';
 import type { Stammdaten } from '@/modules';
 import { nearestPlace, placeIndex } from '@/lib/placeLabel';

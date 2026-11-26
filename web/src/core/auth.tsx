@@ -1,6 +1,11 @@
+/**
+ * @file      auth.tsx – Mock-Auth im Browser: Token im sessionStorage, Abmelden bei 401
+ * @layer     Web · Core (Auth)
+ * @siehe     docs/09-setup.md · docs/10-code-navigation.md
+ */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
-// Mock-Auth: Token liegt im sessionStorage → gilt nur für diese Browser-Sitzung (Tab), max. 2 h
+// SICHERHEIT: Mock-Auth: Token liegt im sessionStorage → gilt nur für diese Browser-Sitzung (Tab), max. 2 h
 const KEY = 'heizma.session';
 
 export interface AuthUser {

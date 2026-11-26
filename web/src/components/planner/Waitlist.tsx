@@ -1,3 +1,8 @@
+/**
+ * @file      Waitlist.tsx – Warteliste nach Grund gruppiert, je Grund eine nächste Aktion (REGEL-8)
+ * @layer     Web · View-Komponente (Planer)
+ * @siehe     docs/03-planung-und-regeln.md · docs/10-code-navigation.md
+ */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCore } from '@/core';
@@ -16,12 +21,17 @@ interface Props {
 
 /** Je Grund genau eine nächste Aktion */
 function actionFor(reason: string): { kind: 'fix' | 'customer' | 'internal'; label: string } {
-  if (reason.startsWith('Keine Koordinaten')) return { kind: 'fix', label: 'Korrigieren' };
+  if (reason.startsWith('Keine Koordinaten') || reason.startsWith('Datenfehler')) return { kind: 'fix', label: 'Korrigieren' };
+  // ACHTUNG · GRUND-PRAEFIX: prüft den Anfang von `reason` – muss zu den Texten in planner.ts buildPlan() passen
+  if (reason.startsWith('Zeitwunsch')) return { kind: 'fix', label: 'Klären' };
   if (reason.startsWith('Kapazität')) return { kind: 'customer', label: 'Kunde informieren' };
   return { kind: 'internal', label: 'Eskalieren' };
 }
 
-const ORDER = ['Kapazität', 'Keine Koordinaten', 'Zuständige', 'Nicht zuordenbar'];
+// GRUND-PRAEFIX: Reihenfolge der Gruppen in der Warteliste – neue Gründe aus planner.ts hier ergänzen
+const ORDER = ['Kapazität', 'Zeitwunsch', 'Datenfehler', 'Keine Koordinaten', 'Zuständige', 'Passt in keinen Tag', 'Nicht zuordenbar'];
+/** Gruppe = Grund ohne Detail („Zeitwunsch klären: „…““ → „Zeitwunsch klären“) */
+const groupOf = (reason: string) => reason.split(/[:(]/)[0].trim();
 
 /** Nicht eingeplante Anfragen – gruppiert nach Grund, mit Aktion pro Eintrag */
 export default function Waitlist({ items, requests, escalations, nextWorkday }: Props) {
@@ -38,7 +48,7 @@ export default function Waitlist({ items, requests, escalations, nextWorkday }: 
   const byId = new Map(requests.map((r) => [r.id, r]));
   const groups = Object.entries(
     items.reduce<Record<string, UnassignedRequest[]>>((acc, item) => {
-      (acc[item.reason] ??= []).push(item);
+      (acc[groupOf(item.reason)] ??= []).push(item);
       return acc;
     }, {}),
   ).sort(([a], [b]) => ORDER.findIndex((o) => a.startsWith(o)) - ORDER.findIndex((o) => b.startsWith(o)));

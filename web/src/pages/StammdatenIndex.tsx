@@ -1,5 +1,11 @@
+/**
+ * @file      StammdatenIndex.tsx – Seite: Stammdaten-Übersicht mit KPI-Kacheln
+ * @layer     Web · View (Seite)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import { Link } from 'react-router-dom';
 import RegionOverview from '@/components/RegionOverview';
+import ForecastStrip from '@/components/ForecastCard';
 import { useCore, useResource } from '@/core';
 import { ENTITIES } from '@/lib/entities';
 import { formatMinutes } from '@/lib/format';
@@ -42,6 +48,7 @@ export default function StammdatenIndex() {
             <span className={cx('font-medium', d.source === 'live' ? 'text-brand-600' : 'text-warning-600')}>{system.sourceLabel(d.source)}</span>
           </>
         }
+        below={<ForecastStrip />}
         actions={
           <Link to="/planer" className="btn btn--secondary">
             <Icon name="route" className="h-4 w-4" /> Zur Routenplanung

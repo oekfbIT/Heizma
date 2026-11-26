@@ -1,3 +1,13 @@
+/**
+ * @file      localStore.ts – Lokale Schreibschicht (JSON-Datei): Korrekturen, Freigaben, Entscheidungen, Eskalationen, Protokoll
+ * @layer     Backend · Infrastruktur (I/O: api/data/local-db.json · auf Vercel /tmp)
+ * @einstieg  applyOverrides() (vor jeder Planung) · updateEntity() · setDecision() · approveRoutes() · listLog()
+ * @siehe     docs/04-datenqualitaet.md · docs/07-api.md · docs/10-code-navigation.md
+ *
+ * AUSBLICK: In Produktion wird nur diese Datei ersetzt (CRM/DB statt JSON) – die Funktionssignaturen bleiben.
+ * ACHTUNG: Jede schreibende Funktion muss persist() aufrufen → erhöht `revision` → index.ts plant neu.
+ */
+import { normalizeTime } from './time.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Appointment, AuditEntry, Dataset, Decision, DecisionMode, ServiceRequest, Technician } from './types.js';
@@ -48,9 +58,12 @@ const DB_PATH = resolve(
 
 const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, approvals: {}, noteConfirmations: {}, decisions: {}, log: [] });
 
+// MARK: - Laden & Speichern
+
 let db: LocalDb | null = null;
 let revision = 0;
 
+/** Lazy-Load + Migration: fehlende Felder älterer Dateien werden mit Defaults ergänzt. */
 function load(): LocalDb {
   if (db) return db;
   try {
@@ -79,8 +92,7 @@ function persist() {
   }
 }
 
-// ---- Erlaubte Felder & Typprüfung ----
-
+// MARK: - Erlaubte Felder & Typprüfung
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const num = (v: unknown) => (v === '' || v === null || v === undefined ? null : Number(v));
 
@@ -92,7 +104,7 @@ const FIELDS: Record<EntityKey, Record<string, Parser>> = {
     lng: (v) => num(v),
     visitationType: (v) => (v === '' || v === null || v === '—' ? null : String(v)),
     durationMinutes: (v) => Number(v),
-    customerAvailableFrom: (v) => (v === '' || v === null || v === '—' ? null : String(v).trim()),
+    customerAvailableFrom: (v) => (v === '' || v === null || v === '—' ? null : (normalizeTime(String(v)) ?? String(v).trim())),
     notes: (v) => (v === '' || v === '—' ? null : String(v)),
   },
   technicians: {
@@ -107,7 +119,7 @@ const FIELDS: Record<EntityKey, Record<string, Parser>> = {
             .filter((p) => p.length === 2 && p.every(Number.isFinite))
             .map(([lat, lng]) => ({ lat, lng })),
   },
-  // Fixe Termine sind laut Case nicht verschiebbar → bewusst nicht bearbeitbar
+  // REGEL-6: Fixe Termine sind laut Case nicht verschiebbar → bewusst nicht bearbeitbar
   appointments: {},
 };
 
@@ -131,8 +143,7 @@ function check(entity: EntityKey, patch: Patch) {
     throw new ValidationError('Gebiet braucht mindestens 3 Eckpunkte');
 }
 
-// ---- Öffentliche API ----
-
+// MARK: - Öffentliche API
 export function updateEntity(entity: EntityKey, id: string, input: Patch): Patch {
   const parsers = FIELDS[entity];
   if (!parsers) throw new ValidationError(`Unbekannter Bereich ${entity}`);
@@ -157,8 +168,10 @@ export function resetEntity(entity: EntityKey, id: string) {
   persist();
 }
 
+/** Demo auf den Ausgangsstand: Korrekturen, Freigaben, Entscheidungen, Eskalationen und Protokoll leeren */
 export function resetAll() {
   db = empty();
+  db.log.push({ at: new Date().toISOString(), entity: 'system', id: 'demo', action: 'demo-reset' });
   persist();
 }
 
@@ -199,8 +212,7 @@ export function applyOverrides(data: Dataset): Dataset & { overridden: Record<En
   };
 }
 
-// ---- Eskalationen ----
-
+// MARK: - Eskalationen
 /**
  * Schlüssel: Anfrage-ID (z. B. req_1042) oder "technicians:<id>:<ziel>" für Techniker-Eskalationen.
  */
@@ -238,7 +250,10 @@ export function escalate(
 
 export function withdrawEscalation(requestId: string) {
   const d = load();
+  const before = d.escalations[requestId];
+  if (!before) return;
   delete d.escalations[requestId];
+  d.log.push({ at: new Date().toISOString(), entity: 'escalations', id: requestId, action: 'eskalation-zurueck', changes: { type: before.type } });
   persist();
 }
 
@@ -246,8 +261,7 @@ export function listEscalations(): Record<string, Escalation> {
   return load().escalations;
 }
 
-// ---- Freigaben ----
-
+// MARK: - Freigaben
 export function listApprovals() {
   return load().approvals;
 }
@@ -275,8 +289,7 @@ export function unapproveRoutes(keys: string[]) {
   persist();
 }
 
-// ---- Bestätigte Notiz-Hinweise ----
-
+// MARK: - Bestätigte Notiz-Hinweise
 export function listNoteConfirmations() {
   return load().noteConfirmations;
 }
@@ -286,17 +299,20 @@ export function confirmNote(requestId: string, c: { earliest?: string; latest?: 
   if (c) {
     for (const v of [c.earliest, c.latest]) if (v !== undefined && !HHMM.test(v)) throw new ValidationError('Uhrzeit im Format HH:MM');
     d.noteConfirmations[requestId] = { ...c, confirmedAt: new Date().toISOString() };
-  } else delete d.noteConfirmations[requestId];
+    d.log.push({ at: d.noteConfirmations[requestId].confirmedAt, entity: 'requests', id: requestId, action: c.earliest || c.latest ? 'notiz-bestaetigt' : 'notiz-verworfen', changes: { ...c } });
+  } else if (d.noteConfirmations[requestId]) {
+    delete d.noteConfirmations[requestId];
+    d.log.push({ at: new Date().toISOString(), entity: 'requests', id: requestId, action: 'notiz-zurueck' });
+  }
   persist();
 }
 
-// ---- Planer-Entscheidungen ----
-
+// MARK: - Planer-Entscheidungen
 export function listDecisions(): Record<string, Decision> {
   return load().decisions;
 }
 
-export function setDecision(requestId: string, input: { mode: DecisionMode; technicianId?: string; date?: string; reason: string; override: boolean }) {
+export function setDecision(requestId: string, input: { mode: DecisionMode; technicianId?: string; date?: string; reason: string; override: boolean; replaces?: string }) {
   const d = load();
   const before = d.decisions[requestId] ?? null;
   const decision: Decision = { ...input, reason: input.reason.trim(), at: new Date().toISOString() };
@@ -305,9 +321,9 @@ export function setDecision(requestId: string, input: { mode: DecisionMode; tech
     at: decision.at,
     entity: 'requests',
     id: requestId,
-    action: input.mode === 'pin' ? 'fixiert' : input.mode === 'exclude' ? 'aus-plan' : 'vorgezogen',
+    action: input.replaces ? 'getauscht' : input.mode === 'pin' ? 'fixiert' : input.mode === 'exclude' ? 'aus-plan' : 'vorgezogen',
     reason: decision.reason || undefined,
-    changes: { before: before ? { mode: before.mode, technicianId: before.technicianId, date: before.date } : null, after: { mode: input.mode, technicianId: input.technicianId, date: input.date }, override: input.override },
+    changes: { before: before ? { mode: before.mode, technicianId: before.technicianId, date: before.date } : null, after: { mode: input.mode, technicianId: input.technicianId, date: input.date, replaces: input.replaces }, override: input.override },
   });
   persist();
   return decision;
@@ -320,6 +336,11 @@ export function clearDecision(requestId: string) {
   delete d.decisions[requestId];
   d.log.push({ at: new Date().toISOString(), entity: 'requests', id: requestId, action: 'zurueckgesetzt', changes: { before: { mode: before.mode, technicianId: before.technicianId, date: before.date } } });
   persist();
+}
+
+/** Gesamtes Protokoll, neueste zuerst */
+export function listLog(): AuditEntry[] {
+  return [...load().log].reverse();
 }
 
 export function auditFor(id: string): AuditEntry[] {

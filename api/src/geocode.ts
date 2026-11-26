@@ -1,3 +1,13 @@
+/**
+ * @file      geocode.ts – Adresse ↔ Koordinaten mit mehrstufigem Fallback
+ * @layer     Backend · Infrastruktur (I/O: Google Geocoding / OSM Nominatim, offline: towns.ts)
+ * @einstieg  geocode(address, data) · reverseGeocode(lat, lng)
+ * @genutzt   index.ts → GET /api/geocode(/reverse) → Web: LocationAssist (Korrektur in der Stammdaten-Ansicht)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ *
+ * DATEN: 8 Anfragen ohne Koordinaten + Tippfehler in Adressen. Kette: Google → OSM → gleiche PLZ im Datensatz → Ortsmitte.
+ * ANNAHME: Ergebnis wird nie automatisch übernommen – der Planer bestätigt; `precision` zeigt, wie genau es ist.
+ */
 import { config } from './config.js';
 import type { Dataset } from './types.js';
 import { findTown, nearestTown } from './towns.js';
@@ -7,6 +17,8 @@ export interface GeoResult { lat: number; lng: number; address: string; source: 
 
 const cache = new Map<string, GeoResult | null>();
 const UA = { 'User-Agent': 'heizma-case-study/1.0', 'Accept-Language': 'de' };
+
+// MARK: - Anbieter (je 4 s Timeout)
 
 async function google(params: string): Promise<GeoResult | null> {
   const key = config.map?.googleMapsApiKey;
@@ -39,6 +51,7 @@ async function osm(path: string): Promise<GeoResult | null> {
 /** "Rosenweg 20, 3580 Horn, Österreich" → "Rosenweg 20, 3580 Horn" */
 const shorten = (s: string) => s.replace(/,\s*(Österreich|Austria)$/i, '');
 
+/** Probiert Anbieter nacheinander, cached auch Fehlschläge (null) pro Prozess. */
 async function withFallback(key: string, ...tries: (() => Promise<GeoResult | null>)[]) {
   if (cache.has(key)) return cache.get(key)!;
   let result: GeoResult | null = null;
@@ -50,8 +63,10 @@ async function withFallback(key: string, ...tries: (() => Promise<GeoResult | nu
   return result;
 }
 
+// MARK: - Vorwärts-Geocoding (EINSTIEG)
+
 /**
- * Stufenweise Suche – Adressen enthalten absichtlich Tippfehler:
+ * DATEN: Stufenweise Suche – Adressen enthalten absichtlich Tippfehler:
  * 1. ganze Adresse  2. Straße ohne Hausnummer  3. nur PLZ + Ort.
  * precision sagt der Oberfläche, wie genau das Ergebnis ist.
  */
@@ -74,6 +89,8 @@ export async function geocode(address: string, data?: Dataset): Promise<GeoResul
   return localGeocode(address, data);
 }
 
+// MARK: - Offline-Fallback
+
 const plzOf = (s: string) => s.match(/\b\d{4}\b/)?.[0];
 
 /**
@@ -81,7 +98,7 @@ const plzOf = (s: string) => s.match(/\b\d{4}\b/)?.[0];
  * 1. andere Anfragen derselben PLZ mit Koordinaten → deren Mittelpunkt
  * 2. Ortsverzeichnis (PLZ/Ortsname) → Ortsmitte
  */
-export function localGeocode(address: string, data?: Dataset): GeoResult | null {
+function localGeocode(address: string, data?: Dataset): GeoResult | null {
   const town = address.split(',').slice(1).join(',').trim() || address;
   const plz = plzOf(town);
   const peers = (data?.requests ?? []).filter((r) => r.lat != null && r.lng != null && plz && plzOf(r.address.split(',').pop() ?? '') === plz);
@@ -94,6 +111,8 @@ export function localGeocode(address: string, data?: Dataset): GeoResult | null 
   if (t) return { lat: t[2], lng: t[3], address: `${t[1]} ${t[0]}`, source: 'offline', precision: 'town' };
   return null;
 }
+
+// MARK: - Rückwärts-Geocoding (Pin auf der Karte → Adresse)
 
 export async function reverseGeocode(lat: number, lng: number): Promise<GeoResult | null> {
   const hit = await withFallback(`r:${lat},${lng}`, () => google(`latlng=${lat},${lng}`), () => osm(`reverse?lat=${lat}&lon=${lng}`));

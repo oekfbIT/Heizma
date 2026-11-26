@@ -1,3 +1,8 @@
+/**
+ * @file      TechnikerInteractor.ts – Modul Techniker: Personen, Verfügbarkeiten, Farben, Gebiets-Vorlagen, Eskalationen
+ * @layer     Web · Modul-Interactor
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import type { ApiService } from '@/core/ApiService';
 import { Resource } from '@/core/Resource';
 import type { Technician } from '@/lib/types';
@@ -25,8 +30,7 @@ export class TechnikerInteractor {
     return [this.data];
   }
 
-  // ---------- Lesen & Aufbereiten ----------
-
+  // MARK: - Lesen & Aufbereiten
   list(): Technician[] {
     return this.data.getState().data?.technicians ?? [];
   }
@@ -90,8 +94,7 @@ export class TechnikerInteractor {
     return this.data.getState().data?.escalations[escalationKey(id, target)];
   }
 
-  // ---------- Schreiben (nur eigene Daten; Aktualisieren übernimmt der CoreInteractor) ----------
-
+  // MARK: - Schreiben (nur eigene Daten; Aktualisieren übernimmt der CoreInteractor)
   update(id: string, changes: Record<string, string>) {
     return this.api.send(`/api/stammdaten/technicians/${encodeURIComponent(id)}`, 'PATCH', changes);
   }
@@ -110,6 +113,55 @@ export class TechnikerInteractor {
 }
 
 /** Ein Außendienstler = ein Einsatzgebiet. „Techniker Ost“ → „Ost“ */
+/** Vorlage für ein Einsatzgebiet (Dropdown in der Detailansicht) */
+export interface RegionPreset {
+  value: string;
+  label: string;
+  polygon: { lat: number; lng: number }[];
+}
+
+/** Kreis um einen Punkt als Polygon (12 Eckpunkte, ausreichend für Punkt-in-Polygon) */
+export function circlePolygon(center: { lat: number; lng: number }, radiusKm: number, points = 12): { lat: number; lng: number }[] {
+  const dLat = radiusKm / 111.32;
+  const dLng = radiusKm / (111.32 * Math.cos((center.lat * Math.PI) / 180));
+  return Array.from({ length: points }, (_, i) => {
+    const a = (2 * Math.PI * i) / points;
+    return { lat: +(center.lat + dLat * Math.sin(a)).toFixed(4), lng: +(center.lng + dLng * Math.cos(a)).toFixed(4) };
+  });
+}
+
+/** Punkt-in-Polygon (Ray Casting) – gleiche Logik wie in der API */
+export function inPolygon(p: { lat: number; lng: number }, poly: { lat: number; lng: number }[]): boolean {
+  if (poly.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if (a.lat > p.lat !== b.lat > p.lat && p.lng < ((b.lng - a.lng) * (p.lat - a.lat)) / (b.lat - a.lat) + a.lng) inside = !inside;
+  }
+  return inside;
+}
+
+/** Vorlagen: Gebiet einer anderen Person übernehmen oder Umkreis um den Wohnort */
+export function regionPresets(tech: Technician, all: Technician[]): RegionPreset[] {
+  const others = all
+    .filter((t) => t.id !== tech.id && (t.region?.length ?? 0) >= 3)
+    .map((t) => ({ value: `copy:${t.id}`, label: `Gebiet von ${regionName(t)} übernehmen`, polygon: t.region }));
+  const circles = [30, 50, 80].map((km) => ({ value: `circle:${km}`, label: `Umkreis ${km} km um ${tech.home.label}`, polygon: circlePolygon(tech.home, km) }));
+  return [...circles, ...others];
+}
+
+/** Text-Format des Gebiets-Felds: eine Zeile pro Eckpunkt „lat, lng“ */
+export const serializeRegion = (poly: { lat: number; lng: number }[]) => poly.map((p) => `${p.lat}, ${p.lng}`).join('\n');
+
+/** Text des Gebiets-Felds → Eckpunkte (ungültige Zeilen werden ignoriert) */
+export function parseRegion(text: string): { lat: number; lng: number }[] {
+  return text
+    .split('\n')
+    .map((l) => l.split(',').map((x) => Number(x.trim())))
+    .filter((p) => p.length === 2 && p.every((n) => Number.isFinite(n)))
+    .map(([lat, lng]) => ({ lat, lng }));
+}
+
 export const regionName = (t: Technician) => t.name.replace(/^Techniker\s+/i, '');
 
-export const escalationKey = (id: string, target: EscalationTarget): TechnicanEscalationKey => `technicians:${id}:${target}`;
+const escalationKey = (id: string, target: EscalationTarget): TechnicanEscalationKey => `technicians:${id}:${target}`;

@@ -1,3 +1,8 @@
+/**
+ * @file      Page.tsx – UI-Baustein Page
+ * @layer     Web · Design-System (Komponente)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cx } from '../cx';
@@ -9,13 +14,14 @@ export function Page({ narrow, className, children }: { narrow?: boolean; classN
 }
 
 /** Titel + Untertitel, optional Zurück-Link und Aktionen rechts */
-export function PageHeader({ title, subtitle, back, actions }: { title: ReactNode; subtitle?: ReactNode; back?: { to: string; label: string }; actions?: ReactNode }) {
+export function PageHeader({ title, subtitle, back, actions, below }: { title: ReactNode; subtitle?: ReactNode; back?: { to: string; label: string }; actions?: ReactNode; below?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
         {back && <BackLink to={back.to}>{back.label}</BackLink>}
         <h1 className={cx('page-title', back && 'mt-2')}>{title}</h1>
         {subtitle && <p className="page-subtitle">{subtitle}</p>}
+        {below}
       </div>
       {actions}
     </div>

@@ -1,3 +1,8 @@
+/**
+ * @file      types.ts – Typen des Techniker-Moduls
+ * @layer     Web · Modul-Typen
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import type { AvailabilityEntry, Technician } from '@/lib/types';
 import type { Escalation } from '@/modules/anfragen/types';
 

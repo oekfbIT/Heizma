@@ -1,3 +1,13 @@
+/**
+ * @file      travelMatrix.ts – Fahrzeitmatrix aus POST /travel/path (gecacht) + Schätz-Fallback
+ * @layer     Backend · Infrastruktur (I/O: Heizma-API, Datei-Cache)
+ * @einstieg  getTravelMatrix(data) → { lookup, stats } · estimateLookup (Tests/Mock)
+ * @genutzt   planner.ts und verify.ts nutzen ausschließlich das Interface `TravelLookup`
+ * @siehe     docs/03-planung-und-regeln.md#fahrzeiten · docs/10-code-navigation.md
+ *
+ * Fahrzeitquelle tauschen (OSRM, Google, Mapbox …): nur hier ein neues `TravelLookup` bauen –
+ * Planer und Prüfung bleiben unverändert.
+ */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { config } from './config.js';
@@ -15,9 +25,12 @@ import { eligibleTechnicians } from './validation.js';
  * parallel geladen und auf Platte gecacht. Fehlt ein Paar, fällt es auf die Luftlinien-Schätzung
  * zurück und wird als "geschätzt" markiert – der Validator weist das aus.
  *
- * Annahme (Trade-off): Fahrzeit A→B ≈ B→A. Halbiert die Calls; Abweichung auf Landstraßen gering.
+ * ANNAHME · TRADE-OFF: Fahrzeit A→B ≈ B→A. Halbiert die Calls; Abweichung auf Landstraßen gering.
  */
 
+// MARK: - Öffentliche Typen
+
+/** Einzige Schnittstelle, die Planer und Prüfung kennen. Synchron → schnelle Simulation ohne await. */
 export interface TravelLookup {
   minutes(a: LatLng, b: LatLng): number;
   isEstimated(a: LatLng, b: LatLng): boolean;
@@ -31,6 +44,9 @@ export interface MatrixStats {
   apiCalls: number;
   builtAt: string;
 }
+
+// MARK: - Datei-Cache (api/data/travel-cache.json · auf Vercel /tmp)
+// ACHTUNG: Datei löschen = alle Fahrzeiten werden beim nächsten Plan neu geladen (dauert einige Minuten).
 
 const CACHE_PATH = resolve(
   process.env.TRAVEL_CACHE_PATH ?? (process.env.VERCEL ? '/tmp/heizma-travel-cache.json' : resolve(process.cwd(), 'data/travel-cache.json')),
@@ -62,8 +78,10 @@ function writeCache(c: CacheFile) {
   }
 }
 
-/** Alle Punktpaare, die in einer Route benachbart sein können */
-export function neededPairs(data: Dataset): Map<string, [LatLng, LatLng]> {
+// MARK: - Welche Paare werden gebraucht?
+
+/** Alle Punktpaare, die in einer Route benachbart sein können (REGEL-5: nur Punkte mit gemeinsamer zuständiger Person) */
+function neededPairs(data: Dataset): Map<string, [LatLng, LatLng]> {
   const groups = new Map<string, LatLng[]>(data.technicians.map((t) => [t.id, [{ lat: t.home.lat, lng: t.home.lng }]]));
   for (const r of data.requests) {
     if (!hasCoords(r)) continue;
@@ -79,6 +97,8 @@ export function neededPairs(data: Dataset): Map<string, [LatLng, LatLng]> {
   }
   return pairs;
 }
+
+// MARK: - Paare → möglichst wenige API-Calls
 
 /** Paare zu Pfaden verketten (Kanten-Walk, jede Kante genau einmal), dann in 14er-Stücke schneiden */
 function pairsToPaths(pairs: [LatLng, LatLng][]): LatLng[][] {
@@ -121,12 +141,16 @@ async function pool<T>(items: T[], limit: number, fn: (x: T) => Promise<void>) {
   }));
 }
 
+// MARK: - Matrix laden (EINSTIEG)
+
+// In-Memory-Stand: `current` = fertige Matrix für den Datenstand, `building` = laufender Ladevorgang (verhindert Doppel-Laden)
 let current: { key: string; lookup: TravelLookup; stats: MatrixStats } | null = null;
 let building: Promise<void> | null = null;
 
 /** Matrix für den Datenstand laden/aufbauen (fehlende Paare werden nachgeladen) */
 export async function getTravelMatrix(data: Dataset, opts: { log?: boolean } = {}): Promise<{ lookup: TravelLookup; stats: MatrixStats }> {
   const pairs = neededPairs(data);
+  // Schlüssel ohne lokale Revision (#r…): Korrekturen an Notizen o. Ä. sollen nicht jedes Mal neu laden
   const key = `${data.source}:${[...pairs.keys()].length}:${data.loadedAt.split('#')[0]}`;
   if (current && current.key === key) return current;
   if (building) await building;
@@ -140,6 +164,7 @@ export async function getTravelMatrix(data: Dataset, opts: { log?: boolean } = {
       if (opts.log) console.log(`[travel] ${missing.length} fehlende Paare → ${paths.length} Calls an /travel/path`);
       building = (async () => {
         let failed = 0;
+        // TRADE-OFF: 4 parallele Calls – schnell genug, ohne die Case-API zu fluten
         await pool(paths, 4, async (path) => {
           try {
             const legs = await travelPathRaw(path);
@@ -149,6 +174,7 @@ export async function getTravelMatrix(data: Dataset, opts: { log?: boolean } = {
             });
             if (opts.log && apiCalls % 25 === 0) console.log(`[travel] ${apiCalls}/${paths.length}`);
           } catch (e) {
+            // DATEN: fehlgeschlagener Call → Paare bleiben leer → Luftlinien-Schätzung, im UI mit „≈“ markiert
             failed++;
             if (failed <= 3) console.warn('[travel] Call fehlgeschlagen, Schätzung als Fallback:', (e as Error).message);
           }

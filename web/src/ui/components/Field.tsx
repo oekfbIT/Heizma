@@ -1,3 +1,8 @@
+/**
+ * @file      Field.tsx – UI-Baustein Field
+ * @layer     Web · Design-System (Komponente)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import { forwardRef, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { cx } from '../cx';
 

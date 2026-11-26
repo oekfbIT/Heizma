@@ -1,11 +1,28 @@
+/**
+ * @file      validation.ts – Datenqualität: Befunde (Fehler / Warnung / Hinweis) + Zuständigkeitsregel
+ * @layer     Backend · Domäne (reine Funktionen)
+ * @einstieg  validateDataset() → Liste von Issues · eligibleTechnicians() → REGEL-5
+ * @genutzt   planner.ts (Zuständigkeit, blockierende Fehler), verify.ts, index.ts (Stammdaten-Ansicht im Web)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ *
+ * Severity-Logik:  error → Anfrage wird NICHT geplant, bis korrigiert · warning → wird geplant, Hinweis im UI
+ *                  info → nur zur Kenntnis (z. B. Notiz vorhanden, Tag gesperrt)
+ * Neuen Datenfehler-Typ hinzufügen: hier `push(...)` mit eindeutigem `code`, dann im Web IssueBadge/Texte prüfen.
+ */
 import { haversineKm, hasCoords, pointInPolygon } from './geo.js';
-import { isValidHHMM, splitIso, toMinutes } from './time.js';
+import { isValidHHMM, normalizeTime, splitIso, toMinutes } from './time.js';
 import type { Dataset, Issue, ServiceRequest, Technician } from './types.js';
 
 const EXPECTED_DURATION: Record<string, number> = { PV: 60, WP: 75, 'WP+PV': 105 };
 export const RADIUS_FALLBACK_KM = 15;
 
-/** Zuständigkeitsregel: Gebiet → sonst Wohnort ≤ 15 km → sonst nicht zuordenbar */
+// MARK: - Zuständigkeit (REGEL-5)
+
+/**
+ * REGEL-5 · Zuständigkeitsregel: Gebiet → sonst Wohnort ≤ 15 km → sonst nicht zuordenbar
+ * ANNAHME: Überlappende Gebiete → alle betroffenen Personen sind zuständig; der Planer wählt die günstigste Route.
+ * DATEN: Person ohne Gebiet (tech_07) → nur über den 15-km-Umkreis zuständig.
+ */
 export function eligibleTechnicians(request: ServiceRequest, technicians: Technician[]): Technician[] {
   if (!hasCoords(request)) return [];
   const byRegion = technicians.filter((t) => pointInPolygon(request, t.region));
@@ -13,11 +30,13 @@ export function eligibleTechnicians(request: ServiceRequest, technicians: Techni
   return technicians.filter((t) => haversineKm(request, t.home) <= RADIUS_FALLBACK_KM);
 }
 
+// MARK: - Datensatz-Validierung (EINSTIEG)
+
 export function validateDataset(data: Dataset): Issue[] {
   const issues: Issue[] = [];
   const techIds = new Set(data.technicians.map((t) => t.id));
 
-  // ---- Techniker ----
+  // MARK: Techniker – DATEN: ohne Gebiet (tech_07), ohne Verfügbarkeit (tech_06)
   for (const t of data.technicians) {
     const entries = data.availability.filter((a) => a.technicianId === t.id);
     const usable = entries.filter((a) => !a.blocked);
@@ -46,7 +65,7 @@ export function validateDataset(data: Dataset): Issue[] {
     }
   }
 
-  // ---- Verfügbarkeiten ----
+  // MARK: Verfügbarkeiten
   for (const a of data.availability) {
     const id = `${a.technicianId}@${a.date}`;
     if (!techIds.has(a.technicianId)) {
@@ -60,14 +79,15 @@ export function validateDataset(data: Dataset): Issue[] {
     }
   }
 
-  // ---- Anfragen ----
+  // MARK: Anfragen – DATEN: fehlende Koordinaten, Tippfehler, unbekannter Typ, Uhrzeitformat, außerhalb aller Gebiete, Notizen
   for (const r of data.requests) {
-    const push = (field: string, severity: Issue['severity'], code: string, message: string) =>
-      issues.push({ entity: 'request', entityId: r.id, field, severity, code, message });
+    const push = (field: string, severity: Issue['severity'], code: string, message: string, suggestion?: string) =>
+      issues.push({ entity: 'request', entityId: r.id, field, severity, code, message, ...(suggestion ? { suggestion } : {}) });
 
     if (!hasCoords(r)) {
       push('lat', 'error', 'NO_COORDS', 'Koordinaten fehlen – die Adresse muss geokodiert werden.');
     }
+    // TRADE-OFF: einfache PLZ-Heuristik (4 Ziffern). Tippfehler im Ortsnamen findet erst geocode.ts.
     if (!/\b\d{4}\b/.test(r.address)) {
       push('address', 'warning', 'ADDRESS_NO_ZIP', 'Adresse ohne gültige PLZ – möglicher Tippfehler.');
     }
@@ -77,7 +97,10 @@ export function validateDataset(data: Dataset): Issue[] {
       push('durationMinutes', 'warning', 'DURATION_MISMATCH', `Dauer ${r.durationMinutes} min passt nicht zum Typ ${r.visitationType} (erwartet ${EXPECTED_DURATION[r.visitationType]} min).`);
     }
     if (r.customerAvailableFrom !== null && !isValidHHMM(r.customerAvailableFrom)) {
-      push('customerAvailableFrom', 'error', 'BAD_TIME', `Ungültige Uhrzeit „${r.customerAvailableFrom}“ (erwartet HH:MM).`);
+      const fixed = normalizeTime(r.customerAvailableFrom);
+      // Eindeutiges Format-Problem (wie Int/Double): automatisch gelesen und geplant, Korrektur per Klick
+      if (fixed) push('customerAvailableFrom', 'warning', 'TIME_FORMAT', `Uhrzeit „${r.customerAvailableFrom}“ als ${fixed} gelesen und so geplant – bitte übernehmen.`, fixed);
+      else push('customerAvailableFrom', 'error', 'BAD_TIME', `Ungültige Uhrzeit „${r.customerAvailableFrom}“ (erwartet HH:MM) – nicht eindeutig lesbar.`);
     }
     if (hasCoords(r) && eligibleTechnicians(r, data.technicians).length === 0) {
       push('address', 'error', 'NOT_ASSIGNABLE', 'Außerhalb aller Einsatzgebiete und > 15 km von jedem Wohnort – nicht zuordenbar.');
@@ -87,7 +110,7 @@ export function validateDataset(data: Dataset): Issue[] {
     }
   }
 
-  // ---- Fixe Termine ----
+  // MARK: Fixe Termine – REGEL-6: werden nie verschoben, nur Konflikte gemeldet
   for (const ap of data.appointments) {
     const push = (field: string, severity: Issue['severity'], code: string, message: string) =>
       issues.push({ entity: 'appointment', entityId: ap.id, field, severity, code, message });

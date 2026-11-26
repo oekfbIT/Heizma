@@ -1,3 +1,8 @@
+/**
+ * @file      useResource.ts – React-Hook: Resource abonnieren und beim ersten Anzeigen laden
+ * @layer     Web · Core
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import type { Resource, ResourceState } from './Resource';
 

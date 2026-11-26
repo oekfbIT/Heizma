@@ -1,3 +1,8 @@
+/**
+ * @file      Login.tsx – Seite: Mock-Login
+ * @layer     Web · View (Seite)
+ * @siehe     docs/09-setup.md · docs/10-code-navigation.md
+ */
 import { useState, type FormEvent } from 'react';
 import logo from '@/assets/brand/heizma-logo.png';
 import { Alert, Button, Field, Input } from '@/ui';
@@ -28,7 +33,7 @@ export default function Login() {
       <form onSubmit={onSubmit} className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="mb-8 flex flex-col items-center gap-3">
           <img src={logo} alt="heizma" className="h-10 w-auto" />
-          <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Einsatzplanung</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-gray-400">Routenoptimierung</span>
         </div>
 
         <h1 className="mb-1 text-xl font-semibold text-ink">Anmelden</h1>

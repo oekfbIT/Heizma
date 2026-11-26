@@ -1,8 +1,26 @@
+/**
+ * @file      verify.ts – Unabhängige Regelprüfung des fertigen Plans („Vier-Augen-Prinzip im Code“)
+ * @layer     Backend · Domäne (reine Funktionen)
+ * @einstieg  verifyPlan() → Badge „✓ 0 Regelverstöße · 10 Regeln“ · applyExceptions() → bewusste Ausnahmen (gelb)
+ * @nutzt     nur Originaldaten + ausgegebene Uhrzeiten + dieselbe Fahrzeitquelle wie der Planer
+ * @genutzt   index.ts (GET /api/plan), Tests in __tests__/planner.test.ts schleusen gezielt Fehler ein
+ * @siehe     docs/03-planung-und-regeln.md#die-regeln--umsetzung-und-nachweis · docs/10-code-navigation.md
+ *
+ * Zuordnung Prüf-Schlüssel → Case-Regel:
+ *   window → REGEL-1/2 · returnHome → REGEL-2 · lunch → REGEL-3 · customerFrom → REGEL-4
+ *   responsibility → REGEL-5 · fixed → REGEL-6 · travel → REGEL-7 · priority → REGEL-8
+ *   duration, unique → Zusatzprüfungen (Dauer passt zum Typ, jede Anfrage genau einmal)
+ *
+ * ACHTUNG (für Reviewer): Die Zeitregeln (REGEL-1…7) rechnen komplett mit eigenem Code. Nur die Prioritätsprüfung
+ * (REGEL-8) nutzt swapOptions() aus planner.ts, um „hätte eine ältere eine jüngere ersetzen können?“ zu beantworten.
+ * Das ist die einzige Abhängigkeit zum Planer. AUSBLICK: eigene Tauschsuche hier, damit die Prüfung 100 % unabhängig ist.
+ */
 import { hasCoords } from './geo.js';
-import { splitIso, toMinutes } from './time.js';
+import { normalizeTime, splitIso, toMinutes } from './time.js';
 import type { TravelLookup } from './travelMatrix.js';
 import type { Dataset, Decision, LatLng, Plan, PlanException, RuleCheck, Verification, Violation } from './types.js';
 import { eligibleTechnicians } from './validation.js';
+import { swapOptions } from './planner.js';
 
 /**
  * Unabhängige Prüfung des fertigen Plans gegen alle Case-Regeln.
@@ -10,6 +28,8 @@ import { eligibleTechnicians } from './validation.js';
  * den Originaldaten und derselben Fahrzeitquelle nach. Findet der Planer einen Fehler nicht,
  * findet ihn diese Prüfung (Vier-Augen-Prinzip im Code).
  */
+
+// MARK: - Konstanten (absichtlich dupliziert statt aus planner.RULES importiert → unabhängige Prüfung)
 
 const L_EARLY = toMinutes('11:30');
 const L_LATE = toMinutes('13:00');
@@ -28,7 +48,10 @@ const RULE_LABELS: Record<string, string> = {
   priority: 'Reicht die Kapazität nicht, kommen ältere Anfragen zuerst',
 };
 
-export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, noteConstraints: Record<string, { earliest?: string; latest?: string }> = {}): Verification {
+// MARK: - verifyPlan (EINSTIEG)
+
+/** Prüft jede Route Stopp für Stopp. Jede Einzelprüfung zählt in `checks`, jeder Fehler landet in `violations`. */
+export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, noteConstraints: Record<string, { earliest?: string; latest?: string }> = {}, decisions: Record<string, Decision> = {}): Verification {
   const rules = new Map<string, RuleCheck>(Object.entries(RULE_LABELS).map(([rule, label]) => [rule, { rule, label, checks: 0, violations: [] }]));
   const check = (rule: string, ok: boolean, v: Omit<Violation, 'rule'>) => {
     const r = rules.get(rule)!;
@@ -41,6 +64,7 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
   const seen = new Map<string, string>();
   const plannedApts = new Set<string>();
 
+  // MARK: Pro Route: Fenster, Fahrzeiten, Kundenzeit, Dauer, Zuständigkeit, fixe Termine
   for (const route of plan.routes) {
     const tech = data.technicians.find((t) => t.id === route.technicianId);
     const ctx = { technicianId: route.technicianId, date: route.date };
@@ -64,10 +88,12 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
       const lunchInGap = lunch && lunch[0] >= freeFrom && lunch[1] <= start;
       const needed = leg + (lunchInGap ? 60 : 0);
       const earliestLeave = i === 0 ? ws : free;
+      // REGEL-7: Lücke zum vorigen Stopp muss Fahrzeit (+ ggf. Pause) abdecken
       check('travel', start - earliestLeave >= needed, {
         ...sctx,
         message: `${stop.customer}: ${start - earliestLeave} min Lücke, benötigt ${needed} min (Fahrt ${leg}${lunchInGap ? ' + Pause 60' : ''})`,
       });
+      // REGEL-1/2: Termin inkl. Anfahrt im Fenster
       check('window', start - leg >= ws && end <= we, { ...sctx, message: `${stop.customer} ${stop.start}–${stop.end} liegt inkl. Anfahrt außerhalb von ${avail.start}–${avail.end}` });
       if (lunch) check('travel', !(lunch[0] < end && lunch[1] > start), { ...sctx, message: `Mittagspause überschneidet sich mit ${stop.customer}` });
 
@@ -76,19 +102,23 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
         check('unique', !!r && !seen.has(stop.id), { ...sctx, message: `${stop.id} ${r ? `doppelt (auch ${seen.get(stop.id)})` : 'unbekannt'}` });
         seen.set(stop.id, `${route.technicianId}@${route.date}`);
         if (r) {
-          if (r.customerAvailableFrom && /^\d{2}:\d{2}$/.test(r.customerAvailableFrom))
-            check('customerFrom', start >= toMinutes(r.customerAvailableFrom), { ...sctx, message: `${stop.customer} beginnt ${stop.start}, Kunde erst ab ${r.customerAvailableFrom}` });
+          const from = normalizeTime(r.customerAvailableFrom);
+          // REGEL-4: customerAvailableFrom + bestätigte Notiz-Zeitgrenzen
+          if (from) check('customerFrom', start >= toMinutes(from), { ...sctx, message: `${stop.customer} beginnt ${stop.start}, Kunde erst ab ${from}` });
           const nc = noteConstraints[r.id];
           if (nc?.earliest) check('customerFrom', start >= toMinutes(nc.earliest), { ...sctx, message: `${stop.customer} beginnt ${stop.start}, laut bestätigter Notiz erst ab ${nc.earliest}` });
           if (nc?.latest) check('customerFrom', end <= toMinutes(nc.latest), { ...sctx, message: `${stop.customer} endet ${stop.end}, laut bestätigter Notiz bis ${nc.latest}` });
+          // Zusatz: Dauer passt zum Typ · DATEN: unbekannter Typ = 105 min
           const expected = r.visitationType === null ? 105 : ({ PV: 60, WP: 75, 'WP+PV': 105 } as const)[r.visitationType];
           check('duration', end - start === expected, { ...sctx, message: `${stop.customer}: ${end - start} min geplant, erwartet ${expected}` });
+          // REGEL-5: Zuständigkeit
           const eligible = eligibleTechnicians(r, data.technicians).map((t) => t.id);
           check('responsibility', eligible.includes(route.technicianId), { ...sctx, message: `${stop.customer} liegt weder im Gebiet von ${tech.name} noch ≤ 15 km von dessen Wohnort` });
         }
       } else {
         const a = appointments.get(stop.id);
         plannedApts.add(stop.id);
+        // REGEL-6: fixer Termin exakt bei Person, Tag und Uhrzeit wie in der API
         const ok = !!a && a.technicianId === route.technicianId && splitIso(a.start).date === route.date && splitIso(a.start).minutes === start && splitIso(a.end).minutes === end;
         check('fixed', ok, { ...sctx, message: `Fixer Termin ${stop.id} verschoben oder falsch zugeordnet` });
       }
@@ -97,7 +127,7 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
       freeFrom = end;
     }
 
-    // Heimfahrt
+    // MARK: Heimfahrt – REGEL-1/2 (Ende am Wohnort, max. +60 min)
     const back = travel.minutes(pos, tech.home);
     const lastEnd = toMinutes(route.stops[route.stops.length - 1].end);
     check('returnHome', ret >= lastEnd + back, { ...ctx, message: `Ankunft zu Hause ${route.returnHome} zu früh (Fahrt ${back} min)` });
@@ -105,7 +135,7 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
 
     if (lunch && lunch[0] >= lastEnd) check('lunch', lunch[0] >= ret, { ...ctx, message: 'Mittagspause überschneidet sich mit der Heimfahrt' });
 
-    // Mittagspause
+    // MARK: Mittagspause – REGEL-3 (inkl. „hätte gepasst, fehlt aber“)
     const full = we - ws >= FULL_DAY;
     if (lunch) {
       check('lunch', full, { ...ctx, message: 'Pause an einem Halbtag' });
@@ -125,38 +155,38 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
     }
   }
 
-  // Fixe Termine: alle noch da?
+  // MARK: Planweite Prüfungen
+  // REGEL-6: Fixe Termine: alle noch da?
   for (const a of data.appointments) {
     const hasDay = plan.routes.some((r) => r.technicianId === a.technicianId && r.date === splitIso(a.start).date);
     if (hasDay) check('fixed', plannedApts.has(a.id), { technicianId: a.technicianId, date: splitIso(a.start).date, stopId: a.id, message: `Fixer Termin ${a.id} fehlt im Plan` });
     else notes.push(`Fixer Termin ${a.id} liegt an einem Tag ohne Verfügbarkeit von ${a.technicianId} (Datenfehler, bleibt unverändert)`);
   }
 
-  // Keine Anfrage verloren, Zuständigkeit der nicht zuordenbaren korrekt
+  // Zusatz `unique` + REGEL-5: Keine Anfrage verloren, Zuständigkeit der nicht zuordenbaren korrekt
   const unassigned = new Map(plan.unassigned.map((u) => [u.requestId, u]));
   for (const r of data.requests) {
     check('unique', seen.has(r.id) !== unassigned.has(r.id), { stopId: r.id, message: `${r.id} ${seen.has(r.id) ? 'eingeplant und zugleich auf der Warteliste' : 'weder eingeplant noch auf der Warteliste'}` });
     const u = unassigned.get(r.id);
+    // ACHTUNG · GRUND-PRAEFIX: prüft den Anfang von `reason` – muss zu den Texten in planner.ts buildPlan() passen
     if (u?.reason.startsWith('Nicht zuordenbar'))
       check('responsibility', hasCoords(r) && eligibleTechnicians(r, data.technicians).length === 0, { stopId: r.id, message: `${r.id} als nicht zuordenbar markiert, obwohl eine Zuständigkeit besteht` });
   }
 
-  // Priorität: ist eine jüngere Anfrage eingeplant, während eine ältere mit demselben Techniker wartet?
+  // REGEL-8: Priorität „ältere zuerst“: Wartet eine Anfrage, obwohl sie eine jüngere (nicht manuell gesetzte) Anfrage
+  // regelkonform ersetzen könnte? Dann ist die Regel verletzt. Geprüft wird jeder mögliche Tausch in jeder offenen Route.
   const waitingCap = plan.unassigned.filter((u) => u.reason.startsWith('Kapazität')).map((u) => requests.get(u.requestId)!).filter(Boolean);
-  let inversions = 0;
   for (const w of waitingCap) {
-    const wEl = new Set(eligibleTechnicians(w, data.technicians).map((t) => t.id));
-    for (const route of plan.routes) {
-      if (!wEl.has(route.technicianId)) continue;
-      for (const s of route.stops) {
-        const r = s.kind === 'request' ? requests.get(s.id) : null;
-        if (r && r.createdAt > w.createdAt) inversions++;
-      }
-    }
+    const swap = swapOptions(data, plan, w.id, { travel, noteConstraints, decisions, withFallback: false, onlyYounger: true })[0];
+    check('priority', !swap, {
+      technicianId: swap?.technicianId,
+      date: swap?.date,
+      stopId: swap?.displaced.id,
+      message: swap ? `${w.customer} (älter) wartet, obwohl sie ${swap.displaced.customer} (jünger) am ${swap.date} ersetzen könnte` : '',
+    });
   }
-  rules.get('priority')!.checks = plan.routes.length;
-  if (inversions)
-    notes.push(`Priorität: ${waitingCap.length} ältere Anfragen auf der Warteliste passten in keinen Tag (Zeitfenster/Ort) – jüngere wurden nur dort eingeplant, wo keine ältere hineinpasste (die Planung prüft immer die älteste zuerst).`);
+  if (waitingCap.length && !rules.get('priority')!.violations.length)
+    notes.push(`Priorität: ${waitingCap.length} wartende Anfragen geprüft – keine passt regelkonform anstelle einer jüngeren in eine Route.`);
 
   const estLegs = plan.routes.reduce((n, r) => n + r.stops.filter((s) => s.travelEstimated).length, 0);
   if (estLegs) notes.push(`${estLegs} Fahrten basieren auf Luftlinien-Schätzung (keine echte Fahrzeit verfügbar).`);
@@ -165,6 +195,8 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
   const total = list.reduce((n, r) => n + r.violations.length, 0);
   return { ok: total === 0, totalViolations: total, rules: list, notes };
 }
+
+// MARK: - Bewusste Ausnahmen (Planer hat mit Begründung übersteuert)
 
 /**
  * Bewusste Ausnahmen: Hat der Planer eine Anfrage mit Begründung "trotzdem" eingeplant oder vorgezogen,
@@ -198,6 +230,7 @@ export function applyExceptions(v: Verification, plan: Plan, decisions: Record<s
     for (const s of r.stops) {
       const d = decisions[s.id];
       if (d?.mode === 'prioritize') exceptions.push({ requestId: s.id, rule: 'priority', technicianId: r.technicianId, date: r.date, message: `${s.customer} vorgezogen (vor älteren Anfragen)`, reason: d.reason });
+      if (d?.mode === 'pin' && d.replaces) exceptions.push({ requestId: s.id, rule: 'priority', technicianId: r.technicianId, date: r.date, message: `${s.customer} getauscht gegen ${d.replaces}${d.override ? ' (ältere Anfrage verdrängt)' : ''}`, reason: d.reason });
     }
 
   const total = rules.reduce((n, r) => n + r.violations.length, 0);

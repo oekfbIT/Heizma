@@ -1,3 +1,8 @@
+/**
+ * @file      types.ts – Typen des Anfragen-Moduls (Entscheidung, Eskalation, Notiz-Hinweis)
+ * @layer     Web · Modul-Typen
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import type { DecisionMode, ServiceRequest } from '@/lib/types';
 
 export interface Escalation {
@@ -16,7 +21,7 @@ export interface NoteInsight {
   hint: string;
   earliest?: string;
   latest?: string;
-  source: 'claude' | 'rules';
+  source: 'ai' | 'rules';
 }
 
 export interface NoteInfo {
@@ -28,6 +33,8 @@ export interface NoteInfo {
 export interface NoteConstraint {
   earliest?: string;
   latest?: string;
+  /** Zeitwunsch gelesen und verworfen → ohne Zeitgrenze planen */
+  ignore?: boolean;
 }
 
 export interface GeoResult {
@@ -45,6 +52,8 @@ export interface DecisionInput {
   technicianId?: string;
   date?: string;
   override?: boolean;
+  /** Tausch: diese Anfrage macht Platz */
+  replaces?: string;
 }
 
 export interface EscalationInput {

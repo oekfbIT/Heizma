@@ -1,3 +1,8 @@
+/**
+ * @file      Styleguide.tsx – Seite: lebendiger Styleguide aller UI-Bausteine (/styleguide)
+ * @layer     Web · View (Seite)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import { useState } from 'react';
 import {
   Alert,

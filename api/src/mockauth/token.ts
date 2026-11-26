@@ -1,3 +1,8 @@
+/**
+ * @file      token.ts – Zustandsloses HMAC-Sitzungstoken (funktioniert serverless)
+ * @layer     Backend · Auth
+ * @siehe     docs/07-api.md · docs/10-code-navigation.md
+ */
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SESSION_TTL_MS } from './credentials.js';
 

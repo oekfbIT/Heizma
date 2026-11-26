@@ -1,3 +1,8 @@
+/**
+ * @file      RegionFilter.tsx – Chip-Filter nach Einsatzgebiet
+ * @layer     Web · View-Komponente (Stammdaten)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import type { Technician } from '@/lib/types';
 import { NO_REGION, regionLabel } from '@/lib/regions';
 

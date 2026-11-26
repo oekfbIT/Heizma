@@ -1,3 +1,8 @@
+/**
+ * @file      index.css – Globale Styles: lädt Tokens + Komponenten-Klassen + Tailwind
+ * @layer     Web · Design-System
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 /* Reihenfolge: Fremd-CSS → Design-Tokens → Komponenten (landen per @layer an der richtigen Stelle) */
 @import 'leaflet/dist/leaflet.css';
 @import './ui/styles/tokens.css';

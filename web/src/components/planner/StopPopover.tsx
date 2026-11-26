@@ -1,3 +1,8 @@
+/**
+ * @file      StopPopover.tsx – Popover eines Stopps auf der Karte
+ * @layer     Web · View-Komponente (Karte)
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
+ */
 import { formatMinutes, visitationLabel } from '@/lib/format';
 import type { PlannedStop } from '@/lib/types';
 

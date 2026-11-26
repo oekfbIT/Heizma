@@ -1,10 +1,16 @@
+/**
+ * @file      RequestPlanningCard.tsx – Karte „Planung“ je Anfrage: Status + Eingriffe (verschieben, fixieren, vorziehen, herausnehmen)
+ * @layer     Web · View-Komponente
+ * @siehe     docs/03-planung-und-regeln.md#eingriffe-des-planers · docs/10-code-navigation.md
+ */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCore, useResource } from '@/core';
-import { formatDateTime, formatDay } from '@/lib/format';
+import { formatDateTime, formatDay, isoWeek } from '@/lib/format';
 import type { AuditEntry, RequestPlanning, SlotOption } from '@/lib/types';
 import type { DecisionInput } from '@/modules';
 import { Alert, Badge, Button, Card, Input, type BadgeTone } from '@/ui';
+import SwapModal from './SwapModal';
 
 /**
  * Planung einer einzelnen Anfrage: wo steht sie, und was kann der Planer tun.
@@ -18,6 +24,7 @@ const STATUS: Record<RequestPlanning['status'], { label: string; tone: BadgeTone
   pinned: { label: '📌 Manuell fixiert', tone: 'info-soft' },
   planned: { label: 'Vorgeschlagen', tone: 'success' },
   waitlist: { label: 'Warteliste', tone: 'warning-soft' },
+  review: { label: 'Zeitwunsch klären', tone: 'info-soft' },
   excluded: { label: 'Aus dem Plan genommen', tone: 'neutral' },
   unplannable: { label: 'Nicht planbar', tone: 'danger' },
 };
@@ -26,6 +33,10 @@ const ACTION: Record<string, string> = {
   fixiert: 'Fixiert',
   'aus-plan': 'Aus dem Plan genommen',
   vorgezogen: 'Vorgezogen',
+  getauscht: 'Getauscht',
+  'notiz-bestaetigt': 'Zeitwunsch übernommen',
+  'notiz-verworfen': 'Zeitwunsch verworfen',
+  'notiz-zurueck': 'Zeitwunsch-Entscheidung zurückgenommen',
   zurueckgesetzt: 'Entscheidung zurückgenommen',
   termin: 'Route freigegeben → Termin',
   'termin-zurueck': 'Freigabe zurückgenommen → wieder Anfrage',
@@ -40,6 +51,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
   const core = useCore();
   const planning = core.anfragen.planning.get(requestId);
   const { data: info, error } = useResource(planning);
+  const placement = useResource(core.system.forecast).data?.placements[requestId];
   const [mode, setMode] = useState<Mode>(null);
   const [options, setOptions] = useState<SlotOption[] | null>(null);
   const [picked, setPicked] = useState<SlotOption | null>(null);
@@ -83,14 +95,31 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
     }
   }
 
+  async function note(c: { earliest?: string; latest?: string; ignore?: boolean } | null, okText: string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await core.confirmNote(requestId, c);
+      await planning.load();
+      onChanged?.();
+      setMsg({ tone: 'ok', text: okText });
+    } catch (e) {
+      setMsg({ tone: 'error', text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error && !info) return <Card className="p-4 text-sm text-danger-700">{error}</Card>;
   if (!info) return <Card className="p-4 text-sm text-gray-400">Planung wird geladen …</Card>;
 
-  const st = STATUS[info.status];
+  // Diese Woche voll, aber in einer Folgewoche vorgeplant → „Vorgeplant KW …“ statt „Warteliste“
+  const st = info.status === 'waitlist' && placement ? { label: `Vorgeplant KW ${isoWeek(placement.date)}`, tone: 'info-soft' as BadgeTone } : STATUS[info.status];
   const d = info.decision;
   const locked = info.status === 'termin';
   const reasonOk = reason.trim().length >= 3;
   // Fehlerhafte Daten: nicht einplanbar – auch nicht als Ausnahme. Erst korrigieren, dann plant das System automatisch.
+  // ACHTUNG · GRUND-PRAEFIX: prüft den Anfang von `reason` – muss zu den Texten in planner.ts buildPlan() passen
   const dataBlocked = !!info.reason && /^(Datenfehler|Keine Koordinaten|Nicht zuordenbar)/.test(info.reason);
 
   return (
@@ -142,6 +171,19 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
             Platz {info.waitlist.position} von {info.waitlist.total} auf der Warteliste (nach Eingang)
           </p>
         )}
+        {info.status === 'waitlist' && placement && (
+          <p className="mt-1.5 rounded-lg bg-info-50 px-2.5 py-1.5 text-xs text-info-800">
+            <strong>Vorgeplant (vorläufig):</strong> {formatDay(placement.date)}, ca. {placement.start}–{placement.end} · {core.techniker.getShortName(placement.technicianId)}
+            <span className="block text-info-600">
+              Diese Woche ist voll. Wird bestätigt, sobald die Verfügbarkeit für KW {isoWeek(placement.date)} vorliegt (bis dahin: gleiche Zeiten wie diese Woche angenommen).
+            </span>
+            {!compact && (
+              <Link to={`/planer?week=${placement.week}`} className="ml-1 font-medium text-brand-600 hover:underline">
+                In der Planung ansehen →
+              </Link>
+            )}
+          </p>
+        )}
         {dataBlocked && (
           <Alert tone="danger" size="sm" className="mt-2 rounded-lg px-3 py-2">
             Mit fehlerhaften Daten kann die Anfrage nicht eingeplant werden – auch nicht manuell. Korrigiere die markierten Felder unten
@@ -175,6 +217,42 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         ))}
       </div>
 
+      {/* Zeitwunsch aus der Notiz – wird nie stillschweigend geplant */}
+      {info.timeWish && (
+        <div className={`mt-3 rounded-xl border p-3 text-sm ${info.timeWish.status === 'offen' ? 'border-info-200 bg-info-50' : 'border-gray-200 bg-gray-50'}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">🕘 Kundenwunsch: {info.timeWish.hint}</span>
+            <Badge tone={info.timeWish.kind === 'only' ? 'warning-soft' : 'neutral'}>{info.timeWish.kind === 'only' ? 'Muss' : 'Wunsch'}</Badge>
+            <Badge tone={info.timeWish.status === 'offen' ? 'info-soft' : info.timeWish.status === 'bestaetigt' ? 'success' : 'neutral'}>
+              {info.timeWish.status === 'offen' ? 'offen' : info.timeWish.status === 'bestaetigt' ? 'übernommen' : 'verworfen'}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-gray-600">Notiz: „{info.timeWish.note}“</p>
+          {info.timeWish.status === 'offen' && (
+            <p className="mt-1 text-xs text-info-800">Wird erst automatisch eingeplant, wenn du den Wunsch übernimmst (harte Grenze) oder verwirfst.</p>
+          )}
+          {!locked && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {info.timeWish.status !== 'bestaetigt' && (
+                <Button size="sm" variant="primary" disabled={busy} onClick={() => void note({ earliest: info.timeWish!.earliest, latest: info.timeWish!.latest }, `Übernommen: ${info.timeWish!.hint} gilt als harte Grenze.`)}>
+                  Übernehmen ({info.timeWish.hint.toLowerCase()})
+                </Button>
+              )}
+              {info.timeWish.status !== 'verworfen' && (
+                <Button size="sm" disabled={busy} onClick={() => void note({ ignore: true }, 'Verworfen – wird ohne Zeitgrenze geplant.')}>
+                  Verwerfen
+                </Button>
+              )}
+              {info.timeWish.status !== 'offen' && (
+                <button className="text-xs text-gray-500 hover:underline" disabled={busy} onClick={() => void note(null, 'Zurückgesetzt – Zeitwunsch wieder offen.')}>
+                  Zurücksetzen
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Aktionen */}
       {!locked && mode === null && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -198,7 +276,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
               ⇡ Vorziehen
             </Button>
           )}
-          {info.status !== 'excluded' && (
+          {info.status !== 'excluded' && info.status !== 'unplannable' && (
             <Button size="sm" disabled={busy} onClick={() => { reset(); setMode('exclude'); }}>
               Aus dem Plan nehmen
             </Button>
@@ -328,19 +406,22 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         />
       )}
 
-      {/* Vorziehen – bricht „ältere zuerst“ bewusst */}
+      {/* Vorziehen – Tausch-Dialog: wer macht Platz? */}
       {mode === 'prioritize' && (
-        <ReasonBox
-          title="Vorziehen"
-          warn={info.olderWaiting > 0 ? `${info.olderWaiting} ältere Anfrage${info.olderWaiting === 1 ? '' : 'n'} warte${info.olderWaiting === 1 ? 't' : 'n'} noch. Die Regel „ältere zuerst“ wird hier bewusst übergangen.` : undefined}
-          hint="Wird vor allen anderen eingeplant, sofern ein Tag regelkonform passt. Im Plan als Ausnahme sichtbar."
-          placeholder="Begründung (Pflicht), z. B. „Förderfrist endet“"
-          cta="Vorziehen"
-          reason={reason}
-          setReason={setReason}
-          busy={busy}
-          onCancel={reset}
-          onConfirm={() => void send({ mode: 'prioritize', reason }, (f) => (f.route ? `Vorgezogen und eingeplant: ${formatDay(f.route.date)} ${f.route.start}.` : 'Vorgezogen – passt aber in keinen Tag regelkonform.'))}
+        <SwapModal
+          requestId={requestId}
+          olderWaiting={info.olderWaiting}
+          timeWish={info.timeWish}
+          onClose={reset}
+          onManual={() => void openMove()}
+          onPrioritize={(why) => send({ mode: 'prioritize', reason: why }, (f) => (f.route ? `Vorgezogen und eingeplant: ${formatDay(f.route.date)} ${f.route.start}.` : 'Vorgezogen – wartet, bis regelkonform Platz frei wird.'))}
+          onSwap={async (o, why) => {
+            await send({ mode: 'pin', technicianId: o.technicianId, date: o.date, reason: why, replaces: o.displaced.id }, (f) =>
+              f.route
+                ? `Getauscht: ${formatDay(f.route.date)} ${f.route.start}–${f.route.end} bei ${f.route.technicianName}. ${o.displaced.customer} wurde neu verteilt${o.fallback ? '' : ' (Warteliste)'}.`
+                : `Tausch nicht möglich: ${f.reason ?? 'unbekannt'}`,
+            );
+          }}
         />
       )}
 

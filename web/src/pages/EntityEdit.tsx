@@ -1,3 +1,8 @@
+/**
+ * @file      EntityEdit.tsx – Seite: Detail/Bearbeiten eines Datensatzes – Korrekturen per PATCH (DATEN)
+ * @layer     Web · View (Seite)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import LocationAssist from '@/components/LocationAssist';
@@ -6,6 +11,7 @@ import RequestPlanningCard from '@/components/RequestPlanningCard';
 import AvailabilityWeek from '@/components/stammdaten/AvailabilityWeek';
 import { SeverityPill } from '@/components/stammdaten/IssueBadge';
 import PolygonEditor from '@/components/stammdaten/PolygonEditor';
+import RegionPresetPicker from '@/components/stammdaten/RegionPresetPicker';
 import TechnicianEscalation from '@/components/TechnicianEscalation';
 import { useCore, useResource } from '@/core';
 import { entityBySlug } from '@/lib/entities';
@@ -32,6 +38,7 @@ export default function EntityEdit() {
   const { data, error, reload } = useResource(core.system.stammdaten);
   const localDb = useResource(core.system.localDb);
   const plan = useResource(core.routen.plan);
+  const forecast = useResource(core.system.forecast);
   const def = entityBySlug(slug);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -152,7 +159,7 @@ export default function EntityEdit() {
         const u = plan.data ? core.routen.capacityWaitlist(plan.data, id) : [];
         return u.length > 0 ? (
           <div className="mt-6">
-            <Waitlist items={u} requests={data.requests} escalations={data.escalations ?? {}} nextWorkday={data.range.to} />
+            <Waitlist items={u} requests={data.requests} escalations={data.escalations ?? {}} nextWorkday={forecast.data?.placements[id]?.date ?? data.range.to} />
           </div>
         ) : null;
       })()}
@@ -184,6 +191,15 @@ export default function EntityEdit() {
               {field.key === 'availability' && def.kind === 'technician' ? (
                 <AvailabilityWeek data={data} technicianId={id} />
               ) : field.key === 'region' && def.kind === 'technician' ? (
+                <>
+                {canEdit && (
+                  <RegionPresetPicker
+                    technician={record as unknown as Technician}
+                    data={data}
+                    value={value === '—' ? '' : value}
+                    onPick={(text) => setDraft({ ...draft, [field.key]: text })}
+                  />
+                )}
                 <PolygonEditor
                   value={value === '—' ? '' : value}
                   data={data}
@@ -191,6 +207,7 @@ export default function EntityEdit() {
                   className={tone ? `input--${tone}` : ''}
                   onChange={(v) => setDraft({ ...draft, [field.key]: v })}
                 />
+                </>
               ) : field.multiline ? (
                 <Textarea
                   rows={3}
@@ -212,6 +229,11 @@ export default function EntityEdit() {
               {fieldIssues.map((i) => (
                 <FieldMessage key={i.code} tone={i.severity === 'error' ? 'error' : 'warning'}>
                   {i.message}
+                  {i.suggestion && canEdit && draft[field.key] !== i.suggestion && (
+                    <button type="button" className="ml-2 font-semibold text-brand-700 underline hover:text-brand-800" onClick={() => setDraft({ ...draft, [field.key]: i.suggestion! })}>
+                      „{i.suggestion}“ übernehmen
+                    </button>
+                  )}
                 </FieldMessage>
               ))}
             </div>

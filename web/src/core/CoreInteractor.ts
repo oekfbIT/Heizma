@@ -1,9 +1,18 @@
+/**
+ * @file      CoreInteractor.ts – Fassade des Frontends: einziger Einstiegspunkt für alle Views
+ * @layer     Web · Core (View → **Core** → Modul-Interactor → ApiService)
+ * @einstieg  useCore() in jeder View · schreibende Aktionen laufen immer über mutate()
+ * @siehe     docs/02-architektur.md#frontend-interactor-architektur · docs/10-code-navigation.md
+ *
+ * Neue schreibende Aktion hinzufügen: Methode im Modul-Interactor (ruft api.send) → hier eine Methode,
+ * die `this.mutate(() => …)` aufruft. Dann lädt alles Sichtbare automatisch neu – Views laden nie selbst nach.
+ */
 import { AnfragenInteractor } from '@/modules/anfragen/AnfragenInteractor';
 import type { DecisionInput, EscalationInput, NoteConstraint } from '@/modules/anfragen/types';
 import { RoutenInteractor } from '@/modules/routen/RoutenInteractor';
 import type { RequestPlanStatus } from '@/modules/routen/types';
 import { SystemInteractor } from '@/modules/system/SystemInteractor';
-import type { EntityKey } from '@/modules/system/types';
+import type { EntityKey, LogEntry, LogItem } from '@/modules/system/types';
 import { TechnikerInteractor } from '@/modules/techniker/TechnikerInteractor';
 import type { EscalationTarget, TechnicianEscalationInput } from '@/modules/techniker/types';
 import { TermineInteractor } from '@/modules/termine/TermineInteractor';
@@ -36,15 +45,13 @@ export class CoreInteractor {
     this.system = new SystemInteractor(api);
   }
 
-  // ---------- modulübergreifendes Lesen ----------
-
+  // MARK: - modulübergreifendes Lesen
   /** Plan-Status je Anfrage mit Kurznamen der Person („Mo 23.11. · Nord“) */
   requestStatuses(plan: Plan): Map<string, RequestPlanStatus> {
-    return this.routen.requestStatuses(plan, (id) => this.techniker.getShortName(id));
+    return this.routen.requestStatuses(plan, (id) => this.techniker.getShortName(id), this.system.forecast.getState().data?.placements);
   }
 
-  // ---------- Schreiben: ausführen, dann alles Sichtbare aktualisieren ----------
-
+  // MARK: - Schreiben: ausführen, dann alles Sichtbare aktualisieren
   approveRoute(technicianId: string, date: string, currentlyApproved: boolean) {
     return this.mutate(() => this.routen.setApproval([this.routen.routeKey(technicianId, date)], !currentlyApproved));
   }
@@ -86,6 +93,16 @@ export class CoreInteractor {
     return this.mutate(() => this.moduleFor(key).resetToOriginal(id));
   }
 
+  /** Demo auf den Ausgangsstand (Korrekturen, Freigaben, Eingriffe, Eskalationen, Protokoll) */
+  resetDemo() {
+    return this.mutate(() => this.system.resetDemo());
+  }
+
+  /** Protokoll mit Kurznamen der Personen */
+  logItems(entries: LogEntry[]): LogItem[] {
+    return this.system.logItems(entries, (id) => this.techniker.getShortName(id));
+  }
+
   resetPlanning() {
     return this.mutate(() => this.system.resetPlanning());
   }
@@ -95,8 +112,7 @@ export class CoreInteractor {
     return this.mutate(() => this.system.reloadSource());
   }
 
-  // ---------- intern ----------
-
+  // MARK: - intern
   private moduleFor(key: EntityKey) {
     return key === 'technicians' ? this.techniker : key === 'appointments' ? this.termine : this.anfragen;
   }
@@ -116,6 +132,7 @@ export class CoreInteractor {
     await Promise.all(this.resources().filter((r) => r.active).map((r) => r.load()));
   }
 
+  /** ACHTUNG: Zentrale Stelle für „nach Änderung neu laden“. Nicht umgehen, sonst zeigen Views veraltete Pläne. */
   private async mutate<T>(action: () => Promise<T>): Promise<T> {
     const result = await action(); // ApiService.send leert den Cache
     await this.refreshActive();

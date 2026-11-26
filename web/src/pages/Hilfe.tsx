@@ -1,3 +1,8 @@
+/**
+ * @file      Hilfe.tsx – Seite: Hilfe & Annahmen für Planer (statischer Inhalt)
+ * @layer     Web · View (Seite)
+ * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/10-code-navigation.md
+ */
 import { Link } from 'react-router-dom';
 import { Card, Icon, Page } from '@/ui';
 
@@ -7,11 +12,14 @@ import { Card, Icon, Page } from '@/ui';
  */
 
 const SECTIONS = [
+  { id: 'annahmen', title: 'Annahmen' },
   { id: 'ablauf', title: 'Ablauf in 5 Schritten' },
   { id: 'regeln', title: 'Planungsregeln' },
   { id: 'status', title: 'Status & Symbole' },
   { id: 'entscheidungen', title: 'Eingriffe des Planers' },
   { id: 'datenprobleme', title: 'Datenprobleme lösen' },
+  { id: 'ki-hinweise', title: 'KI-Hinweise aus Notizen' },
+  { id: 'protokoll', title: 'Protokoll & Demo' },
   { id: 'wichtig', title: 'Gut zu wissen' },
 ];
 
@@ -45,7 +53,7 @@ const RULES: [string, string][] = [
   ['Arbeitstag', 'Liegt im Verfügbarkeitsfenster der Person und beginnt und endet am Wohnort.'],
   ['Termine und Anfahrt', 'Jeder Termin inklusive Anfahrt liegt ganz im Fenster. Nur die Heimfahrt darf bis zu 60 Minuten darüber hinausgehen.'],
   ['Mittagspause', '60 Minuten, Beginn zwischen 11:30 und 13:00 – nur an ganzen Tagen. Passt sie nicht, entfällt sie.'],
-  ['Kundenzeit', '„Kunde verfügbar ab“ ist eine harte Grenze: Der Termin beginnt nie früher. Zeitangaben aus Notizen gelten erst, wenn du sie bestätigt hast.'],
+  ['Kundenzeit', '„Kunde verfügbar ab“ ist eine harte Grenze: Der Termin beginnt nie früher. Ohne Angabe gilt der Kunde als ganztägig verfügbar – kein Fehler, mit der Freigabe steht der Termin fest. Zeitangaben aus Notizen gelten erst, wenn du sie bestätigt hast.'],
   ['Zuständigkeit', 'Anfrage im Einsatzgebiet der Person, sonst Wohnort höchstens 15 km entfernt, sonst nicht zuordenbar.'],
   ['Fixe Termine', 'Bestehende Termine (z. B. Inbetriebnahmen, 4 Stunden) bleiben, wo sie sind. Die Route wird um sie herum geplant.'],
   ['Keine Überschneidungen', 'Nichts überlappt, auch nicht Fahrzeiten oder die Mittagspause.'],
@@ -58,7 +66,9 @@ const STATUS: { label: string; cls: string; text: string }[] = [
   { label: 'Freigegeben', cls: 'bg-brand-500 text-white', text: 'Route ist bestätigt und gesperrt. Die Anfrage wird zum Termin.' },
   { label: '📌 Fixiert', cls: 'bg-info-100 text-info-800', text: 'Vom Planer an Tag und Person gebunden – bleibt bei jeder Neuplanung dort.' },
   { label: '⇡ Vorgezogen', cls: 'bg-accent-100 text-accent-800', text: 'Wird vor älteren Anfragen eingeplant. Bewusste Ausnahme mit Begründung.' },
+  { label: 'Vorgeplant KW …', cls: 'bg-info-100 text-info-800', text: 'Diese Woche ist voll – die Anfrage ist in einer Folgewoche vorgeplant (vorläufig, bis die echte Verfügbarkeit vorliegt).' },
   { label: 'Warteliste', cls: 'bg-warning-100 text-warning-800', text: 'Daten sind in Ordnung, aber die Kapazität der Woche reicht nicht. Kunde über die Verschiebung informieren.' },
+  { label: 'Zeitwunsch klären', cls: 'bg-info-100 text-info-800', text: 'Die Notiz enthält einen Zeitwunsch (z. B. „nur vormittags“). Wird erst eingeplant, wenn du ihn übernimmst oder verwirfst.' },
   { label: 'Aus dem Plan genommen', cls: 'bg-gray-200 text-gray-700', text: 'Bleibt offen, wird aber nicht automatisch eingeplant, bis du sie wieder aufnimmst.' },
   { label: 'Nicht planbar', cls: 'bg-danger-50 text-danger-700 ring-1 ring-inset ring-danger-200', text: 'Datenfehler oder nicht zuordenbar. Erst korrigieren bzw. intern klären.' },
   { label: 'Bewusste Ausnahme', cls: 'bg-warning-50 text-warning-800 ring-1 ring-inset ring-warning-200', text: 'Gelb markiert: Eine Regel wurde mit Begründung übergangen. Die Route bleibt freigebbar.' },
@@ -76,10 +86,17 @@ const SYMBOLS: [React.ReactNode, string][] = [
 const ACTIONS: [string, string][] = [
   ['Verschieben … / Einplanen …', 'Zeigt alle möglichen Tage und Personen, die besten zuerst – mit Uhrzeit und zusätzlicher Fahrzeit. Regelkonforme Optionen übernimmst du direkt; ein Regelbruch geht nur als bewusste Ausnahme mit Begründung.'],
   ['📌 Fixieren', 'Hält einen Vorschlag an Tag und Person fest, z. B. wenn der Termin mit dem Kunden schon abgesprochen ist.'],
-  ['⇡ Vorziehen', 'Übergeht „ältere zuerst“, z. B. bei einer ablaufenden Förderfrist. Begründung ist Pflicht.'],
+  ['⇡ Vorziehen', 'Zeigt, welche geplante Anfrage Platz machen könnte (Empfehlung zuerst, frei wählbar) inkl. Mehrfahrzeit gegenüber der optimalen Route. Nur regelkonforme Tausche, fixe Termine bleiben. Begründung ist Pflicht.'],
   ['Aus dem Plan nehmen', 'Für Anfragen, die gerade nicht besichtigt werden sollen (z. B. „Kunde ruft zurück“). Mit „Wieder aufnehmen“ rückgängig.'],
   ['Notiz-Hinweis übernehmen', 'Erkannte Zeitwünsche aus den Notizen (z. B. „nur vormittags“) werden erst nach deiner Bestätigung zur harten Regel.'],
   ['Freigabe zurücknehmen', 'Entsperrt eine Route wieder für die Neuplanung – nur solange sie noch nicht veröffentlicht ist.'],
+];
+
+const AI_WHEN: [string, string][] = [
+  ['Route prüfen', 'Statt jede Notiz zu lesen, siehst du in der Tagesroute beim Termin einen kurzen Hinweis („Vorher anrufen“, „Nur vormittags“). Ein Klick auf den Termin zeigt Hinweis und Original-Notiz nebeneinander.'],
+  ['Zeitwunsch erkannt', 'Steht in der Notiz z. B. „nur vormittags“ oder „ab 14 Uhr“, schlägt die KI eine Zeitgrenze vor. Mit „Übernehmen“ wird sie zur harten Regel – das System plant neu und prüft sie wie jede andere Regel.'],
+  ['Vor der Freigabe', 'Kurz alle Hinweise der Route überfliegen: Zufahrt, Tiere oder „vorher anrufen“ betreffen den Außendienst und gehören vor der Abfahrt geklärt.'],
+  ['Kein Hinweis / falscher Hinweis', 'Die Original-Notiz gilt immer. Passt der Vorschlag nicht, einfach nicht übernehmen – ohne deine Bestätigung ändert sich an der Planung nichts.'],
 ];
 
 const PROBLEMS: [string, string][] = [
@@ -88,8 +105,57 @@ const PROBLEMS: [string, string][] = [
   ['Besichtigungstyp fehlt', 'Wird mit 105 Minuten eingeplant. Wenn bekannt, Typ nachtragen – dann stimmt die Dauer.'],
   ['Außerhalb aller Gebiete', 'Nicht zuordenbar (z. B. Innsbruck). Intern eskalieren: Vertretung aus einer Nachbarregion oder Gebiet erweitern.'],
   ['Person ohne Verfügbarkeit', 'Wird nicht eingeplant. In der Detailansicht Verfügbarkeit anfragen oder an den Vertrieb melden.'],
-  ['Person ohne Einsatzgebiet', 'Bekommt nur Anfragen im Umkreis von 15 km um den Wohnort. Gebiet bestätigen lassen und eintragen.'],
+  ['Person ohne Einsatzgebiet', 'Bekommt nur Anfragen im Umkreis von 15 km um den Wohnort. Gebiet bestätigen lassen. Ist es abgesprochen, in der Detailansicht unter „Gebiet aus Vorlage übernehmen“ ein Gebiet wählen (z. B. Umkreis 50 km) und speichern – die Vorschau zeigt vorher, wie viele Anfragen im Gebiet liegen, danach wird sofort neu geplant.'],
+  ['Passt in keinen Tag', 'Die Anfrage passt selbst an einem leeren Tag nicht (z. B. Kunde erst ab 17 Uhr, Termin 105 min, weite Anfahrt). Kein Kapazitätsproblem – mit Kunde bzw. Vertrieb eine andere Zeit klären.'],
   ['Freitext-Notizen', 'Immer lesen. Zufahrt, Tiere oder „vorher anrufen“ betreffen den Außendienst, Zeitwünsche die Planung.'],
+];
+
+/** Wo die Case Study Spielraum lässt: so wurde entschieden (gleicher Stand wie README „Bewusste Annahmen“) */
+const ASSUMPTIONS: { group: string; rows: [string, string][] }[] = [
+  {
+    group: 'Kunde & Termin',
+    rows: [
+      ['„Kunde verfügbar ab“ fehlt', 'Kunde gilt als ganztägig verfügbar. Das Feld legt nur fest, dass ein Termin nicht früher beginnen darf – ohne Wert gibt es keine Untergrenze. Kein Datenfehler, sondern der Normalfall.'],
+      ['„Kunde verfügbar ab“ im falschen Format', 'Eindeutige Schreibweisen wie „10.00“, „10 Uhr“ oder „1000“ werden als 10:00 gelesen und so geplant (gelbe Warnung, Korrektur per Klick). Nur wirklich unlesbare Werte (z. B. „25:99“, „morgens“) sind ein Datenfehler und „Nicht planbar“.'],
+      ['Zeitwünsche in Notizen', 'Werden per Regeln erkannt (ohne KI): „vormittags“, „nachmittags“, „ab 14 Uhr“, „bis 12 Uhr“; „besser/lieber“ = Wunsch, sonst Muss. Solche Anfragen werden nie automatisch eingeplant: Status „Zeitwunsch klären“, bis der Planer übernimmt (harte Grenze) oder verwirft. Wird eine solche Anfrage manuell eingeplant oder vorgezogen, gilt der Wunsch vorsorglich als harte Grenze.'],
+      ['Freigabe', 'Mit der Freigabe steht der Termin fest. Kunde und Außendienst werden informiert, eine erneute Bestätigung durch den Kunden ist nicht vorgesehen. Im Prototyp wird nur gespeichert, nichts versendet.'],
+      ['Besichtigungstyp fehlt', 'Dauer 105 Minuten (Vorgabe der Case Study für „unbekannt“).'],
+    ],
+  },
+  {
+    group: 'Arbeitstag',
+    rows: [
+      ['Kein Verfügbarkeits-Eintrag', 'Person ist an dem Tag nicht verfügbar (laut API). Gesperrte Tage ebenso.'],
+      ['Ganzer Tag', 'Fenster von mindestens 10 Stunden (z. B. 07:00–19:00). Nur dann gibt es eine Mittagspause; halbe Tage (07–12, 12–19) haben keine.'],
+      ['Mittagspause passt nicht', 'Entfällt – laut Regel erlaubt, kein Verstoß. Aber nur, wenn schon fixe Termine sie verhindern: Für einen zusätzlichen Besuch wird die Pause nie geopfert.'],
+      ['Abfahrt', 'So spät wie möglich, damit beim ersten Kunden niemand wartet – aber nie vor Fensterbeginn.'],
+      ['Wartezeit', 'Kommt der Außendienst vor „Kunde verfügbar ab“ an, wartet er vor Ort. Die Wartezeit zählt zum Arbeitstag.'],
+    ],
+  },
+  {
+    group: 'Zuständigkeit',
+    rows: [
+      ['15-km-Regel', 'Luftlinie zwischen Wohnort und Kundenadresse.'],
+      ['Überlappende Gebiete', 'Alle zuständigen Personen kommen in Frage; das System wählt die mit der geringsten Zusatz-Fahrzeit.'],
+      ['Person ohne Gebiet', 'Bekommt nur Anfragen im 15-km-Umkreis des Wohnorts.'],
+    ],
+  },
+  {
+    group: 'Folgewochen (Vorplanung)',
+    rows: [
+      ['Verfügbarkeit Außendienst', 'Die Case-API liefert Verfügbarkeiten nur für diese Woche. In Produktion kämen die der Folgewochen ebenfalls aus der API; bis dahin wird angenommen, dass jede Person genauso verfügbar ist wie jetzt (gleiche Tage, Zeitfenster, Urlaube/Krankheit). Deshalb sind Folgewochen vorgeplant (vorläufig) und erst freigebbar, wenn die echte Verfügbarkeit vorliegt.'],
+      ['Ablauf', 'Diese Woche wird gefüllt (ältere zuerst). Was keinen Platz hat, wird in die nächste Woche vorgeplant, der Rest in die übernächste usw. Neue Anfragen und fixe Termine der Folgewochen ändern die Vorplanung – sie wird bei jeder Änderung neu berechnet.'],
+      ['Nicht enthalten', 'Anfragen mit offenem Zeitwunsch, Datenfehler oder ohne zuständige Person – sie brauchen zuerst eine Entscheidung.'],
+    ],
+  },
+  {
+    group: 'Fahrzeit & Priorität',
+    rows: [
+      ['Fahrzeitquelle', 'Heizma-API (/travel/path), ohne Puffer und ohne Berufsverkehr; Hin- und Rückweg gelten als gleich lang. Mit „≈“ markierte Werte sind Luftlinien-Schätzungen.'],
+      ['„Ältere zuerst“', 'Reihenfolge nach Eingang (createdAt). Nach der Routenoptimierung wird nachgeprüft: Könnte eine wartende ältere Anfrage regelkonform den Platz einer jüngeren einnehmen, wird getauscht. Eine jüngere bekommt also nur Plätze, in die keine wartende ältere passt (Ort, Zeitfenster, Dauer).'],
+      ['Vorziehen / Tauschen', 'Nur mit Begründung; fixe Termine und freigegebene Routen werden nie verdrängt. Im Plan als bewusste Ausnahme sichtbar.'],
+    ],
+  },
 ];
 
 export default function Hilfe() {
@@ -118,6 +184,17 @@ export default function Hilfe() {
         </nav>
 
         <div className="space-y-6">
+          <Section id="annahmen" title="Annahmen" hint="Wo die Case Study Spielraum lässt, gelten diese Festlegungen – in Planung und Prüfung gleich.">
+            <div className="space-y-5">
+              {ASSUMPTIONS.map((a) => (
+                <div key={a.group}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{a.group}</p>
+                  <Table rows={a.rows} head={['Fall', 'Annahme']} />
+                </div>
+              ))}
+            </div>
+          </Section>
+
           <Section id="ablauf" title="Ablauf in 5 Schritten">
             <ol className="space-y-4">
               {STEPS.map((s, i) => (
@@ -167,6 +244,40 @@ export default function Hilfe() {
 
           <Section id="datenprobleme" title="Datenprobleme lösen" hint="Fehlerhafte Daten werden nie stillschweigend eingeplant. Sie stehen unter „Handlungsbedarf“ und sind in der Detailansicht rot bzw. gelb markiert.">
             <Table rows={PROBLEMS} head={['Problem', 'Was tun?']} />
+          </Section>
+
+          <Section
+            id="ki-hinweise"
+            title="KI-Hinweise aus Notizen"
+            hint="Der Vertrieb schreibt Notizen als Freitext. Eine KI liest sie und macht daraus kurze, einheitliche Hinweise – damit du nicht jede Notiz selbst auswerten musst."
+          >
+            <p className="text-sm text-gray-600">
+              Jede Notiz wird einer Kategorie zugeordnet: <strong className="text-ink">Zeitwunsch</strong>, <strong className="text-ink">Vorher anrufen</strong>,{' '}
+              <strong className="text-ink">Zufahrt</strong>, <strong className="text-ink">Tiere</strong> oder <strong className="text-ink">Sonstiges</strong>. Hinweise
+              mit „✦ KI-Hinweis“ stammen vom Sprachmodell, „Erkannter Hinweis“ von der einfachen Schlüsselwort-Erkennung (falls die KI nicht verfügbar ist).
+            </p>
+            <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-gray-400">Wann du sie nutzt</p>
+            <Table rows={AI_WHEN} head={['Situation', 'So hilft der Hinweis']} />
+            <p className="mt-4 rounded-lg bg-info-50 px-3 py-2.5 text-sm text-info-800">
+              <strong>Warum nur ein Vorschlag?</strong> Eine KI kann Freitext falsch verstehen. Deshalb plant das System nie allein auf Basis einer Notiz – eine
+              Zeitgrenze gilt erst, wenn du sie bestätigst. So bleibt jede Planung nachvollziehbar.
+            </p>
+          </Section>
+
+          <Section id="protokoll" title="Protokoll & Demo" hint="Beides findest du im Zahnrad oben rechts.">
+            <ul className="list-disc space-y-2 pl-5 text-sm text-gray-600">
+              <li>
+                <strong className="text-ink">Aktivitätsprotokoll:</strong> zeigt, wann welche Route freigegeben, welche Anfrage verschoben, fixiert oder
+                vorgezogen, was eskaliert und welche Daten korrigiert wurden – mit Begründung. Filterbar nach Bereich und durchsuchbar.{' '}
+                <Link to="/protokoll" className="font-medium text-brand-600 hover:underline">
+                  Zum Protokoll →
+                </Link>
+              </li>
+              <li>
+                <strong className="text-ink">Demo zurücksetzen:</strong> löscht alle lokalen Korrekturen, Freigaben, Eingriffe, Eskalationen und das
+                Protokoll. Die Planung startet wieder mit den Originaldaten der Heizma-API – ideal für einen neuen Testlauf.
+              </li>
+            </ul>
           </Section>
 
           <Section id="wichtig" title="Gut zu wissen">

@@ -1,3 +1,9 @@
+/**
+ * @file      heizmaClient.ts – Zugriff auf die Heizma Case-Study-API (read-only) bzw. lokale Fixtures
+ * @layer     Backend · Infrastruktur (einzige Stelle mit dem Heizma-Token)
+ * @einstieg  loadDataset() · travelPath() (Kartengeometrie) · travelPathRaw() (für travelMatrix)
+ * @siehe     docs/09-setup.md (DATA_SOURCE=live|mock) · docs/10-code-navigation.md
+ */
 import { config } from './config.js';
 import appointmentsFixture from './fixtures/appointments.json';
 import availabilityFixture from './fixtures/availability.json';
@@ -7,7 +13,7 @@ import type { Appointment, AvailabilityEntry, Dataset, LatLng, ServiceRequest, T
 
 /**
  * Client für die Heizma Case-Study-API.
- * - Token bleibt serverseitig (kommt aus .env, nie ins Frontend)
+ * - SICHERHEIT: Token bleibt serverseitig (kommt aus .env, nie ins Frontend)
  * - Antworten werden im Speicher gecacht (eingefrorener Datenstand → wenig Calls)
  * - DATA_SOURCE=mock lädt lokale Beispieldaten aus src/fixtures (offline arbeiten)
  */
@@ -20,6 +26,8 @@ export class HeizmaApiError extends Error {
     super(message);
   }
 }
+
+// MARK: - In-Memory-Cache (TTL aus config.cacheTtlMs)
 
 const cache = new Map<string, { at: number; value: unknown }>();
 
@@ -35,6 +43,9 @@ export function clearCache() {
   cache.clear();
 }
 
+// MARK: - HTTP-Basis
+
+/** Fehler der Heizma-API kommen als { error } – werden als HeizmaApiError weitergereicht (→ HTTP 502 in index.ts) */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${config.heizmaBaseUrl}${path}`, {
     ...init,
@@ -49,6 +60,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+// MARK: - Mock-Modus (offline, gleicher Datenstand als JSON in src/fixtures)
+
 const FIXTURES: Record<string, unknown> = {
   technicians: techniciansFixture,
   availability: availabilityFixture,
@@ -60,6 +73,9 @@ async function fixture<T>(name: string): Promise<T> {
   return FIXTURES[name] as T;
 }
 
+// MARK: - Datensatz laden (EINSTIEG)
+
+/** Lädt alle vier Ressourcen parallel für config.planFrom–planTo (Mo 23. – Fr 27. Nov 2026). */
 export async function loadDataset(): Promise<Dataset> {
   const { planFrom: from, planTo: to } = config;
   return cached(`dataset:${config.dataSource}:${from}:${to}`, async () => {
@@ -97,6 +113,8 @@ export async function loadDataset(): Promise<Dataset> {
     };
   });
 }
+
+// MARK: - Fahrzeiten / Strecken
 
 /** Ein einzelner /travel/path-Call (2–14 Punkte), ungecacht – für die Fahrzeitmatrix */
 export async function travelPathRaw(points: LatLng[]): Promise<TravelResult[]> {

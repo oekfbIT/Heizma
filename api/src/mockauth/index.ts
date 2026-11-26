@@ -1,3 +1,8 @@
+/**
+ * @file      index.ts – Auth-Router (/api/auth/*) + requireAuth-Middleware für alle übrigen /api-Routen
+ * @layer     Backend · Auth
+ * @siehe     docs/07-api.md · docs/10-code-navigation.md
+ */
 import { timingSafeEqual } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { MOCK_USER } from './credentials.js';

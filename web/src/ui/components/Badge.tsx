@@ -1,3 +1,8 @@
+/**
+ * @file      Badge.tsx – UI-Baustein Badge
+ * @layer     Web · Design-System (Komponente)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import type { ReactNode } from 'react';
 import { cx } from '../cx';
 

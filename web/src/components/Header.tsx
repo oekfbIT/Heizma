@@ -1,8 +1,14 @@
+/**
+ * @file      Header.tsx – Kopfzeile mit Navigation (Desktop + mobiler Drawer)
+ * @layer     Web · View-Komponente
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import logo from '@/assets/brand/heizma-logo.png';
 import { Icon } from '@/ui';
 import { useAuth } from '@/core/auth';
+import SettingsMenu from './SettingsMenu';
 
 const NAV = [
   { to: '/stammdaten', label: 'Übersicht', end: true },
@@ -17,7 +23,7 @@ const NAV = [
  * Mobil: Logo, kompakter Planer-Button und Menü (Drawer).
  */
 export default function Header() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const location = useLocation();
   useEffect(() => setOpen(false), [location.pathname]);
@@ -25,10 +31,10 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-header border-b border-gray-200 bg-white">
       <div className="mx-auto flex h-[60px] max-w-[1440px] items-center justify-between gap-4 px-4 md:h-[72px] md:px-6 lg:px-10">
-        <Link to="/stammdaten" className="flex shrink-0 items-center gap-3" aria-label="Heizma Einsatzplanung">
+        <Link to="/stammdaten" className="flex shrink-0 items-center gap-3" aria-label="Heizma Routenoptimierung">
           <img src={logo} alt="heizma" className="h-7 w-auto md:h-9" />
-          <span className="hidden border-l border-gray-200 pl-3 text-xs font-medium uppercase tracking-wider text-gray-400 xl:inline">
-            Einsatzplanung
+          <span className="hidden translate-y-[3px] border-l border-gray-200 py-1.5 pl-3 text-xs font-medium uppercase leading-none tracking-wider text-gray-400 xl:inline">
+            Routenoptimierung
           </span>
         </Link>
 
@@ -51,15 +57,7 @@ export default function Header() {
             <span className="md:hidden">Routen</span>
             <span className="hidden md:inline">Routenplanung öffnen</span>
           </Link>
-          {user && (
-            <button
-              onClick={logout}
-              title={`${user.email} · Sitzung bis ${new Date(user.expiresAt).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}`}
-              className="hidden text-sm font-medium text-gray-500 transition hover:text-brand-600 lg:inline"
-            >
-              Abmelden
-            </button>
-          )}
+          <SettingsMenu />
           <button onClick={() => setOpen(!open)} className="rounded-lg p-2 text-ink hover:bg-gray-100 lg:hidden" aria-label="Menü" aria-expanded={open}>
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
               {open ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
@@ -84,9 +82,9 @@ export default function Header() {
             </NavLink>
           ))}
           {user && (
-            <button onClick={logout} className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-3 text-left text-sm font-medium text-gray-600">
-              Abmelden <span className="text-gray-400">· {user.email}</span>
-            </button>
+            <div className="mt-2 rounded-lg border border-gray-200 p-1">
+              <SettingsMenu variant="inline" onDone={() => setOpen(false)} />
+            </div>
           )}
         </div>
       )}

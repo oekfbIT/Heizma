@@ -1,6 +1,11 @@
+/**
+ * @file      AnfragenInteractor.ts – Modul Anfragen: Liste, Planung je Anfrage, Entscheidungen, Notizen, Eskalationen
+ * @layer     Web · Modul-Interactor
+ * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
+ */
 import type { ApiService } from '@/core/ApiService';
 import { Resource, ResourceFamily } from '@/core/Resource';
-import type { RequestPlanning, ServiceRequest, SlotOption } from '@/lib/types';
+import type { RequestPlanning, ServiceRequest, SlotOption, SwapOption } from '@/lib/types';
 import type { Stammdaten } from '@/modules/system/types';
 import type { AnfragenData, DecisionInput, EscalationInput, GeoResult, NoteConstraint, NoteInfo } from './types';
 
@@ -35,8 +40,7 @@ export class AnfragenInteractor {
     return [this.data, this.notes, ...this.planning.all()];
   }
 
-  // ---------- Lesen & Aufbereiten ----------
-
+  // MARK: - Lesen & Aufbereiten
   list(): ServiceRequest[] {
     return this.data.getState().data?.requests ?? [];
   }
@@ -81,7 +85,10 @@ export class AnfragenInteractor {
     return { insight, confirmed: n?.confirmed[id] };
   }
 
-  // ---------- Aktionen (Aktualisieren übernimmt der CoreInteractor) ----------
+  // MARK: - Aktionen (Aktualisieren übernimmt der CoreInteractor)
+  async swapOptions(id: string): Promise<SwapOption[]> {
+    return (await this.api.get<{ options: SwapOption[] }>(`/api/requests/${encodeURIComponent(id)}/swap-options`)).options;
+  }
 
   async options(id: string): Promise<SlotOption[]> {
     return (await this.api.get<{ options: SlotOption[] }>(`/api/requests/${encodeURIComponent(id)}/options`)).options;

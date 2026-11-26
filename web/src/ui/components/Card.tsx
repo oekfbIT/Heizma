@@ -1,3 +1,8 @@
+/**
+ * @file      Card.tsx – UI-Baustein Card
+ * @layer     Web · Design-System (Komponente)
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 import type { HTMLAttributes } from 'react';
 import { cx } from '../cx';
 

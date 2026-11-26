@@ -1,3 +1,8 @@
+/**
+ * @file      TechnicianEscalation.tsx – DATEN: Eskalation bei Personen ohne Verfügbarkeit/Gebiet (tech_06, tech_07)
+ * @layer     Web · View-Komponente
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import { useState } from 'react';
 import { useCore, useResource } from '@/core';
 import { regionLabel } from '@/lib/regions';

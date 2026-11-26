@@ -1,3 +1,8 @@
+/**
+ * @file      IssueBadge.tsx – Status-Spalte: OK oder schlimmster Befund (error/warning/info)
+ * @layer     Web · View-Komponente (Stammdaten)
+ * @siehe     docs/04-datenqualitaet.md · docs/10-code-navigation.md
+ */
 import type { Issue, Severity } from '@/lib/types';
 import { SEVERITY_LABEL, worstSeverity } from '@/lib/format';
 

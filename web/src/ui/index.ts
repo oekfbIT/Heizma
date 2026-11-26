@@ -1,3 +1,8 @@
+/**
+ * @file      index.ts – Öffentliche Exporte des Design-Systems – Views importieren nur von @/ui
+ * @layer     Web · Design-System
+ * @siehe     docs/05-design-system.md · docs/10-code-navigation.md
+ */
 /** Design-System: alle wiederverwendbaren UI-Bausteine. Views importieren nur von hier. */
 export { Alert, type Tone } from './components/Alert';
 export { Badge, type BadgeTone } from './components/Badge';
