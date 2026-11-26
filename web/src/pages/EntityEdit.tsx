@@ -81,6 +81,7 @@ export default function EntityEdit() {
       setDraft({});
       reload();
       localDb.reload();
+      window.dispatchEvent(new Event('heizma:data-changed')); // Planungs-Karte zeigt sofort den neuen Stand
       setMessage({ tone: 'ok', text: 'Gespeichert – Prüfung und Tourenplan wurden mit der Korrektur neu berechnet.' });
     } catch (e) {
       setMessage({ tone: 'error', text: (e as Error).message });
@@ -97,6 +98,7 @@ export default function EntityEdit() {
       setDraft({});
       reload();
       localDb.reload();
+      window.dispatchEvent(new Event('heizma:data-changed'));
       setMessage({ tone: 'ok', text: 'Auf Originaldaten der Heizma-API zurückgesetzt.' });
     } finally {
       setSaving(false);

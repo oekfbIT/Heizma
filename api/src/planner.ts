@@ -1,7 +1,7 @@
 import { hasCoords } from './geo.js';
 import { splitIso, toHHMM, toMinutes } from './time.js';
 import { estimateLookup, type MatrixStats, type TravelLookup } from './travelMatrix.js';
-import { eligibleTechnicians } from './validation.js';
+import { eligibleTechnicians, validateDataset } from './validation.js';
 import type { Appointment, Dataset, DayRoute, Decision, LatLng, ManualMark, Plan, PlannedStop, ServiceRequest, SlotOption, Technician, UnassignedRequest } from './types.js';
 
 /**
@@ -279,6 +279,13 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
   const waiting: Item[] = [];
   const handled = new Set<string>(pinned);
 
+  // 1a) Datenfehler sperren die Planung – auch für manuelle Entscheidungen. Nach der Korrektur wird automatisch geplant.
+  for (const [id, message] of blockingErrors(data)) {
+    if (handled.has(id)) continue;
+    unassigned.push({ requestId: id, reason: `Datenfehler – erst korrigieren: ${message}` });
+    handled.add(id);
+  }
+
   // 1b) Planer-Entscheidungen zuerst: "aus Plan genommen" und "fixiert" (Planer entscheidet, Regeln werden danach geprüft)
   const byTime = Object.entries(decisions).sort(([, a], [, b]) => a.at.localeCompare(b.at));
   for (const [id, d] of byTime) {
@@ -293,6 +300,10 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
     const item = items.get(id);
     if (!item) {
       unassigned.push({ requestId: id, reason: 'Keine Koordinaten – erst geokodieren' });
+      continue;
+    }
+    if (!item.eligible.size) {
+      unassigned.push({ requestId: id, reason: 'Nicht zuordenbar (kein Gebiet, > 15 km)' });
       continue;
     }
     item.manual = { mode: 'pin', reason: d.reason, override: d.override };
@@ -545,4 +556,20 @@ export function rankOptions(data: Dataset, plan: Plan, requestId: string, opts: 
   // Regelkonforme zuerst, dann nach Zusatz-Fahrzeit; gesperrte ans Ende
   const rank = (o: SlotOption) => (o.blocked ? 2 : o.warnings.length ? 1 : 0);
   return options.sort((a, b) => rank(a) - rank(b) || a.deltaDrive - b.deltaDrive || a.date.localeCompare(b.date));
+}
+
+/**
+ * Anfragen mit Datenfehler (Severity "error"), die nicht schon eigene Gründe haben
+ * (fehlende Koordinaten / nicht zuordenbar werden weiter unten mit eigenem Grund ausgewiesen).
+ */
+export function blockingErrors(data: Dataset): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const i of validateDataset(data))
+    if (i.entity === 'request' && i.severity === 'error' && i.code !== 'NO_COORDS' && i.code !== 'NOT_ASSIGNABLE' && !out.has(i.entityId)) out.set(i.entityId, i.message);
+  return out;
+}
+
+/** Alle Datenfehler einer Anfrage (inkl. Koordinaten / Zuständigkeit) – Grund, warum sie nicht planbar ist */
+export function requestErrors(data: Dataset, requestId: string): string[] {
+  return validateDataset(data).filter((i) => i.entity === 'request' && i.entityId === requestId && i.severity === 'error').map((i) => i.message);
 }

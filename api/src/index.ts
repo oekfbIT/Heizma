@@ -3,7 +3,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { config } from './config.js';
 import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
 import { geocode, reverseGeocode } from './geocode.js';
-import { buildPlan, rankOptions } from './planner.js';
+import { buildPlan, rankOptions, requestErrors } from './planner.js';
 import { getTravelMatrix, resetTravelMatrix } from './travelMatrix.js';
 import { applyExceptions, verifyPlan } from './verify.js';
 import { getNoteInsights } from './notesAi.js';
@@ -168,6 +168,8 @@ app.get('/api/requests/:id/planning', route(async (req, res) => {
 app.get('/api/requests/:id/options', route(async (req, res) => {
   const r = await planningFor(req.params.id);
   if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
+  const errors = requestErrors(r.data, req.params.id);
+  if (errors.length) return res.json({ options: [], blockedReason: `Datenfehler – erst korrigieren: ${errors[0]}` });
   const { lookup } = await getTravelMatrix(r.data);
   res.json({ options: rankOptions(r.data, r.plan, req.params.id, { travel: lookup, noteConstraints: listNoteConfirmations() }) });
 }));
@@ -191,6 +193,9 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
     if (reason.length < 3) throw new ValidationError('Bitte kurz begründen, warum die Anfrage aus dem Plan genommen wird');
     return res.json({ ok: true, decision: setDecision(id, { mode, reason, override: false }) });
   }
+  // Fehlerhafte Daten können nicht eingeplant werden – auch nicht als Ausnahme. Erst korrigieren.
+  const errors = requestErrors(r.data, id);
+  if (errors.length) return res.status(409).json({ error: `Datenfehler – erst korrigieren: ${errors[0]}` });
   if (mode === 'prioritize') {
     // Bricht "ältere zuerst" bewusst → immer mit Begründung
     if (reason.length < 3) throw new ValidationError(r.info.olderWaiting ? `Bitte begründen – ${r.info.olderWaiting} ältere Anfragen warten noch` : 'Bitte kurz begründen, warum die Anfrage vorgezogen wird');

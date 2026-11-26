@@ -212,8 +212,8 @@ test('Aus Plan genommen: steht mit Begründung auf der Liste, nicht im Plan', ()
 });
 
 test('Regelbruch ohne Ausnahme bleibt rot, mit Ausnahme + Begründung gelb', () => {
-  // Kunde weit weg + Halbtag: passt nicht regelkonform
-  const far = req({ lat: 47.07, lng: 15.44, address: 'Graz' });
+  // Im Gebiet, aber Kunde erst ab 11:00 auf einem Halbtag bis 12:00 – passt nicht regelkonform
+  const far = req({ customerAvailableFrom: '11:00', visitationType: 'WP+PV', durationMinutes: 105 });
   const data = ds([far], [day('07:00', '12:00')]);
   const asError = { [far.id]: decide({ mode: 'pin', technicianId: 'tech_t', date: '2026-11-23', override: false }) };
   const v1 = check(data, buildPlan(data, { travel, decisions: asError }), asError);
@@ -250,4 +250,17 @@ test('Optionen: regelkonforme Slots zuerst, gesperrte (freigegebene) Touren am E
   assert.ok(options.length >= 2);
   assert.ok(!options[0].blocked && options[0].warnings.length === 0);
   assert.ok(options[options.length - 1].blocked || options.every((o) => !o.blocked));
+});
+
+test('Datenfehler sperren die Planung – auch fixiert; nach Korrektur wird geplant', () => {
+  const bad = req({ customerAvailableFrom: '10.00' }); // ungültige Uhrzeit = Fehler
+  const decisions = { [bad.id]: decide({ mode: 'pin', technicianId: 'tech_t', date: '2026-11-23', override: true }) };
+  const plan = buildPlan(ds([bad]), { travel, decisions });
+  assert.equal(where(plan, bad.id), undefined);
+  assert.match(plan.unassigned.find((u) => u.requestId === bad.id)!.reason, /^Datenfehler/);
+  assert.equal(verifyPlan(plan, ds([bad]), travel).totalViolations, 0);
+
+  const fixed = { ...bad, customerAvailableFrom: '10:00' };
+  const after = buildPlan(ds([fixed]), { travel });
+  assert.ok(where(after, bad.id), 'nach Korrektur eingeplant');
 });

@@ -95,6 +95,8 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
   const d = info.decision;
   const locked = info.status === 'termin';
   const reasonOk = reason.trim().length >= 3;
+  // Fehlerhafte Daten: nicht einplanbar – auch nicht als Ausnahme. Erst korrigieren, dann plant das System automatisch.
+  const dataBlocked = !!info.reason && /^(Datenfehler|Keine Koordinaten|Nicht zuordenbar)/.test(info.reason);
 
   return (
     <section className={compact ? '' : 'card p-4 md:p-5'}>
@@ -131,6 +133,12 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
             Platz {info.waitlist.position} von {info.waitlist.total} auf der Warteliste (nach Eingang)
           </p>
         )}
+        {dataBlocked && (
+          <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+            Mit fehlerhaften Daten kann die Anfrage nicht eingeplant werden – auch nicht manuell. Korrigiere die markierten Felder unten
+            (Adresse, Koordinaten, Uhrzeit …) und speichere: Prüfung und Tourenplan laufen dann neu, die Anfrage wird automatisch eingeplant.
+          </p>
+        )}
         {locked && (
           <p className="mt-1 text-xs text-gray-500">
             Teil einer freigegebenen Tour – in Produktion als Termin im Heizma-Backend angelegt. Änderungen erst nach „Freigabe zurücknehmen“.
@@ -161,7 +169,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
       {/* Aktionen */}
       {!locked && mode === null && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {!info.reason?.startsWith('Keine Koordinaten') && (
+          {!dataBlocked && (
             <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void openMove()}>
               {info.route ? 'Verschieben…' : 'Einplanen…'}
             </button>
@@ -176,7 +184,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
               📌 Fixieren
             </button>
           )}
-          {info.status === 'waitlist' && d?.mode !== 'prioritize' && (
+          {info.status === 'waitlist' && !dataBlocked && d?.mode !== 'prioritize' && (
             <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => { reset(); setMode('prioritize'); }}>
               ⇡ Vorziehen
             </button>

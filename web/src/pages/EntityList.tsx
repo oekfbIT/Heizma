@@ -6,9 +6,9 @@ import { ErrorBox, Loading } from '@/components/ui/PageState';
 import RegionFilter from '@/components/ui/RegionFilter';
 import { useApi, type Stammdaten } from '@/lib/api';
 import { entityByKind, entityBySlug } from '@/lib/entities';
-import { SEVERITY_ORDER, technicianColor } from '@/lib/format';
+import { formatDay, SEVERITY_ORDER, technicianColor } from '@/lib/format';
 import { NO_REGION, requestInRegion, useRegion } from '@/lib/regions';
-import type { Issue } from '@/lib/types';
+import type { Issue, Plan } from '@/lib/types';
 
 /** Auf Mobil sichtbare Spalten (Rest ab md) */
 const MOBILE = new Set(['customer', 'address', 'name', 'tech', 'date', 'window', 'start']);
@@ -42,11 +42,14 @@ function PageHead({ title, subtitle }: { title: string; subtitle: string }) {
 function Table({ data, slug }: { data: Stammdaten; slug: string }) {
   const def = entityBySlug(slug)!;
   const navigate = useNavigate();
-  const [onlyProblems, setOnlyProblems] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'problems' | 'planned'>('all');
   const [query, setQuery] = useState('');
   const [region, setRegion] = useRegion();
   const techIds = data.technicians.map((t) => t.id);
   const colors = Object.fromEntries(techIds.map((id) => [id, technicianColor(id, techIds)]));
+  // Nur bei Anfragen: Stand im Tourenplan je Zeile
+  const plan = useApi<Plan>(def.kind === 'request' ? '/api/plan' : null);
+  const planStatus = useMemo(() => (plan.data ? planStatusById(plan.data, data) : null), [plan.data, data]);
 
   /** Gehört der Datensatz zur gewählten Region? */
   const inRegion = (id: string) => {
@@ -67,7 +70,8 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
   const rows = def.rows(data).filter((row) => {
     if (!inRegion(row.id)) return false;
     const problems = (issuesById.get(row.id) ?? []).some((i) => i.severity !== 'info');
-    if (onlyProblems && !problems) return false;
+    if (filter === 'problems' && !problems) return false;
+    if (filter === 'planned' && !planStatus?.get(row.id)?.planned) return false;
     if (!query) return true;
     return Object.values(row.cells).join(' ').toLowerCase().includes(query.toLowerCase());
   });
@@ -88,13 +92,14 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
         </div>
         <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 text-sm">
           {[
-            { v: false, label: `Alle (${def.rows(data).length})` },
-            { v: true, label: `Nur Probleme (${problemCount})` },
+            { v: 'all' as const, label: `Alle (${def.rows(data).length})` },
+            { v: 'problems' as const, label: `Nur Probleme (${problemCount})` },
+            ...(def.kind === 'request' ? [{ v: 'planned' as const, label: `Eingeplant (${planStatus ? def.rows(data).filter((r) => planStatus.get(r.id)?.planned).length : '…'})` }] : []),
           ].map((opt) => (
             <button
-              key={String(opt.v)}
-              onClick={() => setOnlyProblems(opt.v)}
-              className={`rounded-md px-3 py-1.5 font-medium transition ${onlyProblems === opt.v ? 'bg-brand-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+              key={opt.v}
+              onClick={() => setFilter(opt.v)}
+              className={`rounded-md px-3 py-1.5 font-medium transition ${filter === opt.v ? 'bg-brand-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
             >
               {opt.label}
             </button>
@@ -111,6 +116,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
                   {c.label}
                 </th>
               ))}
+              {def.kind === 'request' && <th className="w-44 px-3 py-3 font-medium md:px-4">Plan</th>}
               <th className="w-28 px-3 py-3 font-medium md:w-36 md:px-4">Status</th>
             </tr>
           </thead>
@@ -125,10 +131,15 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
                   className={`cursor-pointer transition hover:bg-brand-50/50 ${hasError ? 'bg-red-50/40' : ''}`}
                 >
                   {def.columns.map((c) => (
-                    <td key={c.key} className={`px-3 py-3 md:px-4 ${c.key === 'id' ? 'font-mono text-xs text-gray-500' : ''} ${MOBILE.has(c.key) ? '' : 'hidden md:table-cell'}`}>
+                    <td key={c.key} className={`px-3 py-3 md:px-4 ${c.key === 'id' ? 'font-mono text-xs text-gray-500' : ''} ${c.key === 'customer' || c.key === 'id' ? 'whitespace-nowrap' : ''} ${MOBILE.has(c.key) ? '' : 'hidden md:table-cell'}`}>
                       {row.cells[c.key]}
                     </td>
                   ))}
+                  {def.kind === 'request' && (
+                    <td className="px-3 py-3 md:px-4">
+                      {planStatus ? <PlanChip s={planStatus.get(row.id)} /> : <span className="text-xs text-gray-300">…</span>}
+                    </td>
+                  )}
                   <td className="px-3 py-3 md:px-4">
                     <IssueBadge issues={issues} />
                   </td>
@@ -137,7 +148,7 @@ function Table({ data, slug }: { data: Stammdaten; slug: string }) {
             })}
             {!rows.length && (
               <tr>
-                <td colSpan={def.columns.length + 1} className="px-4 py-10 text-center text-gray-400">
+                <td colSpan={def.columns.length + (def.kind === 'request' ? 2 : 1)} className="px-4 py-10 text-center text-gray-400">
                   Keine Einträge
                 </td>
               </tr>
@@ -177,5 +188,47 @@ function IssueList({ data }: { data: Stammdaten }) {
         {!issues.length && <p className="px-5 py-10 text-center text-sm text-gray-400">Alles sauber – kein Handlungsbedarf 🎉</p>}
       </div>
     </main>
+  );
+}
+
+interface PlanStatus {
+  planned: boolean;
+  label: string;
+  tone: string;
+  title: string;
+}
+
+/** Wo steht jede Anfrage im Tourenplan? Eingeplant (Tag · Person), Warteliste, aus Plan genommen, nicht planbar. */
+function planStatusById(plan: Plan, data: Stammdaten): Map<string, PlanStatus> {
+  const map = new Map<string, PlanStatus>();
+  const short = (id: string) => data.technicians.find((t) => t.id === id)?.name.replace(/^Techniker\s+/i, '') ?? id;
+  for (const r of plan.routes)
+    for (const s of r.stops) {
+      if (s.kind !== 'request') continue;
+      const pin = s.manual?.mode === 'pin' ? '📌 ' : '';
+      map.set(s.id, {
+        planned: true,
+        label: `${pin}${formatDay(r.date)} · ${short(r.technicianId)}`,
+        tone: r.approved ? 'bg-brand-500 text-white' : 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200',
+        title: `${r.approved ? 'Freigegeben' : 'Vorgeschlagen'}: ${s.start}–${s.end}`,
+      });
+    }
+  for (const u of plan.unassigned) {
+    const [label, tone] = u.reason.startsWith('Kapazität')
+      ? ['Warteliste', 'bg-amber-100 text-amber-800']
+      : u.reason.startsWith('Aus Plan')
+        ? ['Aus Plan genommen', 'bg-gray-200 text-gray-700']
+        : ['Nicht planbar', 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200'];
+    map.set(u.requestId, { planned: false, label, tone, title: u.reason });
+  }
+  return map;
+}
+
+function PlanChip({ s }: { s?: PlanStatus }) {
+  if (!s) return <span className="text-xs text-gray-300">—</span>;
+  return (
+    <span title={s.title} className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${s.tone}`}>
+      {s.label}
+    </span>
   );
 }

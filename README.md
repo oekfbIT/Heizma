@@ -130,6 +130,8 @@ Auf jeder Anfrage-Seite (`/stammdaten/anfragen/:id`) und im Stopp-Dialog des Pla
 - **⇡ Vorziehen** von der Warteliste: bricht „ältere zuerst“ bewusst – Hinweis „N ältere Anfragen warten noch“, Begründung Pflicht.
 - **Änderungsprotokoll** je Anfrage: was, wann, warum.
 
+**Datenfehler sperren die Planung – auch manuell.** Eine Anfrage mit Fehler (rot: fehlende Koordinaten, nicht zuordenbar, ungültige Uhrzeit …) wird nie eingeplant, auch nicht als Ausnahme. Nach der Korrektur (Adresse, Koordinaten, fehlende Daten) und „Speichern“ laufen Prüfung und Plan neu – die Anfrage wird automatisch eingeplant. Warnungen (z. B. Typ unbekannt → 105 min) blockieren nicht. In der Anfragenliste zeigt die Spalte **Plan** den Stand je Anfrage (Tag · Person, Warteliste, Nicht planbar), Filter „Eingeplant“.
+
 **Regelbrüche: erlaubt, aber nie unsichtbar.** Der Planer bleibt nie in der UI stecken. Ein Regelbruch geht nur mit „Trotzdem einplanen“ + Begründung. Die Plan-Prüfung führt ihn dann als **bewusste Ausnahme (gelb)** statt als Fehler (rot); Touren mit Ausnahmen sind freigebbar, Touren mit echten Fehlern nicht. Ein Regelbruch ohne bestätigte Ausnahme bleibt immer rot.
 
 > **Annahme – Anfrage wird Termin:** Mit der Freigabe einer Tour würden in Produktion die Anfragen im Heizma-Backend zu Terminen. Im Prototyp ist das simuliert: Freigegebene Anfragen verschwinden aus „Offene Anfragen“ und erscheinen unter „Termine“ („aus Freigabe“). „Freigabe zurücknehmen“ macht sie wieder zu Anfragen.
