@@ -45,7 +45,7 @@ npm run dev
 | `npm test` | Tests API (Node Test Runner) + Web (Vitest) |
 | `npm run test:coverage` | Tests mit Coverage-Report |
 | `npm run check:architecture` | Nur die Schichtregeln prüfen |
-| `npm run travel:prewarm -w api` | Fahrzeitmatrix vorab laden (sonst beim ersten Plan-Aufruf) |
+| `npm run travel:prewarm -w api` | Optional – nicht nötig: Fahrzeiten liegen als Seed im Code, der Plan wird beim Serverstart vorberechnet |
 
 ## Anmeldung
 

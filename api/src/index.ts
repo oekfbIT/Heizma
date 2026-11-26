@@ -494,6 +494,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 if (!process.env.VERCEL) {
   app.listen(config.port, () => {
     console.log(`[api] läuft auf http://localhost:${config.port} (Datenquelle: ${config.dataSource})`);
+    // Aufwärmen im Hintergrund: Daten, Fahrzeiten und Plan sind fertig, bevor die erste Seite lädt
+    loadWorkingDataset()
+      .then(getPlan)
+      .then(() => console.log('[api] Plan vorberechnet – bereit'))
+      .catch((e) => console.warn('[api] Vorberechnung fehlgeschlagen, wird beim ersten Aufruf nachgeholt:', (e as Error).message));
   });
 }
 

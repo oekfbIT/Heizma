@@ -78,7 +78,8 @@ Die Rückmeldung nach einer Aktion kommt aus dem **tatsächlichen Ergebnis der N
 
 - **Nur nötige Paare:** Punkte, die in einer Route benachbart sein können – also mindestens eine zuständige Person teilen (Wohnort, Anfragen, fixe Termine).
 - **13 Fahrten pro Call:** Paare werden zu Pfaden mit bis zu 14 Punkten verkettet.
-- **Parallel und gecacht:** 4 Calls gleichzeitig, Ergebnis auf Platte (`api/data/travel-cache.json`). Vorab laden: `npm run travel:prewarm -w api`.
+- **Parallel und gecacht:** 4 Calls gleichzeitig, Ergebnis auf Platte (`api/data/travel-cache.json`).
+- **Ohne Vorbereitung startklar:** Alle Fahrzeiten liegen als Seed im Code (`api/src/fixtures/travel-cache.seed.json`) – lokal, in Docker und auf Vercel sofort da. Beim Serverstart werden Daten, Fahrzeiten und Plan im Hintergrund vorberechnet. Neu geladene Fahrzeiten schreibt die lokale API in den Seed zurück; sie kommen mit dem nächsten Push auf Vercel.
 - **Fallback:** Fehlt ein Paar, Luftlinien-Schätzung – in der UI mit „≈“ markiert, in der Prüfung ausgewiesen.
 
 **Warum die Heizma-API statt OSRM/Google?** Gleiche Quelle wie bei Heizma selbst, kein zusätzlicher Schlüssel, und das Ergebnis ist deckungsgleich mit dem, was der Planer in der Praxis sieht. Die Abstraktion (`TravelLookup`) erlaubt einen Wechsel ohne Änderung am Planer.

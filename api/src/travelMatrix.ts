@@ -15,6 +15,7 @@ import { estimateTravelMinutes, hasCoords } from './geo.js';
 import { travelPathRaw } from './heizmaClient.js';
 import type { Dataset, LatLng } from './types.js';
 import { eligibleTechnicians } from './validation.js';
+import seedJson from './fixtures/travel-cache.seed.json';
 
 /**
  * Fahrzeitmatrix aus der Heizma-API (/travel/path).
@@ -45,8 +46,11 @@ export interface MatrixStats {
   builtAt: string;
 }
 
-// MARK: - Datei-Cache (api/data/travel-cache.json · auf Vercel /tmp)
-// ACHTUNG: Datei löschen = alle Fahrzeiten werden beim nächsten Plan neu geladen (dauert einige Minuten).
+// MARK: - Datei-Cache (api/data/travel-cache.json · auf Vercel /tmp) + mitgelieferter Seed
+// Der Seed (src/fixtures/travel-cache.seed.json) ist Teil des Codes: lokal, in Docker und auf Vercel sind
+// alle Fahrzeiten ab dem ersten Request da – ohne Vorab-Skript. Fehlende Paare werden nachgeladen,
+// lokal in den Seed zurückgeschrieben und kommen mit dem nächsten Push automatisch auf Vercel.
+// ACHTUNG: Datei-Cache löschen ist unkritisch (Seed bleibt). Seed löschen = Fahrzeiten werden neu geladen (Minuten).
 
 const CACHE_PATH = resolve(
   process.env.TRAVEL_CACHE_PATH ?? (process.env.VERCEL ? '/tmp/heizma-travel-cache.json' : resolve(process.cwd(), 'data/travel-cache.json')),
@@ -60,13 +64,36 @@ const pairKey = (a: LatLng, b: LatLng) => {
   return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
 };
 
+const SEED = seedJson as unknown as CacheFile;
+
+/** Seed + Datei-Cache (Datei gewinnt bei gleichem Paar) */
 function readCache(): CacheFile {
+  const pairs = { ...SEED.pairs };
   try {
-    if (existsSync(CACHE_PATH)) return JSON.parse(readFileSync(CACHE_PATH, 'utf8')) as CacheFile;
+    if (existsSync(CACHE_PATH)) Object.assign(pairs, (JSON.parse(readFileSync(CACHE_PATH, 'utf8')) as CacheFile).pairs);
   } catch {
-    /* kaputter Cache → neu aufbauen */
+    /* kaputter Cache → Seed reicht, Rest wird nachgeladen */
   }
-  return { version: 1, pairs: {} };
+  return { version: 1, pairs };
+}
+
+/**
+ * Seed im Quellcode aktualisieren (nur lokal im Repo, nie auf Vercel/Docker): so landen neu geladene
+ * Fahrzeiten mit dem nächsten Commit automatisch im Deployment. Nur echte Fahrzeiten, sortiert für stabile Diffs.
+ */
+const SEED_PATH = resolve(process.cwd(), 'src/fixtures/travel-cache.seed.json');
+function writeSeed(c: CacheFile) {
+  if (process.env.VERCEL || !existsSync(dirname(SEED_PATH))) return;
+  const keys = Object.keys(c.pairs).filter((k) => !c.pairs[k].estimated).sort();
+  if (keys.length <= Object.keys(SEED.pairs).length) return;
+  try {
+    const pairs: CacheFile['pairs'] = {};
+    for (const k of keys) pairs[k] = c.pairs[k];
+    writeFileSync(SEED_PATH, JSON.stringify({ version: 1, pairs }) + '\n');
+    console.log(`[travel] Seed aktualisiert: ${keys.length} Paare (kommt mit dem nächsten Push auf Vercel)`);
+  } catch (e) {
+    console.warn('[travel] Seed nicht schreibbar:', (e as Error).message);
+  }
 }
 
 function writeCache(c: CacheFile) {
@@ -180,6 +207,7 @@ export async function getTravelMatrix(data: Dataset, opts: { log?: boolean } = {
           }
         });
         writeCache(cache);
+        writeSeed(cache);
       })();
       await building;
       building = null;
