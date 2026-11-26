@@ -19,6 +19,8 @@ export interface Stammdaten {
   responsibility: Record<string, string[]>;
   /** Eskalationen je Anfrage (simuliert) */
   escalations: Record<string, Escalation>;
+  /** Anfragen aus freigegebenen Touren – jetzt (simuliert) Termine */
+  convertedRequests?: ServiceRequest[];
 }
 
 export interface Escalation {

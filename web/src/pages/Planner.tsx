@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { CapacityLegend } from '@/components/planner/CapacityBar';
 import { useEffect, useMemo, useState } from 'react';
 import PlanKpis from '@/components/planner/PlanKpis';
 import RouteMap from '@/components/planner/RouteMap';
@@ -217,6 +218,7 @@ export default function Planner() {
                   onSelectStop={(id) => selectStop(selectedTech.id, id)}
                   onHover={setHoveredStopId}
                   violations={violationsFor(selectedTech.id)}
+                  exceptions={new Set((p.verification?.exceptions ?? []).map((e) => e.requestId))}
                   notes={notes.data ?? undefined}
                 />
               </div>
@@ -229,6 +231,7 @@ export default function Planner() {
           ) : (
             <>
               <Step n={2} title="Touren prüfen" hint="Klick auf eine Person zeigt ihre Tour." />
+              <CapacityLegend />
               <div className="mt-2 space-y-2">
                 {visibleTechs.map((t) => {
                   const r = dayRoutes.find((x) => x.technicianId === t.id);
@@ -280,7 +283,9 @@ export default function Planner() {
                       ? `Freigegeben – Reihenfolge und Zeiten bleiben bei Neuplanung erhalten.`
                       : bad
                         ? 'Diese Tour verletzt eine Regel und kann nicht freigegeben werden.'
-                        : 'Passt alles? Dann freigeben – die Tour wird gesperrt.'}
+                        : (p.verification?.exceptions ?? []).some((e) => e.technicianId === selectedTech.id && e.date === day)
+                          ? 'Enthält eine bewusste Ausnahme (gelb, mit Begründung) – Freigabe möglich.'
+                          : 'Passt alles? Dann freigeben – die Tour wird gesperrt.'}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -362,11 +367,17 @@ export default function Planner() {
           route={detailsRoute}
           technician={detailsTech}
           color={colors[detailsTech.id]}
-          request={d.requests.find((r) => r.id === detailsStopId)}
-          appointment={d.appointments.find((a) => a.id === detailsStopId)}
+          request={d.requests.find((r) => r.id === detailsStopId) ?? d.convertedRequests?.find((r) => r.id === detailsStopId)}
+          appointment={d.appointments.find((a) => a.id === detailsStopId && !a.simulated)}
           notes={notes.data ?? undefined}
           violations={violationsFor(detailsTech.id, detailsRoute.date).get(detailsStopId!) ?? []}
           onConfirmNote={confirmNote}
+          onPlanChanged={() => {
+            // Stopp kann in eine andere Tour gewandert sein → Dialog schließen, Plan neu laden
+            setDetailsStopId(null);
+            plan.reload();
+            stamm.reload();
+          }}
           onClose={() => setDetailsStopId(null)}
         />
       )}

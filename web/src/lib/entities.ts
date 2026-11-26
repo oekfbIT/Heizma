@@ -70,7 +70,7 @@ export const ENTITIES: EntityDef[] = [
             createdAt: formatDateTime(r.createdAt),
           },
         })),
-    find: (d, id) => d.requests.find((r) => r.id === id),
+    find: (d, id) => d.requests.find((r) => r.id === id) ?? d.convertedRequests?.find((r) => r.id === id),
     fields: [
       { key: 'customer', label: 'Kunde', value: (r) => r.customer },
       { key: 'address', label: 'Adresse', value: (r) => r.address },
@@ -119,7 +119,7 @@ export const ENTITIES: EntityDef[] = [
     slug: 'termine',
     kind: 'appointment',
     title: 'Fixe Termine',
-    description: 'Bestehende Besichtigungen & Inbetriebnahmen – nicht verschiebbar',
+    description: 'Bestehende Termine – nicht verschiebbar. Inkl. freigegebener Touren (simuliert)',
     icon: 'calendar',
     columns: [
       { key: 'id', label: 'ID', className: 'w-28' },
@@ -133,7 +133,7 @@ export const ENTITIES: EntityDef[] = [
         .sort((a, b) => a.start.localeCompare(b.start))
         .map((a) => ({
           id: a.id,
-          cells: { id: a.id, tech: a.technicianId, type: a.type, customer: `${a.customer} · ${a.address}`, start: formatDateTime(a.start) },
+          cells: { id: a.id, tech: a.technicianId, type: a.simulated ? `${a.type} · aus Freigabe` : a.type, customer: `${a.customer} · ${a.address}`, start: formatDateTime(a.start) },
         })),
     find: (d, id) => d.appointments.find((a) => a.id === id),
     fields: [

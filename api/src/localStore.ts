@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { Appointment, Dataset, ServiceRequest, Technician } from './types.js';
+import type { Appointment, AuditEntry, Dataset, Decision, DecisionMode, ServiceRequest, Technician } from './types.js';
 
 /**
  * Lokale Korrekturen ("Overrides") – die Case-Study-API ist read-only.
@@ -36,14 +36,17 @@ export interface LocalDb {
   approvals: Record<string, { at: string; stops: { id: string; start: string }[] }>;
   /** Vom Planer bestätigte KI-Hinweise aus den Notizen (requestId → Felder) */
   noteConfirmations: Record<string, { earliest?: string; latest?: string; confirmedAt: string }>;
-  log: { at: string; entity: EntityKey | 'escalations' | 'approvals'; id: string; action: 'update' | 'reset' | 'escalate' | 'approve' | 'unapprove'; changes?: Patch }[];
+  /** Manuelle Planer-Entscheidungen je Anfrage (fixieren, aus Plan nehmen, vorziehen) */
+  decisions: Record<string, Decision>;
+  /** Änderungsprotokoll: wer hat was warum geändert */
+  log: AuditEntry[];
 }
 
 const DB_PATH = resolve(
   process.env.LOCAL_DB_PATH ?? (process.env.VERCEL ? '/tmp/heizma-local-db.json' : resolve(process.cwd(), 'data/local-db.json')),
 );
 
-const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, approvals: {}, noteConfirmations: {}, log: [] });
+const empty = (): LocalDb => ({ version: 1, updatedAt: null, overrides: { requests: {}, technicians: {}, appointments: {} }, escalations: {}, approvals: {}, noteConfirmations: {}, decisions: {}, log: [] });
 
 let db: LocalDb | null = null;
 let revision = 0;
@@ -60,6 +63,7 @@ function load(): LocalDb {
   db.escalations ??= {};
   db.approvals ??= {};
   db.noteConfirmations ??= {};
+  db.decisions ??= {};
   return db;
 }
 
@@ -239,7 +243,9 @@ export function approveRoutes(routes: { key: string; stops: { id: string; start:
   const at = new Date().toISOString();
   for (const r of routes) {
     d.approvals[r.key] = { at, stops: r.stops };
-    d.log.push({ at, entity: 'approvals', id: r.key, action: 'approve' });
+    d.log.push({ at, entity: 'approvals', id: r.key, action: 'approve', changes: { stops: r.stops.map((s) => s.id) } });
+    // Anfragen der Tour werden (simuliert) zu Terminen – auch im Protokoll der Anfrage sichtbar
+    for (const s of r.stops) if (s.id.startsWith('req_')) d.log.push({ at, entity: 'requests', id: s.id, action: 'termin', changes: { route: r.key, start: s.start } });
   }
   persist();
 }
@@ -247,8 +253,10 @@ export function approveRoutes(routes: { key: string; stops: { id: string; start:
 export function unapproveRoutes(keys: string[]) {
   const d = load();
   for (const k of keys) {
+    const at = new Date().toISOString();
+    for (const s of d.approvals[k]?.stops ?? []) if (s.id.startsWith('req_')) d.log.push({ at, entity: 'requests', id: s.id, action: 'termin-zurueck', changes: { route: k } });
     delete d.approvals[k];
-    d.log.push({ at: new Date().toISOString(), entity: 'approvals', id: k, action: 'unapprove' });
+    d.log.push({ at, entity: 'approvals', id: k, action: 'unapprove' });
   }
   persist();
 }
@@ -266,4 +274,40 @@ export function confirmNote(requestId: string, c: { earliest?: string; latest?: 
     d.noteConfirmations[requestId] = { ...c, confirmedAt: new Date().toISOString() };
   } else delete d.noteConfirmations[requestId];
   persist();
+}
+
+// ---- Planer-Entscheidungen ----
+
+export function listDecisions(): Record<string, Decision> {
+  return load().decisions;
+}
+
+export function setDecision(requestId: string, input: { mode: DecisionMode; technicianId?: string; date?: string; reason: string; override: boolean }) {
+  const d = load();
+  const before = d.decisions[requestId] ?? null;
+  const decision: Decision = { ...input, reason: input.reason.trim(), at: new Date().toISOString() };
+  d.decisions[requestId] = decision;
+  d.log.push({
+    at: decision.at,
+    entity: 'requests',
+    id: requestId,
+    action: input.mode === 'pin' ? 'fixiert' : input.mode === 'exclude' ? 'aus-plan' : 'vorgezogen',
+    reason: decision.reason || undefined,
+    changes: { before: before ? { mode: before.mode, technicianId: before.technicianId, date: before.date } : null, after: { mode: input.mode, technicianId: input.technicianId, date: input.date }, override: input.override },
+  });
+  persist();
+  return decision;
+}
+
+export function clearDecision(requestId: string) {
+  const d = load();
+  const before = d.decisions[requestId];
+  if (!before) return;
+  delete d.decisions[requestId];
+  d.log.push({ at: new Date().toISOString(), entity: 'requests', id: requestId, action: 'zurueckgesetzt', changes: { before: { mode: before.mode, technicianId: before.technicianId, date: before.date } } });
+  persist();
+}
+
+export function auditFor(id: string): AuditEntry[] {
+  return load().log.filter((e) => e.id === id).slice(-30).reverse();
 }

@@ -3,14 +3,14 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { config } from './config.js';
 import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
 import { geocode, reverseGeocode } from './geocode.js';
-import { buildPlan } from './planner.js';
+import { buildPlan, rankOptions } from './planner.js';
 import { getTravelMatrix, resetTravelMatrix } from './travelMatrix.js';
-import { verifyPlan } from './verify.js';
+import { applyExceptions, verifyPlan } from './verify.js';
 import { getNoteInsights } from './notesAi.js';
-import type { Dataset, Plan } from './types.js';
+import type { Appointment, Dataset, Plan, RequestPlanning, ServiceRequest, SlotOption } from './types.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
-import { applyOverrides, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, resetAll, resetEntity, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, confirmNote, listNoteConfirmations, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, resetAll, resetEntity, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
 
 /** Erster Werktag nach dem Planungszeitraum – Vorschlag für verschobene Termine */
 function nextWorkday(date: string): string {
@@ -37,8 +37,9 @@ function getPlan(data: Dataset): Promise<Plan> {
       const { lookup, stats } = await getTravelMatrix(data);
       const t0 = Date.now();
       const noteConstraints = listNoteConfirmations();
-      const p = buildPlan(data, { travel: lookup, travelStats: stats, approvals: listApprovals(), noteConstraints });
-      p.verification = verifyPlan(p, data, lookup, noteConstraints);
+      const decisions = listDecisions();
+      const p = buildPlan(data, { travel: lookup, travelStats: stats, approvals: listApprovals(), noteConstraints, decisions });
+      p.verification = applyExceptions(verifyPlan(p, data, lookup, noteConstraints), p, decisions);
       console.log(`[plan] ${p.stats.planned}/${p.stats.totalRequests} geplant, ${p.verification.totalViolations} Regelverstöße, ${Date.now() - t0} ms, Fahrzeiten: ${stats.source}`);
       return p;
     })();
@@ -69,12 +70,147 @@ app.get('/api/meta', route(async (_req, res) => {
   res.json({ source: data.source, range: data.range, loadedAt: data.loadedAt, office: config.office, nextWorkday: nextWorkday(data.range.to) });
 }));
 
+/**
+ * Freigegebene Touren → Anfragen werden (simuliert) zu Terminen.
+ * Annahme: In Produktion legt die Freigabe die Termine im Heizma-Backend an; die Anfrage verschwindet
+ * aus der Anfragenliste. Hier nur eine Sicht auf die Daten – Freigabe zurücknehmen macht sie wieder zur Anfrage.
+ */
+function terminView(data: Dataset): { requests: ServiceRequest[]; converted: ServiceRequest[]; appointments: Appointment[] } {
+  const offset = /([+-]\d{2}:\d{2})$/.exec(data.appointments[0]?.start ?? '')?.[1] ?? '+01:00';
+  const byId = new Map(data.requests.map((r) => [r.id, r]));
+  const simulated: Appointment[] = [];
+  for (const [key, approval] of Object.entries(listApprovals())) {
+    const [technicianId, date] = key.split('@');
+    for (const s of approval.stops) {
+      const r = byId.get(s.id);
+      if (!r) continue;
+      const dur = r.visitationType === null ? 105 : r.durationMinutes;
+      const [h, m] = s.start.split(':').map(Number);
+      const endMin = h * 60 + m + dur;
+      const end = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+      simulated.push({
+        id: r.id, technicianId, type: 'Besichtigung', visitationType: r.visitationType, durationMinutes: dur,
+        start: `${date}T${s.start}:00${offset}`, end: `${date}T${end}:00${offset}`,
+        customer: r.customer, address: r.address, lat: r.lat!, lng: r.lng!, simulated: true, fromRequestId: r.id,
+      });
+    }
+  }
+  const ids = new Set(simulated.map((a) => a.id));
+  return { requests: data.requests.filter((r) => !ids.has(r.id)), converted: data.requests.filter((r) => ids.has(r.id)), appointments: [...data.appointments, ...simulated] };
+}
+
 /** Stammdaten + Validierungsergebnis */
 app.get('/api/stammdaten', route(async (_req, res) => {
   const data = await loadWorkingDataset();
   // Zuständigkeit je Anfrage (Gebiet → sonst ≤ 15 km) – Basis für den Regionsfilter
   const responsibility = Object.fromEntries(data.requests.map((r) => [r.id, eligibleTechnicians(r, data.technicians).map((t) => t.id)]));
-  res.json({ ...data, issues: validateDataset(data), responsibility, escalations: listEscalations() });
+  const view = terminView(data);
+  res.json({ ...data, requests: view.requests, appointments: view.appointments, convertedRequests: view.converted, issues: validateDataset(data), responsibility, escalations: listEscalations() });
+}));
+
+// ---- Planer-Entscheidungen je Anfrage (Status, Optionen, fixieren / aus Plan nehmen / vorziehen) ----
+
+async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; info: RequestPlanning } | null> {
+  const data = await loadWorkingDataset();
+  const request = data.requests.find((r) => r.id === id);
+  if (!request) return null;
+  const plan = await getPlan(data);
+  const decision = listDecisions()[id] ?? null;
+  const hit = plan.routes.find((r) => r.stops.some((s) => s.id === id));
+  const unassigned = plan.unassigned.find((u) => u.requestId === id) ?? null;
+  const waiting = plan.unassigned
+    .filter((u) => u.reason.startsWith('Kapazität'))
+    .map((u) => data.requests.find((r) => r.id === u.requestId)!)
+    .filter(Boolean)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const pos = waiting.findIndex((r) => r.id === id);
+  const olderWaiting = waiting.filter((r) => r.id !== id && r.createdAt < request.createdAt).length;
+
+  let route: RequestPlanning['route'] = null;
+  if (hit) {
+    const i = hit.stops.findIndex((s) => s.id === id);
+    const tech = data.technicians.find((t) => t.id === hit.technicianId);
+    route = { technicianId: hit.technicianId, technicianName: tech?.name ?? hit.technicianId, date: hit.date, start: hit.stops[i].start, end: hit.stops[i].end, position: i + 1, stops: hit.stops.length, approved: !!hit.approved };
+  }
+  const status: RequestPlanning['status'] = route?.approved
+    ? 'termin'
+    : decision?.mode === 'exclude'
+      ? 'excluded'
+      : route && decision?.mode === 'pin'
+        ? 'pinned'
+        : route
+          ? 'planned'
+          : unassigned?.reason.startsWith('Kapazität')
+            ? 'waitlist'
+            : 'unplannable';
+  const info: RequestPlanning = {
+    requestId: id,
+    status,
+    route,
+    reason: unassigned?.reason ?? null,
+    decision,
+    waitlist: pos >= 0 ? { position: pos + 1, total: waiting.length } : null,
+    olderWaiting,
+    violations: (plan.verification?.rules ?? []).flatMap((r) => r.violations).filter((v) => v.stopId === id).map((v) => v.message),
+    exceptions: (plan.verification?.exceptions ?? []).filter((e) => e.requestId === id),
+    log: auditFor(id),
+  };
+  return { data, plan, info };
+}
+
+app.get('/api/requests/:id/planning', route(async (req, res) => {
+  const r = await planningFor(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
+  res.json(r.info);
+}));
+
+/** Mögliche Slots, sortiert: regelkonform & wenig Zusatz-Fahrzeit zuerst. Ändert nichts (Vorschau). */
+app.get('/api/requests/:id/options', route(async (req, res) => {
+  const r = await planningFor(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
+  const { lookup } = await getTravelMatrix(r.data);
+  res.json({ options: rankOptions(r.data, r.plan, req.params.id, { travel: lookup, noteConstraints: listNoteConfirmations() }) });
+}));
+
+/**
+ * Entscheidung des Planers. Body { mode: 'pin'|'exclude'|'prioritize', technicianId?, date?, reason?, override? }
+ * Grundsatz: Der Planer darf alles – aber ein Regelbruch braucht override + Begründung und bleibt im Plan sichtbar.
+ */
+app.post('/api/requests/:id/decision', route(async (req, res) => {
+  const id = req.params.id;
+  const r = await planningFor(id);
+  if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
+  if (r.info.status === 'termin') return res.status(409).json({ error: 'Anfrage ist Teil einer freigegebenen Tour – zuerst Freigabe zurücknehmen' });
+  const body = req.body ?? {};
+  const mode = String(body.mode ?? '');
+  const reason = String(body.reason ?? '').trim();
+  const override = body.override === true;
+  if (!['pin', 'exclude', 'prioritize'].includes(mode)) throw new ValidationError('mode muss pin, exclude oder prioritize sein');
+
+  if (mode === 'exclude') {
+    if (reason.length < 3) throw new ValidationError('Bitte kurz begründen, warum die Anfrage aus dem Plan genommen wird');
+    return res.json({ ok: true, decision: setDecision(id, { mode, reason, override: false }) });
+  }
+  if (mode === 'prioritize') {
+    // Bricht "ältere zuerst" bewusst → immer mit Begründung
+    if (reason.length < 3) throw new ValidationError(r.info.olderWaiting ? `Bitte begründen – ${r.info.olderWaiting} ältere Anfragen warten noch` : 'Bitte kurz begründen, warum die Anfrage vorgezogen wird');
+    return res.json({ ok: true, decision: setDecision(id, { mode, reason, override: true }) });
+  }
+
+  const technicianId = String(body.technicianId ?? '');
+  const date = String(body.date ?? '');
+  const { lookup } = await getTravelMatrix(r.data);
+  const option: SlotOption | undefined = rankOptions(r.data, r.plan, id, { travel: lookup, noteConstraints: listNoteConfirmations() }).find((o) => o.technicianId === technicianId && o.date === date);
+  if (!option) return res.status(400).json({ error: `${technicianId} ist am ${date} nicht verfügbar` });
+  if (option.blocked) return res.status(409).json({ error: option.blocked });
+  if (option.warnings.length && !override) return res.status(409).json({ error: 'Regelbruch – nur als bewusste Ausnahme möglich', warnings: option.warnings, needsOverride: true });
+  if (option.warnings.length && reason.length < 3) throw new ValidationError('Ausnahme braucht eine kurze Begründung');
+  res.json({ ok: true, decision: setDecision(id, { mode: 'pin', technicianId, date, reason, override: option.warnings.length > 0 }) });
+}));
+
+app.delete('/api/requests/:id/decision', route(async (req, res) => {
+  clearDecision(req.params.id);
+  res.json({ ok: true });
 }));
 
 /** Übersichtszahlen für die Kacheln */

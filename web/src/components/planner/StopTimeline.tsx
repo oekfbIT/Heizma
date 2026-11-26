@@ -13,11 +13,13 @@ interface Props {
   onHover: (stopId: string | null) => void;
   /** Stopp-IDs mit Regelverstoß (aus der Plan-Prüfung) */
   violations?: Map<string, string[]>;
+  /** Anfragen mit bewusster Ausnahme des Planers (gelb) */
+  exceptions?: Set<string>;
   notes?: NoteInfo;
 }
 
 /** Tagesablauf als einfache Liste: links die Uhrzeit, rechts wer/wo. Klick = auf der Karte zeigen. */
-export default function StopTimeline({ route, technician, color, selectedStopId, hoveredStopId, onSelectStop, onHover, violations, notes }: Props) {
+export default function StopTimeline({ route, technician, color, selectedStopId, hoveredStopId, onSelectStop, onHover, violations, exceptions, notes }: Props) {
   const lunchBefore = route.lunch ? route.stops.findIndex((s) => s.start >= route.lunch!.end) : -1;
 
   return (
@@ -42,7 +44,7 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
               onMouseEnter={() => onHover(stop.id)}
               onMouseLeave={() => onHover(null)}
               className={`flex w-full gap-3 rounded-xl border px-2 py-2 text-left transition ${
-                bad ? 'border-red-200 bg-red-50' : selected ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : hoveredStopId === stop.id ? 'border-gray-200 bg-gray-50' : 'border-transparent'
+                bad ? 'border-red-200 bg-red-50' : exceptions?.has(stop.id) ? 'border-amber-200 bg-amber-50' : selected ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : hoveredStopId === stop.id ? 'border-gray-200 bg-gray-50' : 'border-transparent'
               }`}
             >
               <span className="w-[46px] shrink-0 pt-0.5 text-right text-xs font-semibold tabular-nums text-gray-700">
@@ -62,6 +64,9 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
                   <Tag className={stop.appointmentType === 'Inbetriebnahme' ? 'bg-gray-900 text-white' : 'bg-brand-50 text-brand-700'}>{stop.appointmentType}</Tag>
                   {(stop.appointmentType === 'Besichtigung' || stop.visitationType) && <Tag className="bg-gray-100 text-gray-600">{stop.visitationType ?? 'Typ ?'}</Tag>}
                   {stop.fixed && <Tag className="border border-gray-300 text-gray-600">fix</Tag>}
+                  {stop.manual?.mode === 'pin' && <Tag className="bg-sky-100 text-sky-800">📌 manuell</Tag>}
+                  {stop.manual?.mode === 'prioritize' && <Tag className="bg-violet-100 text-violet-800">⇡ vorgezogen</Tag>}
+                  {exceptions?.has(stop.id) && <Tag className="bg-amber-100 text-amber-800" >Ausnahme</Tag>}
                   {insight && <Tag className="bg-violet-50 text-violet-700">{insight.hint}</Tag>}
                 </span>
                 {bad?.map((m) => (

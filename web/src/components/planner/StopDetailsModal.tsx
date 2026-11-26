@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { NoteInfo } from '@/lib/api';
+import RequestPlanningCard from '@/components/RequestPlanningCard';
 import { formatDateTime, formatDay, visitationLabel } from '@/lib/format';
 import type { Appointment, DayRoute, PlannedStop, ServiceRequest, Technician } from '@/lib/types';
 
@@ -14,11 +15,13 @@ interface Props {
   notes?: NoteInfo;
   violations: string[];
   onConfirmNote: (requestId: string, c: { earliest?: string; latest?: string } | null) => void;
+  /** Planer hat die Anfrage verschoben / fixiert / herausgenommen → Plan neu laden */
+  onPlanChanged?: () => void;
   onClose: () => void;
 }
 
 /** Alle Informationen zu einem Stopp in einem Dialog */
-export default function StopDetailsModal({ stop, index, route, technician, color, request, appointment, notes, violations, onConfirmNote, onClose }: Props) {
+export default function StopDetailsModal({ stop, index, route, technician, color, request, appointment, notes, violations, onConfirmNote, onPlanChanged, onClose }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -56,6 +59,12 @@ export default function StopDetailsModal({ stop, index, route, technician, color
         </div>
 
         <div className="space-y-5 p-5 text-sm">
+          {stop.kind === 'request' && (
+            <Section title="Planung – Entscheidung des Planers">
+              <RequestPlanningCard requestId={stop.id} compact onChanged={onPlanChanged} />
+            </Section>
+          )}
+
           {violations.length > 0 && (
             <div className="rounded-lg bg-red-50 p-3 text-red-700">
               <p className="font-semibold">Regelverstoß</p>

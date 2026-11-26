@@ -1,0 +1,374 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { apiGet, apiSend, useApi } from '@/lib/api';
+import { formatDateTime, formatDay } from '@/lib/format';
+import type { AuditEntry, RequestPlanning, SlotOption } from '@/lib/types';
+
+/**
+ * Planung einer einzelnen Anfrage: wo steht sie, und was kann der Planer tun.
+ * Grundsatz: Das System schlägt vor, der Planer entscheidet. Regelbrüche sind möglich,
+ * brauchen aber eine Begründung und bleiben im Plan als Ausnahme sichtbar.
+ * Wird auf der Anfrage-Seite und im Stopp-Dialog des Planers verwendet – gleiche Endpunkte, gleiche Logik.
+ */
+
+const STATUS: Record<RequestPlanning['status'], { label: string; tone: string }> = {
+  termin: { label: 'Termin (freigegeben)', tone: 'bg-brand-500 text-white' },
+  pinned: { label: '📌 Manuell fixiert', tone: 'bg-sky-100 text-sky-800' },
+  planned: { label: 'Vorgeschlagen', tone: 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200' },
+  waitlist: { label: 'Warteliste', tone: 'bg-amber-100 text-amber-800' },
+  excluded: { label: 'Aus Plan genommen', tone: 'bg-gray-200 text-gray-700' },
+  unplannable: { label: 'Nicht planbar', tone: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200' },
+};
+
+const ACTION: Record<string, string> = {
+  fixiert: 'Fixiert',
+  'aus-plan': 'Aus Plan genommen',
+  vorgezogen: 'Vorgezogen',
+  zurueckgesetzt: 'Entscheidung zurückgenommen',
+  termin: 'Tour freigegeben → Termin',
+  'termin-zurueck': 'Freigabe zurückgenommen → wieder Anfrage',
+  update: 'Stammdaten korrigiert',
+  reset: 'Original wiederhergestellt',
+  escalate: 'Eskaliert',
+};
+
+type Mode = null | 'move' | 'exclude' | 'prioritize';
+
+export default function RequestPlanningCard({ requestId, compact, onChanged }: { requestId: string; compact?: boolean; onChanged?: () => void }) {
+  const { data: info, error, reload } = useApi<RequestPlanning>(`/api/requests/${encodeURIComponent(requestId)}/planning`);
+  const [mode, setMode] = useState<Mode>(null);
+  const [options, setOptions] = useState<SlotOption[] | null>(null);
+  const [picked, setPicked] = useState<SlotOption | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    const onChange = () => reload();
+    window.addEventListener('heizma:data-changed', onChange);
+    return () => window.removeEventListener('heizma:data-changed', onChange);
+  }, [reload]);
+
+  const reset = () => {
+    setMode(null);
+    setPicked(null);
+    setReason('');
+    setShowAll(false);
+  };
+
+  async function openMove() {
+    reset();
+    setMode('move');
+    setOptions(null);
+    try {
+      const r = await apiGet<{ options: SlotOption[] }>(`/api/requests/${encodeURIComponent(requestId)}/options`);
+      setOptions(r.options);
+    } catch (e) {
+      setMsg({ tone: 'error', text: (e as Error).message });
+    }
+  }
+
+  async function send(body: Record<string, unknown> | null, okText: string | ((fresh: RequestPlanning) => string)) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await apiSend(`/api/requests/${encodeURIComponent(requestId)}/decision`, body ? 'POST' : 'DELETE', body ?? undefined);
+      reset();
+      // Meldung aus dem tatsächlichen Ergebnis der Neuplanung, nicht aus der Vorschau
+      const fresh = await apiGet<RequestPlanning>(`/api/requests/${encodeURIComponent(requestId)}/planning`);
+      reload();
+      window.dispatchEvent(new Event('heizma:data-changed'));
+      onChanged?.();
+      setMsg({ tone: 'ok', text: typeof okText === 'function' ? okText(fresh) : okText });
+    } catch (e) {
+      setMsg({ tone: 'error', text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error) return <div className="card p-4 text-sm text-red-700">{error}</div>;
+  if (!info) return <div className="card p-4 text-sm text-gray-400">Planung wird geladen …</div>;
+
+  const st = STATUS[info.status];
+  const d = info.decision;
+  const locked = info.status === 'termin';
+  const reasonOk = reason.trim().length >= 3;
+
+  return (
+    <section className={compact ? '' : 'card p-4 md:p-5'}>
+      {/* Status */}
+      <div className="flex flex-wrap items-center gap-2">
+        {!compact && <h2 className="mr-1 text-sm font-semibold">Planung</h2>}
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.tone}`}>{st.label}</span>
+        {d?.mode === 'prioritize' && <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-800">⇡ Vorgezogen</span>}
+        {info.exceptions.length > 0 && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Bewusste Ausnahme</span>}
+        {info.violations.length > 0 && <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Regelverstoß</span>}
+      </div>
+
+      <div className="mt-2 text-sm text-gray-700">
+        {info.route ? (
+          <p>
+            <strong>{formatDay(info.route.date)}</strong> · {info.route.technicianName} ·{' '}
+            <strong className="tabular-nums">
+              {info.route.start}–{info.route.end}
+            </strong>{' '}
+            <span className="text-gray-500">
+              (Stopp {info.route.position} von {info.route.stops})
+            </span>
+            {!compact && (
+              <Link to="/planer" className="ml-2 text-brand-600 hover:underline">
+                Im Planer öffnen →
+              </Link>
+            )}
+          </p>
+        ) : (
+          <p className="text-gray-600">{info.reason ?? 'Nicht eingeplant'}</p>
+        )}
+        {info.waitlist && (
+          <p className="mt-1 text-xs text-gray-500">
+            Platz {info.waitlist.position} von {info.waitlist.total} auf der Warteliste (nach Eingang)
+          </p>
+        )}
+        {locked && (
+          <p className="mt-1 text-xs text-gray-500">
+            Teil einer freigegebenen Tour – in Produktion als Termin im Heizma-Backend angelegt. Änderungen erst nach „Freigabe zurücknehmen“.
+          </p>
+        )}
+        {d && d.reason && (
+          <p className="mt-1 text-xs text-gray-500">
+            Begründung: „{d.reason}“ · {formatDateTime(d.at)}
+          </p>
+        )}
+        {d?.mode === 'prioritize' && info.status === 'waitlist' && (
+          <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+            Vorgezogen, passt aber in keinen Tag regelkonform. Über „Verschieben…“ lässt sie sich als bewusste Ausnahme einplanen.
+          </p>
+        )}
+        {info.violations.map((v) => (
+          <p key={v} className="mt-1 text-xs font-medium text-red-600">
+            ⚠ {v}
+          </p>
+        ))}
+        {info.exceptions.map((e, i) => (
+          <p key={i} className="mt-1 text-xs text-amber-700">
+            ◆ {e.message} <span className="text-amber-600">– „{e.reason}“</span>
+          </p>
+        ))}
+      </div>
+
+      {/* Aktionen */}
+      {!locked && mode === null && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {!info.reason?.startsWith('Keine Koordinaten') && (
+            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void openMove()}>
+              {info.route ? 'Verschieben…' : 'Einplanen…'}
+            </button>
+          )}
+          {info.status === 'planned' && info.route && (
+            <button
+              className="btn-secondary !py-1.5 text-xs"
+              disabled={busy}
+              title="Bleibt bei Neuplanung an diesem Tag und bei dieser Person"
+              onClick={() => void send({ mode: 'pin', technicianId: info.route!.technicianId, date: info.route!.date, reason: '' }, 'Fixiert – bleibt bei Neuplanung an diesem Tag und bei dieser Person.')}
+            >
+              📌 Fixieren
+            </button>
+          )}
+          {info.status === 'waitlist' && d?.mode !== 'prioritize' && (
+            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => { reset(); setMode('prioritize'); }}>
+              ⇡ Vorziehen
+            </button>
+          )}
+          {info.status !== 'excluded' && (
+            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => { reset(); setMode('exclude'); }}>
+              Aus Plan nehmen
+            </button>
+          )}
+          {d && (
+            <button className="btn-secondary !py-1.5 text-xs" disabled={busy} onClick={() => void send(null, 'Zurückgenommen – Anfrage wird wieder automatisch geplant.')}>
+              {d.mode === 'pin' ? 'Fixierung lösen' : d.mode === 'exclude' ? 'Wieder aufnehmen' : 'Vorziehen zurücknehmen'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Verschieben: sortierte Vorschläge statt leerer Auswahl */}
+      {mode === 'move' && (
+        <div className="mt-3 rounded-xl border border-gray-200 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Mögliche Tage – beste zuerst</p>
+            <button className="text-xs text-gray-500 hover:underline" onClick={reset}>
+              Abbrechen
+            </button>
+          </div>
+          {!options ? (
+            <p className="text-sm text-gray-400">Berechne Optionen …</p>
+          ) : options.length === 0 ? (
+            <p className="text-sm text-gray-500">Keine Optionen – Anfrage hat keine Koordinaten. Erst Adresse/Koordinaten korrigieren.</p>
+          ) : (
+            <>
+              <ul className="space-y-1">
+                {(showAll ? options : options.slice(0, 6)).map((o) => {
+                  const key = `${o.technicianId}@${o.date}`;
+                  const sel = picked && `${picked.technicianId}@${picked.date}` === key;
+                  return (
+                    <li key={key}>
+                      <button
+                        disabled={!!o.blocked || o.current}
+                        onClick={() => { setPicked(o); setReason(''); }}
+                        className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
+                          sel ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-300' : 'border-gray-100 hover:bg-gray-50'
+                        } ${o.blocked || o.current ? 'cursor-not-allowed opacity-60' : ''}`}
+                      >
+                        <span className={`mt-0.5 ${o.blocked ? 'text-gray-400' : o.warnings.length ? 'text-amber-500' : 'text-brand-600'}`}>{o.blocked ? '✕' : o.warnings.length ? '⚠' : '✓'}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="font-semibold">{formatDay(o.date)}</span> · {o.technicianName}
+                          {o.start && <span className="tabular-nums text-gray-500"> · ca. {o.start}</span>}
+                          {o.current && <span className="text-gray-500"> · aktuell</span>}
+                          {(o.blocked ?? o.warnings[0]) && <span className={`block ${o.blocked ? 'text-gray-500' : 'text-amber-700'}`}>{o.blocked ?? o.warnings.join(' · ')}</span>}
+                        </span>
+                        {!o.blocked && !o.current && <span className="shrink-0 tabular-nums text-gray-500">+{o.deltaDrive} min</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {options.length > 6 && !showAll && (
+                <button className="mt-1 text-xs text-brand-600 hover:underline" onClick={() => setShowAll(true)}>
+                  Alle {options.length} Tage anzeigen
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Vorschau vor dem Übernehmen */}
+          {picked && (
+            <div className={`mt-3 rounded-lg p-3 text-xs ${picked.warnings.length ? 'bg-amber-50 text-amber-900' : 'bg-gray-50 text-gray-700'}`}>
+              <p className="font-semibold">Vorschau</p>
+              <p>
+                Neu: {formatDay(picked.date)} · {picked.technicianName}
+                {picked.start && ` · ca. ${picked.start}–${picked.end}`} · Tour {picked.stopsBefore} → {picked.stopsBefore + 1} Stopps · +{picked.deltaDrive} min Fahrt
+              </p>
+              {info.route && (
+                <p>
+                  Bisher: {formatDay(info.route.date)} · {info.route.technicianName}
+                  {options?.find((o) => o.current)?.sourceSaving ? ` · −${options.find((o) => o.current)!.sourceSaving} min Fahrt` : ''}
+                </p>
+              )}
+              {picked.warnings.length > 0 ? (
+                <>
+                  <p className="mt-2 font-semibold">Verstößt gegen Regeln:</p>
+                  {picked.warnings.map((w) => (
+                    <p key={w}>⚠ {w}</p>
+                  ))}
+                  <input className="input mt-2 !py-1.5 text-xs" placeholder="Begründung (Pflicht), z. B. „Kunde besteht auf Donnerstag“" value={reason} onChange={(e) => setReason(e.target.value)} />
+                </>
+              ) : (
+                <input className="input mt-2 !py-1.5 text-xs" placeholder="Notiz (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
+              )}
+              <p className="mt-2 text-[11px] opacity-70">Vorschau auf Basis des aktuellen Plans. Nach dem Übernehmen wird die Woche neu geplant und unabhängig geprüft.</p>
+              <button
+                className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${picked.warnings.length ? 'bg-amber-600 hover:bg-amber-700' : 'bg-brand-500 hover:bg-brand-600'}`}
+                disabled={busy || (picked.warnings.length > 0 && !reasonOk)}
+                onClick={() =>
+                  void send(
+                    { mode: 'pin', technicianId: picked.technicianId, date: picked.date, reason, override: picked.warnings.length > 0 },
+                    (f) =>
+                      f.exceptions.length
+                        ? 'Als bewusste Ausnahme eingeplant – im Plan gelb markiert.'
+                        : f.violations.length
+                          ? 'Eingeplant, verletzt aber Regeln (rot) – bitte prüfen.'
+                          : f.route
+                            ? `Eingeplant: ${formatDay(f.route.date)} ${f.route.start}–${f.route.end} – nach Neuplanung ohne Regelbruch.`
+                            : `Nicht eingeplant: ${f.reason ?? 'unbekannt'}`,
+                  )
+                }
+              >
+                {picked.warnings.length ? 'Trotzdem einplanen (Ausnahme)' : 'Übernehmen'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Aus Plan nehmen */}
+      {mode === 'exclude' && (
+        <ReasonBox
+          title="Aus dem Plan nehmen"
+          hint="Die Anfrage bleibt offen, wird aber nicht automatisch eingeplant, bis du sie wieder aufnimmst."
+          placeholder="Grund, z. B. „Kunde ruft zurück“"
+          cta="Aus Plan nehmen"
+          reason={reason}
+          setReason={setReason}
+          busy={busy}
+          onCancel={reset}
+          onConfirm={() => void send({ mode: 'exclude', reason }, 'Aus dem Plan genommen.')}
+        />
+      )}
+
+      {/* Vorziehen – bricht „ältere zuerst“ bewusst */}
+      {mode === 'prioritize' && (
+        <ReasonBox
+          title="Vorziehen"
+          warn={info.olderWaiting > 0 ? `${info.olderWaiting} ältere Anfrage${info.olderWaiting === 1 ? '' : 'n'} warte${info.olderWaiting === 1 ? 't' : 'n'} noch. Die Regel „ältere zuerst“ wird hier bewusst übergangen.` : undefined}
+          hint="Wird vor allen anderen eingeplant, sofern ein Tag regelkonform passt. Im Plan als Ausnahme sichtbar."
+          placeholder="Begründung (Pflicht), z. B. „Förderfrist endet“"
+          cta="Vorziehen"
+          reason={reason}
+          setReason={setReason}
+          busy={busy}
+          onCancel={reset}
+          onConfirm={() => void send({ mode: 'prioritize', reason }, (f) => (f.route ? `Vorgezogen und eingeplant: ${formatDay(f.route.date)} ${f.route.start}.` : 'Vorgezogen – passt aber in keinen Tag regelkonform.'))}
+        />
+      )}
+
+      {msg && <p className={`mt-3 rounded px-2 py-1 text-xs ${msg.tone === 'ok' ? 'bg-brand-50 text-brand-800' : 'bg-red-50 text-red-700'}`}>{msg.text}</p>}
+
+      {info.log.length > 0 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-medium text-gray-500">Änderungsprotokoll ({info.log.length})</summary>
+          <ul className="mt-1 space-y-0.5">
+            {info.log.map((l: AuditEntry, i) => (
+              <li key={i} className="text-[11px] text-gray-500">
+                <span className="tabular-nums">{formatDateTime(l.at.replace('Z', ''))}</span> · {ACTION[l.action] ?? l.action}
+                {l.reason && <span> – „{l.reason}“</span>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function ReasonBox(p: {
+  title: string;
+  hint: string;
+  warn?: string;
+  placeholder: string;
+  cta: string;
+  reason: string;
+  setReason: (v: string) => void;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3 text-xs">
+      <p className="font-semibold">{p.title}</p>
+      {p.warn && <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-amber-800">⚠ {p.warn}</p>}
+      <p className="mt-1 text-gray-500">{p.hint}</p>
+      <input className="input mt-2 !py-1.5 text-xs" placeholder={p.placeholder} value={p.reason} onChange={(e) => p.setReason(e.target.value)} autoFocus />
+      <div className="mt-2 flex gap-2">
+        <button className="btn-secondary flex-1 !py-1.5 text-xs" onClick={p.onCancel}>
+          Abbrechen
+        </button>
+        <button className="btn-primary flex-1 !py-1.5 text-xs" disabled={p.busy || p.reason.trim().length < 3} onClick={p.onConfirm}>
+          {p.cta}
+        </button>
+      </div>
+    </div>
+  );
+}

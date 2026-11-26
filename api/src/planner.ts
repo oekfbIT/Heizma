@@ -2,7 +2,7 @@ import { hasCoords } from './geo.js';
 import { splitIso, toHHMM, toMinutes } from './time.js';
 import { estimateLookup, type MatrixStats, type TravelLookup } from './travelMatrix.js';
 import { eligibleTechnicians } from './validation.js';
-import type { Appointment, Dataset, DayRoute, LatLng, Plan, PlannedStop, ServiceRequest, Technician, UnassignedRequest } from './types.js';
+import type { Appointment, Dataset, DayRoute, Decision, LatLng, ManualMark, Plan, PlannedStop, ServiceRequest, SlotOption, Technician, UnassignedRequest } from './types.js';
 
 /**
  * Planer in drei Phasen:
@@ -41,6 +41,7 @@ interface Item {
   fixedStart: number | null; // fixe Termine bzw. freigegebene Stopps
   createdAt: string;
   eligible: Set<string>;
+  manual: ManualMark | null;
 }
 
 interface Slot {
@@ -59,9 +60,12 @@ interface SimResult {
   returnHome: number;
   lunch: [number, number] | null;
   stops: PlannedStop[];
+  /** Warum der Tag nicht regelkonform ist (nur bei feasible = false) */
+  reason?: string;
 }
 
 const FAIL: SimResult = { feasible: false, drive: Infinity, departure: 0, returnHome: 0, lunch: null, stops: [] };
+const fail = (reason: string): SimResult => ({ ...FAIL, reason });
 
 function simulate(slot: Slot, items: Item[], travel: TravelLookup, strict = true): SimResult {
   const fullDay = isFullDay(slot.windowStart, slot.windowEnd);
@@ -88,14 +92,14 @@ function simulate(slot: Slot, items: Item[], travel: TravelLookup, strict = true
     const arrival = t + leg;
     let start = arrival;
     if (item.fixedStart !== null) {
-      if (arrival > item.fixedStart && strict) return FAIL;
+      if (arrival > item.fixedStart && strict) return fail(`Fixer Termin ${item.customer} um ${toHHMM(item.fixedStart)} nicht mehr erreichbar`);
       start = item.fixedStart;
     } else if (item.earliest !== null) {
       start = Math.max(arrival, item.earliest);
     }
     const end = start + item.duration;
-    if (end > slot.windowEnd && strict) return FAIL;
-    if (item.latestEnd !== null && end > item.latestEnd && strict) return FAIL; // Termin inkl. Anfahrt muss im Fenster liegen
+    if (end > slot.windowEnd && strict) return fail(`${item.customer} endet ${toHHMM(end)}, Fenster bis ${toHHMM(slot.windowEnd)}`);
+    if (item.latestEnd !== null && end > item.latestEnd && strict) return fail(`${item.customer} endet ${toHHMM(end)}, laut Notiz nur bis ${toHHMM(item.latestEnd)}`);
 
     drive += leg;
     stops.push({
@@ -115,6 +119,7 @@ function simulate(slot: Slot, items: Item[], travel: TravelLookup, strict = true
       end: toHHMM(end),
       waitMinutes: start - arrival,
       fixed: item.kind === 'appointment',
+      manual: item.manual,
     });
     t = end;
     pos = item.pos;
@@ -122,7 +127,7 @@ function simulate(slot: Slot, items: Item[], travel: TravelLookup, strict = true
 
   const back = travel.minutes(pos, slot.tech.home);
   const returnHome = stops.length ? t + back : slot.windowStart;
-  if (returnHome > slot.windowEnd + RETURN_TOLERANCE && strict) return FAIL;
+  if (returnHome > slot.windowEnd + RETURN_TOLERANCE && strict) return fail(`Heimkehr ${toHHMM(returnHome)} – ${returnHome - slot.windowEnd} min nach Fensterende (max. ${RETURN_TOLERANCE})`);
   drive += back;
 
   // Abfahrt so spät wie möglich, damit beim ersten Kunden nicht gewartet wird
@@ -181,6 +186,7 @@ function requestToItem(r: ServiceRequest, techs: Technician[], note?: NoteConstr
     fixedStart: null,
     createdAt: r.createdAt,
     eligible: new Set(eligibleTechnicians(r, techs).map((t) => t.id)),
+    manual: null,
   };
 }
 
@@ -200,6 +206,7 @@ function appointmentToItem(a: Appointment): Item {
     fixedStart: s.minutes,
     createdAt: '',
     eligible: new Set([a.technicianId]),
+    manual: null,
   };
 }
 
@@ -220,6 +227,8 @@ export interface PlanOptions {
   travelStats?: MatrixStats;
   /** key "techId@date" → freigegebene Route (Stopps + Startzeiten) */
   approvals?: Record<string, ApprovedRoute>;
+  /** Manuelle Entscheidungen des Planers je Anfrage */
+  decisions?: Record<string, Decision>;
   optimize?: boolean;
 }
 
@@ -265,6 +274,36 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
   }
   const open = slots.filter((s) => !s.locked);
   const sim = (slot: Slot, list = slot.items) => simulate(slot, list, travel);
+  const decisions = opts.decisions ?? {};
+  const unassigned: UnassignedRequest[] = [];
+  const waiting: Item[] = [];
+  const handled = new Set<string>(pinned);
+
+  // 1b) Planer-Entscheidungen zuerst: "aus Plan genommen" und "fixiert" (Planer entscheidet, Regeln werden danach geprüft)
+  const byTime = Object.entries(decisions).sort(([, a], [, b]) => a.at.localeCompare(b.at));
+  for (const [id, d] of byTime) {
+    if (handled.has(id) || !data.requests.some((r) => r.id === id)) continue;
+    if (d.mode === 'exclude') {
+      unassigned.push({ requestId: id, reason: `Aus Plan genommen: ${d.reason}` });
+      handled.add(id);
+      continue;
+    }
+    if (d.mode !== 'pin') continue;
+    handled.add(id);
+    const item = items.get(id);
+    if (!item) {
+      unassigned.push({ requestId: id, reason: 'Keine Koordinaten – erst geokodieren' });
+      continue;
+    }
+    item.manual = { mode: 'pin', reason: d.reason, override: d.override };
+    const slot = open.find((s) => s.tech.id === d.technicianId && s.date === d.date);
+    if (!slot) {
+      unassigned.push({ requestId: id, reason: `Fixierung nicht möglich: ${d.technicianId} am ${d.date} nicht verfügbar oder Tour freigegeben` });
+      continue;
+    }
+    const at = insertionIndex(slot, item, sim, travel);
+    slot.items.splice(at, 0, item);
+  }
 
   /** Günstigste regelkonforme Einfügestelle für ein Item */
   function bestInsertion(item: Item, candidates: Slot[]) {
@@ -284,10 +323,15 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
     return best;
   }
 
-  // 2) Älteste Anfragen zuerst
-  const queue = [...data.requests].filter((r) => !pinned.has(r.id)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const unassigned: UnassignedRequest[] = [];
-  const waiting: Item[] = [];
+  // 2) Älteste Anfragen zuerst – vom Planer vorgezogene vor allen anderen
+  const prio = (id: string) => (decisions[id]?.mode === 'prioritize' ? 0 : 1);
+  const byPriority = (a: { id: string; createdAt: string }, b: { id: string; createdAt: string }) => prio(a.id) - prio(b.id) || a.createdAt.localeCompare(b.createdAt);
+  const queue = [...data.requests].filter((r) => !handled.has(r.id)).sort(byPriority);
+  for (const r of queue) {
+    const d = decisions[r.id];
+    const it = items.get(r.id);
+    if (d?.mode === 'prioritize' && it) it.manual = { mode: 'prioritize', reason: d.reason, override: d.override };
+  }
 
   for (const request of queue) {
     const item = items.get(request.id);
@@ -335,7 +379,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
       // Relocate: Anfrage in eine andere Tour / an einen anderen Tag
       for (const slot of open) {
         for (const item of [...slot.items]) {
-          if (item.fixedStart !== null) continue;
+          if (item.fixedStart !== null || item.manual?.mode === 'pin') continue;
           const before = sim(slot).drive;
           const without = slot.items.filter((x) => x !== item);
           const removedDrive = sim(slot, without).drive;
@@ -355,7 +399,7 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
   }
 
   // 4) Freigewordene Kapazität: Warteliste erneut, älteste zuerst
-  for (const item of waiting.sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+  for (const item of waiting.sort(byPriority)) {
     const best = bestInsertion(item, open);
     if (best) best.slot.items.splice(best.index, 0, item);
     else unassigned.push({ requestId: item.id, reason: 'Kapazität erschöpft (Warteliste)' });
@@ -406,4 +450,99 @@ export function buildPlan(data: Dataset, opts: PlanOptions = {}): Plan {
       routesWithStops: routes.filter((r) => r.stops.length).length,
     },
   };
+}
+
+/**
+ * Einfügestelle für eine vom Planer fixierte Anfrage: regelkonform, wenn möglich;
+ * sonst die Stelle mit der kürzesten Fahrzeit (Regelbruch – der Validator weist ihn aus).
+ */
+function insertionIndex(slot: Slot, item: Item, sim: (slot: Slot, list?: Item[]) => SimResult, travel: TravelLookup): number {
+  let best = { index: slot.items.length, drive: Infinity, strict: false };
+  for (let i = 0; i <= slot.items.length; i++) {
+    const trial = [...slot.items.slice(0, i), item, ...slot.items.slice(i)];
+    const s = sim(slot, trial);
+    if (s.feasible) {
+      if (!best.strict || s.drive < best.drive) best = { index: i, drive: s.drive, strict: true };
+    } else if (!best.strict) {
+      const loose = simulate(slot, trial, travel, false);
+      if (loose.drive < best.drive) best = { index: i, drive: loose.drive, strict: false };
+    }
+  }
+  return best.index;
+}
+
+/**
+ * Mögliche Slots für eine Anfrage auf Basis des aktuellen Plans (für "Verschieben…").
+ * Pro Techniker-Tag: günstigste Einfügestelle, Zusatz-Fahrzeit und was dabei gegen Regeln verstoßen würde.
+ * Es wird nichts geändert – das ist die Vorschau, die der Planer vor dem Übernehmen sieht.
+ */
+export function rankOptions(data: Dataset, plan: Plan, requestId: string, opts: PlanOptions = {}): SlotOption[] {
+  const travel = opts.travel ?? estimateLookup;
+  const request = data.requests.find((r) => r.id === requestId);
+  if (!request) return [];
+  const item = requestToItem(request, data.technicians, opts.noteConstraints?.[requestId]);
+  if (!item) return [];
+  const notes = opts.noteConstraints ?? {};
+  const toItem = (stop: PlannedStop, approved: boolean): Item | null => {
+    if (stop.kind === 'appointment') {
+      const a = data.appointments.find((x) => x.id === stop.id);
+      return a ? appointmentToItem(a) : null;
+    }
+    const r = data.requests.find((x) => x.id === stop.id);
+    const it = r ? requestToItem(r, data.technicians, notes[r.id]) : null;
+    return it ? { ...it, fixedStart: approved ? toMinutes(stop.start) : null } : null;
+  };
+
+  const options: SlotOption[] = [];
+  for (const route of plan.routes) {
+    const tech = data.technicians.find((t) => t.id === route.technicianId);
+    if (!tech) continue;
+    const slot: Slot = {
+      tech,
+      date: route.date,
+      windowStart: toMinutes(route.window.start),
+      windowEnd: toMinutes(route.window.end),
+      items: route.stops.filter((s) => s.id !== requestId).map((s) => toItem(s, !!route.approved)).filter((x): x is Item => !!x),
+      locked: route.approved,
+    };
+    const current = route.stops.some((s) => s.id === requestId);
+    const base = simulate(slot, slot.items, travel);
+    const baseDrive = base.feasible ? base.drive : simulate(slot, slot.items, travel, false).drive;
+    const sourceSaving = current ? Math.max(0, route.driveMinutes - baseDrive) : 0;
+    const warnings: string[] = [];
+    if (!item.eligible.has(tech.id)) warnings.push(`Außerhalb des Gebiets von ${tech.name} und > 15 km vom Wohnort`);
+
+    // Regelkonform bevorzugt; sonst die kürzeste Variante mit Begründung, was sie verletzt
+    let ok: { stop: PlannedStop; drive: number } | null = null;
+    let loose: { stop: PlannedStop | null; drive: number; reason?: string } | null = null;
+    for (let i = 0; i <= slot.items.length; i++) {
+      const trial = [...slot.items.slice(0, i), item, ...slot.items.slice(i)];
+      const s = simulate(slot, trial, travel);
+      if (s.feasible) {
+        if (!ok || s.drive < ok.drive) ok = { stop: s.stops[i], drive: s.drive };
+      } else if (!ok) {
+        const l = simulate(slot, trial, travel, false);
+        if (!loose || l.drive < loose.drive) loose = { stop: l.stops[i] ?? null, drive: l.drive, reason: s.reason };
+      }
+    }
+    const best = ok ?? loose;
+    if (!ok && !base.feasible) warnings.push('Tour verletzt bereits ohne diese Anfrage Regeln');
+    else if (!ok && loose?.reason) warnings.push(loose.reason);
+    options.push({
+      technicianId: tech.id,
+      technicianName: tech.name,
+      date: route.date,
+      start: best?.stop?.start ?? null,
+      end: best?.stop?.end ?? null,
+      deltaDrive: best ? Math.round(best.drive - baseDrive) : 0,
+      sourceSaving: Math.round(sourceSaving),
+      stopsBefore: slot.items.length,
+      warnings,
+      blocked: route.approved ? 'Tour ist freigegeben – zuerst Freigabe zurücknehmen' : null,
+      current,
+    });
+  }
+  // Regelkonforme zuerst, dann nach Zusatz-Fahrzeit; gesperrte ans Ende
+  const rank = (o: SlotOption) => (o.blocked ? 2 : o.warnings.length ? 1 : 0);
+  return options.sort((a, b) => rank(a) - rank(b) || a.deltaDrive - b.deltaDrive || a.date.localeCompare(b.date));
 }

@@ -9,6 +9,7 @@ import { ErrorBox, Loading } from '@/components/ui/PageState';
 import { apiSend, useApi, type LocalDb, type Stammdaten } from '@/lib/api';
 import Waitlist from '@/components/planner/Waitlist';
 import TechnicianEscalation from '@/components/TechnicianEscalation';
+import RequestPlanningCard from '@/components/RequestPlanningCard';
 import { entityBySlug } from '@/lib/entities';
 import type { Plan } from '@/lib/types';
 import type { EntityKind, Issue, ServiceRequest, Technician } from '@/lib/types';
@@ -138,6 +139,12 @@ export default function EntityEdit() {
               Zum Tourenplan
             </Link>
           )}
+        </div>
+      )}
+
+      {def.kind === 'request' && (
+        <div className="mt-4">
+          <RequestPlanningCard requestId={id} onChanged={() => { reload(); plan.reload(); }} />
         </div>
       )}
 

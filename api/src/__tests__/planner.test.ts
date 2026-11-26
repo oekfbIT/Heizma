@@ -4,10 +4,10 @@ import appointments from '../fixtures/appointments.json';
 import availability from '../fixtures/availability.json';
 import requests from '../fixtures/requests.json';
 import technicians from '../fixtures/technicians.json';
-import { buildPlan } from '../planner.js';
+import { buildPlan, rankOptions } from '../planner.js';
 import { estimateLookup } from '../travelMatrix.js';
-import type { Appointment, AvailabilityEntry, Dataset, Plan, ServiceRequest, Technician } from '../types.js';
-import { verifyPlan } from '../verify.js';
+import type { Appointment, AvailabilityEntry, Dataset, Decision, Plan, ServiceRequest, Technician } from '../types.js';
+import { applyExceptions, verifyPlan } from '../verify.js';
 
 const travel = estimateLookup;
 const fixtureData = (): Dataset => ({
@@ -184,4 +184,70 @@ test('Bestätigte Notiz „nur vormittags“ wird harte Grenze', () => {
   const stop = ok.routes[0].stops[0];
   assert.ok(stop.end <= '12:00');
   assert.equal(verifyPlan(ok, ds([r]), travel, { [r.id]: { latest: '12:00' } }).totalViolations, 0);
+});
+
+// ---- Planer-Entscheidungen ----
+
+const decide = (d: Partial<Decision> & Pick<Decision, 'mode'>): Decision => ({ reason: 'Test', override: false, at: new Date().toISOString(), ...d });
+const check = (data: Dataset, plan: Plan, decisions: Record<string, Decision>) => applyExceptions(verifyPlan(plan, data, travel), plan, decisions);
+const where = (plan: Plan, id: string) => plan.routes.find((r) => r.stops.some((s) => s.id === id));
+
+test('Fixieren: Anfrage landet am gewählten Tag, bleibt regelkonform', () => {
+  const r = req();
+  const data = ds([r], [day('07:00', '19:00', '2026-11-23'), day('07:00', '19:00', '2026-11-25')]);
+  const decisions = { [r.id]: decide({ mode: 'pin', technicianId: 'tech_t', date: '2026-11-25' }) };
+  const plan = buildPlan(data, { travel, decisions });
+  assert.equal(where(plan, r.id)?.date, '2026-11-25');
+  assert.equal(check(data, plan, decisions).totalViolations, 0);
+});
+
+test('Aus Plan genommen: steht mit Begründung auf der Liste, nicht im Plan', () => {
+  const r = req();
+  const data = ds([r]);
+  const decisions = { [r.id]: decide({ mode: 'exclude', reason: 'Kunde ruft zurück' }) };
+  const plan = buildPlan(data, { travel, decisions });
+  assert.equal(where(plan, r.id), undefined);
+  assert.match(plan.unassigned.find((u) => u.requestId === r.id)!.reason, /Kunde ruft zurück/);
+  assert.equal(check(data, plan, decisions).totalViolations, 0);
+});
+
+test('Regelbruch ohne Ausnahme bleibt rot, mit Ausnahme + Begründung gelb', () => {
+  // Kunde weit weg + Halbtag: passt nicht regelkonform
+  const far = req({ lat: 47.07, lng: 15.44, address: 'Graz' });
+  const data = ds([far], [day('07:00', '12:00')]);
+  const asError = { [far.id]: decide({ mode: 'pin', technicianId: 'tech_t', date: '2026-11-23', override: false }) };
+  const v1 = check(data, buildPlan(data, { travel, decisions: asError }), asError);
+  assert.ok(v1.totalViolations > 0, 'ohne Ausnahme: Fehler');
+
+  const asException = { [far.id]: decide({ mode: 'pin', technicianId: 'tech_t', date: '2026-11-23', override: true, reason: 'Kunde besteht darauf' }) };
+  const plan = buildPlan(data, { travel, decisions: asException });
+  assert.equal(where(plan, far.id)?.date, '2026-11-23', 'Planer entscheidet – Anfrage ist eingeplant');
+  const v2 = check(data, plan, asException);
+  assert.equal(v2.totalViolations, 0);
+  assert.ok(v2.exceptions!.length > 0 && v2.exceptions!.every((e) => e.reason === 'Kunde besteht darauf'));
+});
+
+test('Vorziehen: jüngere Anfrage schlägt ältere, als Ausnahme sichtbar', () => {
+  const older = req({ createdAt: '2026-11-01T09:00:00+01:00', visitationType: 'WP+PV', durationMinutes: 105 });
+  const younger = req({ createdAt: '2026-11-09T09:00:00+01:00', visitationType: 'WP+PV', durationMinutes: 105 });
+  const data = ds([older, younger], [day('07:00', '09:30')]); // Platz für genau eine
+  assert.ok(where(buildPlan(data, { travel }), older.id), 'ohne Eingriff: ältere zuerst');
+  const decisions = { [younger.id]: decide({ mode: 'prioritize', override: true, reason: 'Förderfrist' }) };
+  const plan = buildPlan(data, { travel, decisions });
+  assert.ok(where(plan, younger.id));
+  assert.ok(!where(plan, older.id));
+  assert.ok(check(data, plan, decisions).exceptions!.some((e) => e.rule === 'priority' && e.requestId === younger.id));
+});
+
+test('Optionen: regelkonforme Slots zuerst, gesperrte (freigegebene) Touren am Ende', () => {
+  const a = req(), b = req();
+  const data = ds([a, b], [day('07:00', '19:00', '2026-11-23'), day('07:00', '19:00', '2026-11-24')]);
+  const first = buildPlan(data, { travel });
+  const r = where(first, a.id)!;
+  const approvals = { [`tech_t@${r.date}`]: { at: 'x', stops: r.stops.map((s) => ({ id: s.id, start: s.start })) } };
+  const plan = buildPlan(data, { travel, approvals });
+  const options = rankOptions(data, plan, b.id, { travel });
+  assert.ok(options.length >= 2);
+  assert.ok(!options[0].blocked && options[0].warnings.length === 0);
+  assert.ok(options[options.length - 1].blocked || options.every((o) => !o.blocked));
 });

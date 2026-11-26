@@ -1,7 +1,7 @@
 import { hasCoords } from './geo.js';
 import { splitIso, toMinutes } from './time.js';
 import type { TravelLookup } from './travelMatrix.js';
-import type { Dataset, LatLng, Plan, RuleCheck, Verification, Violation } from './types.js';
+import type { Dataset, Decision, LatLng, Plan, PlanException, RuleCheck, Verification, Violation } from './types.js';
 import { eligibleTechnicians } from './validation.js';
 
 /**
@@ -164,4 +164,42 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, note
   const list = [...rules.values()];
   const total = list.reduce((n, r) => n + r.violations.length, 0);
   return { ok: total === 0, totalViolations: total, rules: list, notes };
+}
+
+/**
+ * Bewusste Ausnahmen: Hat der Planer eine Anfrage mit Begründung "trotzdem" eingeplant oder vorgezogen,
+ * wird ein dadurch entstehender Regelbruch nicht als Fehler (rot), sondern als Ausnahme (gelb) geführt –
+ * mit Begründung, nie stillschweigend. Ohne bestätigte Ausnahme bleibt jeder Verstoß ein Fehler.
+ */
+export function applyExceptions(v: Verification, plan: Plan, decisions: Record<string, Decision>): Verification {
+  const exceptions: PlanException[] = [];
+  // Touren, in denen eine bewusste Ausnahme steckt → auch tourweite Verstöße (Heimkehr, Pause) gehören dazu
+  const overrideIn = new Map<string, { requestId: string; reason: string }>();
+  for (const r of plan.routes)
+    for (const s of r.stops) {
+      const d = decisions[s.id];
+      if (d?.override && d.mode === 'pin') overrideIn.set(`${r.technicianId}@${r.date}`, { requestId: s.id, reason: d.reason });
+    }
+
+  const rules = v.rules.map((rule) => {
+    const keep: Violation[] = [];
+    for (const x of rule.violations) {
+      const own = x.stopId ? decisions[x.stopId] : undefined;
+      const viaRoute = x.technicianId && x.date ? overrideIn.get(`${x.technicianId}@${x.date}`) : undefined;
+      const cover = own?.override && own.mode === 'pin' ? { requestId: x.stopId!, reason: own.reason } : viaRoute;
+      if (cover) exceptions.push({ requestId: cover.requestId, rule: x.rule, technicianId: x.technicianId, date: x.date, message: x.message, reason: cover.reason });
+      else keep.push(x);
+    }
+    return { ...rule, violations: keep };
+  });
+
+  // Vorgezogen: bricht bewusst "ältere zuerst" – als Ausnahme sichtbar, sobald die Anfrage eingeplant ist
+  for (const r of plan.routes)
+    for (const s of r.stops) {
+      const d = decisions[s.id];
+      if (d?.mode === 'prioritize') exceptions.push({ requestId: s.id, rule: 'priority', technicianId: r.technicianId, date: r.date, message: `${s.customer} vorgezogen (vor älteren Anfragen)`, reason: d.reason });
+    }
+
+  const total = rules.reduce((n, r) => n + r.violations.length, 0);
+  return { ...v, rules, ok: total === 0, totalViolations: total, exceptions };
 }

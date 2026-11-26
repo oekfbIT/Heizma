@@ -7,6 +7,7 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
   const v = plan.verification;
   if (!v) return null;
   const checks = v.rules.reduce((n, r) => n + r.checks, 0);
+  const exceptions = v.exceptions ?? [];
 
   return (
     <div className="relative">
@@ -18,6 +19,7 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
       >
         {v.ok ? '✓ 0 Regelverstöße' : `⚠ ${v.totalViolations} Regelverstöße`}
         <span className="font-normal opacity-70">· {v.rules.length} Regeln</span>
+        {exceptions.length > 0 && <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-amber-800">{exceptions.length} Ausnahme{exceptions.length === 1 ? '' : 'n'}</span>}
       </button>
       {open && (
         <div className="absolute left-0 top-8 z-[1000] w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-4 text-left shadow-xl">
@@ -46,6 +48,21 @@ export default function VerificationBadge({ plan, onSelect }: { plan: Plan; onSe
               </li>
             ))}
           </ul>
+          {exceptions.length > 0 && (
+            <div className="mt-3 space-y-1 border-t border-gray-100 pt-3">
+              <p className="text-xs font-semibold text-amber-800">Bewusste Ausnahmen des Planers</p>
+              {exceptions.map((e, i) => (
+                <button
+                  key={i}
+                  onClick={() => e.technicianId && e.date && onSelect?.(e.technicianId, e.date)}
+                  className="block text-left text-[11px] text-amber-700 hover:underline"
+                >
+                  ◆ {e.date ? `${e.date} · ` : ''}
+                  {e.message} – „{e.reason}“
+                </button>
+              ))}
+            </div>
+          )}
           {v.notes.length > 0 && (
             <div className="mt-3 space-y-1 border-t border-gray-100 pt-3">
               {v.notes.map((n) => (

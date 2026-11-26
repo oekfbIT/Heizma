@@ -48,6 +48,9 @@ export interface Appointment {
   address: string;
   lat: number;
   lng: number;
+  /** Lokal: aus einer freigegebenen Tour entstanden (simuliert – in Produktion Heizma-Backend) */
+  simulated?: boolean;
+  fromRequestId?: string;
 }
 
 export interface TravelResult {
@@ -103,6 +106,87 @@ export interface PlannedStop {
   end: string; // HH:MM
   waitMinutes: number;
   fixed: boolean;
+  /** Vom Planer manuell gesetzt (fixiert / vorgezogen) */
+  manual?: ManualMark | null;
+}
+
+export interface ManualMark {
+  mode: 'pin' | 'prioritize';
+  reason: string;
+  /** true = Planer hat einen Regelbruch bewusst akzeptiert */
+  override: boolean;
+}
+
+// ---------- Planer-Entscheidungen (manuelle Eingriffe) ----------
+
+export type DecisionMode = 'pin' | 'exclude' | 'prioritize';
+
+export interface Decision {
+  mode: DecisionMode;
+  /** nur bei pin */
+  technicianId?: string;
+  date?: string;
+  reason: string;
+  override: boolean;
+  at: string;
+}
+
+/** Ein möglicher Slot für eine Anfrage, nach Zusatz-Fahrzeit sortiert */
+export interface SlotOption {
+  technicianId: string;
+  technicianName: string;
+  date: string;
+  /** voraussichtliche Uhrzeit des Termins */
+  start: string | null;
+  end: string | null;
+  /** Zusatz-Fahrminuten in der Ziel-Tour */
+  deltaDrive: number;
+  /** Ersparnis in der bisherigen Tour (wenn die Anfrage schon geplant ist) */
+  sourceSaving: number;
+  /** Ziel-Tour: Stopps vorher → nachher */
+  stopsBefore: number;
+  /** Was die Regeln verletzen würde – leer = regelkonform */
+  warnings: string[];
+  /** Ziel nicht möglich (z. B. Tour freigegeben, Termin hätte keinen Platz) */
+  blocked: string | null;
+  current: boolean;
+}
+
+export type RequestPlanningStatus = 'termin' | 'pinned' | 'planned' | 'waitlist' | 'excluded' | 'unplannable';
+
+export interface RequestPlanning {
+  requestId: string;
+  status: RequestPlanningStatus;
+  route: {
+    technicianId: string;
+    technicianName: string;
+    date: string;
+    start: string;
+    end: string;
+    position: number;
+    stops: number;
+    approved: boolean;
+  } | null;
+  /** Grund, wenn nicht eingeplant */
+  reason: string | null;
+  decision: Decision | null;
+  /** Warteliste: Platz nach Eingang und ältere Wartende */
+  waitlist: { position: number; total: number } | null;
+  /** Ältere Anfragen, die noch auf der Warteliste stehen (Hinweis beim Vorziehen) */
+  olderWaiting: number;
+  /** Regelverstöße dieser Anfrage (rot) und bewusste Ausnahmen (gelb) laut Plan-Prüfung */
+  violations: string[];
+  exceptions: PlanException[];
+  log: AuditEntry[];
+}
+
+export interface AuditEntry {
+  at: string;
+  entity: string;
+  id: string;
+  action: string;
+  reason?: string;
+  changes?: Record<string, unknown>;
 }
 
 export interface DayRoute {
@@ -176,4 +260,15 @@ export interface Verification {
   totalViolations: number;
   rules: RuleCheck[];
   notes: string[];
+  /** Bewusste Ausnahmen des Planers (mit Begründung) – kein Fehler, aber sichtbar */
+  exceptions?: PlanException[];
+}
+
+export interface PlanException {
+  requestId: string;
+  rule: string;
+  technicianId?: string;
+  date?: string;
+  message: string;
+  reason: string;
 }

@@ -117,6 +117,29 @@ Die App ist durch einen fest hinterlegten Mock-Login geschützt – keine extern
 > **Annahme – Benachrichtigung bei Freigabe:** Mit „Route freigeben“ würden in Produktion automatisch die **Kund:innen** (Terminbestätigung mit Datum und Zeitfenster) und die **Techniker:innen** (Tagesroute / Kalendereintrag) benachrichtigt. Im Prototyp wird nur die Freigabe gespeichert – es werden keine Nachrichten versendet.
 - **KI-Hinweise aus Notizen:** Chips wie „Vorher anrufen“, „Nur vormittags“. Zeit-Hinweise lassen sich mit einem Klick als harte Regel übernehmen (Mensch entscheidet).
 - **Warteliste** mit allen nicht eingeplanten Anfragen, gruppiert nach Grund.
+
+### 3. Eingriffe des Planers – „Das System schlägt vor, der Planer entscheidet“
+
+Auf jeder Anfrage-Seite (`/stammdaten/anfragen/:id`) und im Stopp-Dialog des Planers gibt es dieselbe Karte **„Planung“** (gleiche Endpunkte, gleiche Logik):
+
+- **Status:** Vorgeschlagen · 📌 Manuell fixiert · Warteliste (Platz X von Y) · Aus Plan genommen · Nicht planbar (mit Grund) · Termin (freigegeben).
+- **Verschieben… / Einplanen…:** keine leeren Dropdowns, sondern eine **sortierte Liste aller Techniker-Tage** – regelkonforme zuerst, mit voraussichtlicher Uhrzeit und Zusatz-Fahrzeit. Regelbrüche stehen gelb mit Grund daneben („Fixer Termin um 10:30 nicht mehr erreichbar“), freigegebene Touren sind gesperrt.
+- **Vorschau vor dem Übernehmen:** neue vs. bisherige Tour, Fahrzeit-Differenz, verletzte Regeln. Nach dem Übernehmen wird die ganze Woche neu geplant und unabhängig geprüft – die Rückmeldung kommt aus dem **tatsächlichen Ergebnis**, nicht aus der Vorschau.
+- **📌 Fixieren:** Anfrage bleibt bei Neuplanung an diesem Tag und bei dieser Person.
+- **Aus Plan nehmen** (mit Grund, z. B. „Kunde ruft zurück“) und **Wieder aufnehmen**.
+- **⇡ Vorziehen** von der Warteliste: bricht „ältere zuerst“ bewusst – Hinweis „N ältere Anfragen warten noch“, Begründung Pflicht.
+- **Änderungsprotokoll** je Anfrage: was, wann, warum.
+
+**Regelbrüche: erlaubt, aber nie unsichtbar.** Der Planer bleibt nie in der UI stecken. Ein Regelbruch geht nur mit „Trotzdem einplanen“ + Begründung. Die Plan-Prüfung führt ihn dann als **bewusste Ausnahme (gelb)** statt als Fehler (rot); Touren mit Ausnahmen sind freigebbar, Touren mit echten Fehlern nicht. Ein Regelbruch ohne bestätigte Ausnahme bleibt immer rot.
+
+> **Annahme – Anfrage wird Termin:** Mit der Freigabe einer Tour würden in Produktion die Anfragen im Heizma-Backend zu Terminen. Im Prototyp ist das simuliert: Freigegebene Anfragen verschwinden aus „Offene Anfragen“ und erscheinen unter „Termine“ („aus Freigabe“). „Freigabe zurücknehmen“ macht sie wieder zu Anfragen.
+
+| Endpunkt | Zweck |
+| --- | --- |
+| `GET /api/requests/:id/planning` | Status, Tour, Warteliste, Entscheidung, Verstöße/Ausnahmen, Protokoll |
+| `GET /api/requests/:id/options` | Mögliche Techniker-Tage, sortiert (Vorschau, ändert nichts) |
+| `POST /api/requests/:id/decision` | `{ mode: pin \| exclude \| prioritize, technicianId?, date?, reason, override? }` |
+| `DELETE /api/requests/:id/decision` | Entscheidung zurücknehmen → wieder automatisch geplant |
 - Heizma-Firmensitz als Referenzpunkt auf der Karte.
 
 ---
@@ -323,6 +346,6 @@ Hinweise:
 
 1. Adress-Tippfehler per LLM + Geokodierung korrigieren (mit Freigabe), statt nur zu markieren.
 2. Gleichmäßigere Auslastung über die Woche (Balancing als zweites Ziel neben Fahrzeit).
-3. Manuelles Umplanen per Drag & Drop, live gegen die Plan-Prüfung validiert.
+3. Drag & Drop auf Karte/Zeitleiste als zweiter Weg zu „Verschieben“ (gleiche Endpunkte); Rollen/Benutzer im Änderungsprotokoll.
 4. Tageszeit-abhängige Fahrzeiten (Berufsverkehr) und Puffer pro Stopp.
 5. Schreibende Anbindung an CRM/Kalender statt lokaler JSON-Datei.
