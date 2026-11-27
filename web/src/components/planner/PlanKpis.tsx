@@ -1,56 +1,56 @@
 /**
- * @file      PlanKpis.tsx – Ersparnis gegenüber Handplanung (Fahrzeit, Besuche, Ø Anfahrt) + Fahrzeitquelle
+ * @file      PlanKpis.tsx – Ersparnis gegenüber Handplanung: eingesparte Fahrzeit als Kennzahl + zwei Balken
  * @layer     Web · View-Komponente (Planer)
  * @siehe     docs/03-planung-und-regeln.md · api/src/planner.ts baselinePlan()
  */
 import { formatMinutes } from '@/lib/format';
 import type { Plan } from '@/lib/types';
 
-/**
- * Was bringt die Optimierung? Vergleich mit einer Handplanung auf denselben Daten, Regeln und Fahrzeiten:
- * älteste Anfrage zuerst → zuständige Person mit dem nächsten Wohnort → hinten an den ersten Tag, an dem sie passt.
- */
+const METHOD =
+  'Handplanung = derselbe Datenstand, von Hand verteilt: älteste Anfrage zuerst, an die nächstgelegene zuständige Person, ' +
+  'hinten an den ersten Tag, an dem sie passt. Gleiche Regeln und Fahrzeiten wie der Planer.';
+
+/** Was bringt die Optimierung? Eingesparte Fahrzeit diese Woche – Optimiert vs. Handplanung auf denselben Daten. */
 export default function PlanKpis({ plan }: { plan: Plan }) {
   const s = plan.stats;
   const base = s.baseline;
-  const saved = base.driveMinutes - s.driveMinutes;
+  const saved = Math.max(0, base.driveMinutes - s.driveMinutes);
   const pct = base.driveMinutes ? Math.round((saved / base.driveMinutes) * 100) : 0;
+  const max = Math.max(base.driveMinutes, s.driveMinutes, 1);
   const perVisit = (drive: number, visits: number) => (visits ? Math.round(drive / visits) : 0);
   const moreVisits = s.planned - base.planned;
   const t = plan.travel;
-  const travelLabel =
-    !t || t.source === 'estimate'
-      ? 'Fahrzeiten geschätzt (Luftlinie)'
-      : t.source === 'heizma'
-        ? 'Fahrzeiten: Heizma /travel'
-        : `Fahrzeiten: ${Math.round((t.pairsReal / t.pairsNeeded) * 100)} % Heizma /travel`;
+  const source = !t || t.source === 'estimate' ? 'Fahrzeiten geschätzt (Luftlinie)' : 'Fahrzeiten: Heizma /travel';
 
   return (
-    <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">Gegenüber Handplanung</p>
-      <p className="mt-0.5 text-lg font-semibold tabular-nums text-ink">
-        {saved > 0 ? `${formatMinutes(saved)} weniger Fahrzeit` : 'Gleiche Fahrzeit'}
-        {saved > 0 && <span className="ml-1 text-sm font-medium text-brand-700">(−{pct} %)</span>}
-        {moreVisits > 0 && <span className="ml-1 text-sm font-medium text-brand-700">· +{moreVisits} Besuche</span>}
-      </p>
-      <div className="mt-1.5 grid grid-cols-3 gap-1.5 text-center">
-        <Compare label="Fahrzeit" value={formatMinutes(s.driveMinutes)} before={formatMinutes(base.driveMinutes)} />
-        <Compare label="Besuche" value={String(s.planned)} before={String(base.planned)} />
-        <Compare label="Ø Anfahrt" value={`${perVisit(s.driveMinutes, s.planned)} min`} before={`${perVisit(base.driveMinutes, base.planned)} min`} />
+    <section className="mt-3 rounded-xl border border-gray-200 bg-white p-3" title={`${METHOD} ${source}.`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs font-medium text-gray-500">Fahrzeit gespart gegenüber Handplanung</p>
+        {pct > 0 && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-brand-700">−{pct} %</span>}
       </div>
-      <p className="mt-1.5 text-[11px] text-gray-500">
-        Handplanung: älteste zuerst, nächste zuständige Person, hinten an den ersten freien Tag – gleiche Regeln und Fahrzeiten. · 🚗 {travelLabel}
+      <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight text-ink">{saved > 0 ? formatMinutes(saved) : '—'}</p>
+
+      <div className="mt-2.5 space-y-1.5">
+        <Bar label="Optimiert" minutes={s.driveMinutes} max={max} className="bg-brand-500" strong />
+        <Bar label="Von Hand" minutes={base.driveMinutes} max={max} className="bg-gray-300" />
+      </div>
+
+      <p className="mt-2.5 text-xs tabular-nums text-gray-500">
+        {s.planned} Besuche{moreVisits > 0 && <span className="font-medium text-brand-700"> (+{moreVisits})</span>} · Ø {perVisit(s.driveMinutes, s.planned)} statt{' '}
+        {perVisit(base.driveMinutes, base.planned)} min Anfahrt
       </p>
-    </div>
+    </section>
   );
 }
 
-function Compare({ label, value, before }: { label: string; value: string; before: string }) {
+function Bar({ label, minutes, max, className, strong }: { label: string; minutes: number; max: number; className: string; strong?: boolean }) {
   return (
-    <div className="rounded-lg bg-white px-1.5 py-1.5">
-      <p className="text-[10px] uppercase tracking-wide text-gray-400">{label}</p>
-      <p className="text-sm font-semibold tabular-nums">{value}</p>
-      <p className="text-[10px] tabular-nums text-gray-400 line-through decoration-gray-300">{before}</p>
+    <div className="grid grid-cols-[4.5rem_1fr_4.5rem] items-center gap-2 text-xs">
+      <span className={strong ? 'font-medium text-ink' : 'text-gray-500'}>{label}</span>
+      <span className="h-2 overflow-hidden rounded-full bg-gray-100">
+        <span className={`block h-full rounded-full ${className}`} style={{ width: `${(minutes / max) * 100}%` }} />
+      </span>
+      <span className={`text-right tabular-nums ${strong ? 'font-medium text-ink' : 'text-gray-500'}`}>{formatMinutes(minutes)}</span>
     </div>
   );
 }
