@@ -106,9 +106,38 @@ export class CoreInteractor {
     return this.mutate(() => this.system.resetPlanning());
   }
 
-  /** „Neu planen“: Heizma-Daten frisch laden und neu optimieren; optional alle Eingriffe/Freigaben verwerfen */
-  replan(resetDecisions = false) {
-    return this.mutate(() => this.system.replan(resetDecisions));
+  // MARK: - Automatisch neu planen
+  /** Zuletzt gesehener Inhaltsstand des Plans (null = noch keiner) */
+  private seenVersion: string | null = null;
+
+  /**
+   * Hat sich der Inhaltsstand geändert (neue Heizma-Daten, Änderung in einem anderen Tab/von anderer Stelle)?
+   * Dann plant der Server automatisch neu – hier werden nur die sichtbaren Ansichten nachgeladen.
+   * @returns true, wenn neu geladen wurde
+   */
+  async checkForChanges(): Promise<boolean> {
+    const version = await this.system.version();
+    const changed = this.seenVersion !== null && version !== this.seenVersion;
+    this.seenVersion = version;
+    if (!changed) return false;
+    this.api.clear();
+    await this.refreshActive();
+    return true;
+  }
+
+  /** Prüft alle `intervalMs` (nur bei sichtbarem Tab) und beim Zurückkehren in den Tab. Gibt die Aufräumfunktion zurück. */
+  watchForChanges(intervalMs = 30_000): () => void {
+    if (typeof window === 'undefined') return () => {};
+    const check = () => {
+      if (document.visibilityState === 'visible') void this.checkForChanges().catch(() => {});
+    };
+    check();
+    const timer = window.setInterval(check, intervalMs);
+    window.addEventListener('focus', check);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', check);
+    };
   }
 
   // MARK: - intern
@@ -133,8 +162,10 @@ export class CoreInteractor {
 
   /** ACHTUNG: Zentrale Stelle für „nach Änderung neu laden“. Nicht umgehen, sonst zeigen Views veraltete Pläne. */
   private async mutate<T>(action: () => Promise<T>): Promise<T> {
-    const result = await action(); // ApiService.send leert den Cache
+    const result = await action(); // ApiService.send leert den Cache, der Server plant mit dem neuen Stand neu
     await this.refreshActive();
+    // Eigene Änderung ist schon geladen → nicht noch einmal als „fremde“ Änderung nachladen
+    this.seenVersion = await this.system.version().catch(() => null);
     return result;
   }
 }

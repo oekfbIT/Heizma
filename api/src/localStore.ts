@@ -8,6 +8,7 @@
  * ACHTUNG: Jede schreibende Funktion muss persist() aufrufen → erhöht `revision` → index.ts plant neu.
  */
 import { normalizeTime } from './time.js';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Appointment, AuditEntry, Dataset, Decision, DecisionMode, ServiceRequest, Technician } from './types.js';
@@ -193,9 +194,22 @@ export function editableFields(): Record<EntityKey, string[]> {
   return Object.fromEntries(Object.entries(FIELDS).map(([k, v]) => [k, Object.keys(v)])) as Record<EntityKey, string[]>;
 }
 
-/** API-Daten + lokale Korrekturen. loadedAt enthält die Revision → Plan wird neu berechnet. */
+const hash = (value: unknown) => createHash('sha1').update(JSON.stringify(value)).digest('hex').slice(0, 12);
+/** Hash der Heizma-Daten je geladenem Datensatz (der Datensatz ist 10 min gecacht → einmal rechnen) */
+const sourceHashes = new WeakMap<Dataset, string>();
+const sourceHash = (data: Dataset) => {
+  let h = sourceHashes.get(data);
+  if (!h) sourceHashes.set(data, (h = hash([data.technicians, data.availability, data.requests, data.appointments, data.range])));
+  return h;
+};
+
+/**
+ * API-Daten + lokale Korrekturen. `version` = Inhaltsstand aus Heizma-Daten und allem, was die Planung beeinflusst
+ * (Korrekturen, Entscheidungen, Freigaben) → gleicher Inhalt = gleicher Plan, jede Änderung = automatisch neu planen.
+ */
 export function applyOverrides(data: Dataset): Dataset & { overridden: Record<EntityKey, string[]> } {
-  const o = load().overrides;
+  const db = load();
+  const o = db.overrides;
   const merge = <T extends { id: string }>(list: T[], key: EntityKey): T[] =>
     list.map((item) => (o[key][item.id] ? ({ ...item, ...o[key][item.id] } as T) : item));
   return {
@@ -204,6 +218,7 @@ export function applyOverrides(data: Dataset): Dataset & { overridden: Record<En
     technicians: merge<Technician>(data.technicians, 'technicians'),
     appointments: merge<Appointment>(data.appointments, 'appointments'),
     loadedAt: `${data.loadedAt}#r${revision}`,
+    version: `${sourceHash(data)}-${hash([o, db.decisions, db.approvals])}`,
     overridden: { requests: Object.keys(o.requests), technicians: Object.keys(o.technicians), appointments: Object.keys(o.appointments) },
   };
 }

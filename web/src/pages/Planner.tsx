@@ -19,11 +19,10 @@ import VerificationBadge from '@/components/planner/VerificationBadge';
 import RegionFilter from '@/components/stammdaten/RegionFilter';
 import { useResizableSidebar } from '@/hooks/useResizableSidebar';
 import { useCore, useResource } from '@/core';
-import { formatDay, formatMinutes } from '@/lib/format';
+import { formatDay, formatMinutes, formatTime } from '@/lib/format';
 import { NO_REGION, regionLabel, useRegion } from '@/lib/regions';
 import { ROUTE_LEVEL, type RouteGeometry } from '@/modules';
-import type { Plan } from '@/lib/types';
-import { Alert, Button, ErrorBox, Icon, IconButton, Loading } from '@/ui';
+import { Alert, Button, ErrorBox, Icon, Loading } from '@/ui';
 
 /**
  * Planer in drei Schritten: 1. Tag wählen → 2. Routen prüfen → 3. freigeben.
@@ -48,8 +47,6 @@ export default function Planner() {
   const [busy, setBusy] = useState(false);
   const sidebar = useResizableSidebar();
   const [actionError, setActionError] = useState<string | null>(null);
-  // „Neu planen“ mit Zurücksetzen: zweistufig bestätigen (verwirft Eingriffe und Freigaben)
-  const [confirmReset, setConfirmReset] = useState(false);
   const [region, setRegion] = useRegion();
   // Mobil: Liste und Karte im Wechsel (Karte bleibt gemountet, damit sie sauber rendert)
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
@@ -100,10 +97,6 @@ export default function Planner() {
   const toggleApproval = (techId: string, approved: boolean) => run(() => core.approveRoute(techId, day, approved));
   const openRoutes = dayRoutes.filter((r) => r.stops.length && !r.approved);
   const approveDay = () => run(() => core.approveDay(day));
-  const replan = (reset: boolean) => {
-    setConfirmReset(false);
-    return run(() => core.replan(reset));
-  };
 
   const selectTech = (techId: string | null) => {
     setSelectedId(techId);
@@ -133,27 +126,12 @@ export default function Planner() {
       >
         {/* Kopf: was ist der Stand? */}
         <div className="border-b border-gray-100 px-4 pb-3 pt-4 md:px-5">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-baseline justify-between gap-2">
             <h1 className="text-lg font-semibold">Routenplanung</h1>
-            <div className="flex items-center gap-1">
-              <Button size="sm" icon="refresh" disabled={busy} onClick={() => void replan(false)} title="Daten frisch von der Heizma-API laden und neu optimieren. Fixierte und freigegebene Routen bleiben.">
-                {busy ? 'Plane …' : 'Neu planen'}
-              </Button>
-              <IconButton icon="reset" label="Alle Eingriffe und Freigaben verwerfen und neu planen" onClick={() => setConfirmReset(!confirmReset)} />
-            </div>
+            <span className="text-[11px] text-gray-400" title="Jede Änderung (Daten, Korrektur, Verschieben, Fixieren, Freigabe) löst automatisch eine Neuplanung aus.">
+              Automatisch geplant · {formatTime(p.generatedAt)}
+            </span>
           </div>
-          {confirmReset && (
-            <Alert tone="warning" size="sm" className="mt-2">
-              Alle Fixierungen, „aus dem Plan genommen“ und Freigaben verwerfen und komplett neu planen?{' '}
-              <button className="font-semibold underline" disabled={busy} onClick={() => void replan(true)}>
-                Ja, zurücksetzen
-              </button>{' '}
-              ·{' '}
-              <button className="underline" onClick={() => setConfirmReset(false)}>
-                Abbrechen
-              </button>
-            </Alert>
-          )}
           <p className="mt-0.5 text-sm text-gray-600">
             Diese Woche <strong>{bal.thisWeek}</strong> von {bal.total} Anfragen eingeplant
             {bal.waitlist > 0 && <> · {bal.waitlist} Warteliste</>}

@@ -71,7 +71,7 @@ Mock-Login ohne externe Dienste (`api/src/mockauth/`):
 
 ## Zum Testen
 
-- **Planungsstand zurücksetzen:** In der Routenplanung das Symbol neben „Neu planen“ – verwirft Fixierungen, Herausnahmen und Freigaben. Korrekturen bleiben.
+- **Demo zurücksetzen:** Zahnrad oben rechts – verwirft Korrekturen, Fixierungen, Herausnahmen, Freigaben und Eskalationen.
 - **Beispiel-Korrekturen laden:** `cp api/data/local-db.example.json api/data/local-db.json` ([Details](04-datenqualitaet.md#korrigieren-obwohl-die-api-read-only-ist))
 
 ## Deployment

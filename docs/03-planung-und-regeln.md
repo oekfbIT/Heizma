@@ -67,7 +67,7 @@ Auf jeder Anfrage-Seite und im Stopp-Dialog des Planers gibt es dieselbe Karte �
 | **Fixieren** | Bleibt bei jeder Neuplanung an diesem Tag und bei dieser Person. |
 | **Aus dem Plan nehmen** | Mit Grund, z. B. „Kunde ruft zurück“; jederzeit wieder aufnehmbar. |
 | **Kunde informieren / Intern eskalieren** | Für Fälle ohne Lösung – Wartende bzw. fachlich nicht Planbare: Entwurf wird gespeichert (nicht versendet). |
-| **Neu planen** | Lädt die Heizma-Daten frisch und optimiert neu; optional alle Eingriffe und Freigaben verwerfen. |
+| **Automatisch neu planen** | Ändert sich der Inhaltsstand (Heizma-Daten, Korrektur, Eingriff, Freigabe), plant der Server neu; offene Ansichten laden selbst nach. Gleicher Stand = kein Neurechnen. |
 | **Änderungsprotokoll** | Was, wann, warum – je Anfrage. |
 
 Die Rückmeldung nach einer Aktion kommt aus dem **tatsächlichen Ergebnis der Neuplanung**, nicht aus der Vorschau.

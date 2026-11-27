@@ -15,7 +15,7 @@ Im Frontend ist der zuständige **Interactor** angegeben – Views rufen keine E
 | GET | `/api/meta` | Zeitraum, Datenquelle, Firmensitz, nächster Werktag | `system.meta` |
 | GET | `/api/stammdaten` | Außendienst, Verfügbarkeiten, Anfragen, Termine + Prüfbefunde, Zuständigkeiten, Eskalationen | `techniker` · `termine` · `anfragen` · `system.stammdaten` |
 | GET | `/api/overview` | Kennzahlen der Startseite | `system.overview` |
-| POST | `/api/reload` | „Neu planen“: Heizma-Daten frisch laden, neu optimieren; `?reset=1` verwirft vorher Eingriffe und Freigaben | `core.replan()` |
+| GET | `/api/version` | Inhaltsstand (Hash aus Heizma-Daten, Korrekturen, Entscheidungen, Freigaben) – ändert er sich, lädt der Browser nach | `core.checkForChanges()` |
 
 ## Plan & Freigabe
 

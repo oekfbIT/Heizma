@@ -1,5 +1,5 @@
 /**
- * @file      SystemInteractor.ts – Modul System: Meta, Kennzahlen, lokale DB, Neu planen, Reset
+ * @file      SystemInteractor.ts – Modul System: Meta, Kennzahlen, lokale DB, Inhaltsstand, Reset
  * @layer     Web · Modul-Interactor
  * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
  */
@@ -41,13 +41,9 @@ export class SystemInteractor {
     return source === 'live' ? 'Heizma Case-Study-API' : 'Mock-Daten (offline)';
   }
 
-  /**
-   * „Neu planen“: Daten frisch von der Heizma-API laden und neu optimieren.
-   * resetDecisions = alle Eingriffe und Freigaben verwerfen (Datenkorrekturen bleiben).
-   */
-  replan(resetDecisions = false) {
-    this.api.clear();
-    return this.api.send(`/api/reload${resetDecisions ? '?reset=1' : ''}`, 'POST');
+  /** Inhaltsstand des Plans (ändert sich mit Heizma-Daten, Korrekturen, Entscheidungen, Freigaben) – immer frisch */
+  async version(): Promise<string> {
+    return (await this.api.fresh<{ version: string }>('/api/version')).version;
   }
 
   /** Demo auf den Ausgangsstand: alle lokalen Korrekturen, Freigaben, Eingriffe, Eskalationen und das Protokoll löschen */

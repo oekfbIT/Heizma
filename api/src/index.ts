@@ -13,7 +13,7 @@
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { config } from './config.js';
-import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
+import { HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
 import { geocode, reverseGeocode } from './geocode.js';
 import { buildPlan, rankOptions, requestErrors } from './planner.js';
 import { getTravelMatrix } from './travelMatrix.js';
@@ -44,12 +44,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ACHTUNG: Cache-Schlüssel ist data.loadedAt. localStore.applyOverrides() hängt bei jeder lokalen Änderung
-// eine Revision an (`#r<n>`) → jede Korrektur/Entscheidung/Freigabe erzwingt eine Neuplanung.
-// Plan wird pro Datenstand (inkl. Korrekturen & Freigaben) einmal berechnet und danach unabhängig geprüft
-let planCache: { loadedAt: string; plan: Promise<Plan> } | null = null;
+// Automatisch neu planen: Cache-Schlüssel ist der Inhaltsstand `data.version` (localStore.applyOverrides).
+// Neue Heizma-Daten, eine Korrektur, Entscheidung oder Freigabe → anderer Stand → neuer Plan. Gleicher Inhalt → kein Neurechnen.
+// Jeder Plan wird einmal berechnet und danach unabhängig geprüft.
+let planCache: { version: string; plan: Promise<Plan> } | null = null;
 function getPlan(data: Dataset): Promise<Plan> {
-  if (!planCache || planCache.loadedAt !== data.loadedAt) {
+  const version = data.version ?? data.loadedAt;
+  if (!planCache || planCache.version !== version) {
     const plan = (async () => {
       const { lookup, stats } = await getTravelMatrix(data);
       const t0 = Date.now();
@@ -60,7 +61,7 @@ function getPlan(data: Dataset): Promise<Plan> {
       return p;
     })();
     plan.catch(() => (planCache = null));
-    planCache = { loadedAt: data.loadedAt, plan };
+    planCache = { version, plan };
   }
   return planCache.plan;
 }
@@ -275,6 +276,15 @@ app.get('/api/overview', route(async (_req, res) => {
   });
 }));
 
+/**
+ * Inhaltsstand für die automatische Aktualisierung: Der Browser fragt ihn regelmäßig ab und lädt Plan und Ansichten
+ * neu, sobald er sich ändert. Heizma-Daten werden spätestens nach CACHE_TTL_SECONDS (Standard 10 min) frisch geholt.
+ */
+app.get('/api/version', route(async (_req, res) => {
+  const data = await loadWorkingDataset();
+  res.json({ version: data.version ?? data.loadedAt });
+}));
+
 /** Tourenplan (Entwurf) */
 app.get('/api/plan', route(async (_req, res) => {
   res.json(await getPlan(await loadWorkingDataset()));
@@ -406,19 +416,6 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (err instanceof ValidationError) return res.status(400).json({ error: err.message });
   next(err);
 });
-
-/**
- * „Neu planen“: Daten frisch von der Heizma-API laden und den Plan neu berechnen.
- * ?reset=1 verwirft zusätzlich alle Planer-Entscheidungen und Freigaben (Datenkorrekturen bleiben).
- * Die Fahrzeit-Matrix bleibt erhalten (gleiche Punkte = gleiche Fahrzeiten, spart API-Aufrufe).
- */
-app.post('/api/reload', route(async (req, res) => {
-  if (req.query.reset === '1') resetPlanning();
-  clearCache();
-  planCache = null;
-  const plan = await getPlan(await loadWorkingDataset());
-  res.json({ ok: true, generatedAt: plan.generatedAt, stats: plan.stats, violations: plan.verification?.totalViolations ?? null });
-}));
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof HeizmaApiError) {

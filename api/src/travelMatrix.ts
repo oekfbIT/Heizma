@@ -244,7 +244,3 @@ export const estimateLookup: TravelLookup = {
   minutes: estimateTravelMinutes,
   isEstimated: () => true,
 };
-
-export function resetTravelMatrix() {
-  current = null;
-}

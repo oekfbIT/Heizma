@@ -19,7 +19,7 @@ const SECTIONS = [
   { id: 'entscheidungen', title: 'Eingriffe des Planers' },
   { id: 'datenprobleme', title: 'Datenprobleme lösen' },
   { id: 'notizen', title: 'Notizen aus dem Vertrieb' },
-  { id: 'neuplanen', title: 'Neu planen & Demo' },
+  { id: 'neuplanen', title: 'Automatisch neu planen & Demo' },
   { id: 'wichtig', title: 'Gut zu wissen' },
 ];
 
@@ -234,11 +234,11 @@ export default function Hilfe() {
             </p>
           </Section>
 
-          <Section id="neuplanen" title="Neu planen & Demo">
+          <Section id="neuplanen" title="Automatisch neu planen & Demo">
             <ul className="list-disc space-y-2 pl-5 text-sm text-gray-600">
               <li>
-                <strong className="text-ink">Neu planen</strong> (Routenplanung oben): lädt die Daten frisch von der Heizma-API und optimiert neu. Fixierte und
-                freigegebene Routen bleiben. Das Symbol daneben verwirft vorher alle Eingriffe und Freigaben.
+                <strong className="text-ink">Automatisch neu planen:</strong> Jede Änderung – neue Heizma-Daten, eine Korrektur, Verschieben, Fixieren,
+                Herausnehmen oder eine Freigabe – löst sofort eine Neuplanung aus; offene Ansichten laden selbst nach. Fixierte und freigegebene Routen bleiben.
               </li>
               <li>
                 <strong className="text-ink">Gegenüber Handplanung:</strong> derselbe Datenstand, von Hand geplant (älteste zuerst, nächste zuständige Person,

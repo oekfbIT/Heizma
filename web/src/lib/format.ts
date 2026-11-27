@@ -23,6 +23,12 @@ export function formatDateTime(iso: string): string {
   return m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}` : iso;
 }
 
+/** Uhrzeit eines Zeitstempels in Wiener Zeit, z. B. „14:05“ */
+export function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Vienna' });
+}
+
 export const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 
 export function worstSeverity(issues: Issue[]): Severity | null {

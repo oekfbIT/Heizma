@@ -73,6 +73,11 @@ export interface Dataset {
   range: { from: string; to: string };
   source: 'live' | 'mock';
   loadedAt: string;
+  /**
+   * Inhaltsstand (Hash): ändert sich nur, wenn sich Heizma-Daten, Korrekturen, Entscheidungen oder Freigaben ändern.
+   * Schlüssel für den Plan-Cache und für die automatische Aktualisierung im Browser (GET /api/version).
+   */
+  version?: string;
 }
 
 // MARK: - Validierung

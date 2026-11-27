@@ -10,6 +10,7 @@
 | **Fahrzeiten aus der Heizma-API** (`/travel/path`, 13 Fahrten pro Call, gecacht) | Echte Straßenfahrzeiten ohne eigenen Routing-Dienst | Symmetrisch angenommen (A→B = B→A), kein Berufsverkehr, kein Puffer pro Stopp |
 | **„Ältere zuerst“ über Reihenfolge + Tausch-Durchgang** | Einfach und unabhängig prüfbar | Eine jüngere Anfrage kann einen Platz bekommen, in den die ältere nicht passt (Ort, Zeitfenster) – das ist regelkonform |
 | **Handplanung als Vergleich** (älteste zuerst, nächste Person, hinten anhängen) | Die Ersparnis ist auf denselben Daten, Regeln und Fahrzeiten messbar | Vereinfachtes Modell eines Planers – echte Vergleichsdaten von Heizma gibt es nicht |
+| **Automatisch neu planen per Abfrage** (Browser prüft alle 30 s den Inhaltsstand, Heizma-Daten max. 10 min gecacht) | Kein Button, keine Push-Infrastruktur; gleicher Stand wird nie neu gerechnet | Neue Heizma-Daten erscheinen mit bis zu 10 min Verzögerung |
 | **Planer entscheidet, System schlägt vor** | Verschieben, Fixieren und Herausnehmen sind möglich; ein Regelbruch nur mit Begründung und sichtbar | Kein vollautomatischer Betrieb ohne Freigabe |
 | **Notizen werden angezeigt, nicht ausgewertet** (keine KI) | Planung bleibt deterministisch und erklärbar | Ein Zeitwunsch in einer Notiz kann zunächst falsch eingeplant sein – der Planer sieht die Notiz beim Termin |
 | **Eine Woche** (23.–27.11.) | Fokus auf die Kernaufgabe | Die Warteliste zeigt, was diese Woche nicht passt – keine Vorplanung der Folgewochen |

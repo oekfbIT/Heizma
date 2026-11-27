@@ -39,10 +39,6 @@ async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   return value;
 }
 
-export function clearCache() {
-  cache.clear();
-}
-
 // MARK: - HTTP-Basis
 
 /** Fehler der Heizma-API kommen als { error } – werden als HeizmaApiError weitergereicht (→ HTTP 502 in index.ts) */

@@ -68,6 +68,11 @@ export class ApiService {
     return request;
   }
 
+  /** GET ohne Cache (z. B. Inhaltsstand für die automatische Aktualisierung) */
+  fresh<T>(path: string): Promise<T> {
+    return this.request<T>(path);
+  }
+
   /** POST/PATCH/DELETE – leert danach den Cache (Plan & Prüfungen werden serverseitig neu berechnet) */
   async send<T = unknown>(path: string, method: HttpMethod, body?: unknown): Promise<T> {
     const result = await this.request<T>(path, {
