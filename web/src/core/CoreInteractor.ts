@@ -12,7 +12,7 @@ import type { DecisionInput, EscalationInput } from '@/modules/anfragen/types';
 import { RoutenInteractor } from '@/modules/routen/RoutenInteractor';
 import type { PlanBalance, RequestPlanStatus } from '@/modules/routen/types';
 import { SystemInteractor } from '@/modules/system/SystemInteractor';
-import type { EntityKey, LogEntry, LogItem } from '@/modules/system/types';
+import type { EntityKey } from '@/modules/system/types';
 import { TechnikerInteractor } from '@/modules/techniker/TechnikerInteractor';
 import type { EscalationTarget, TechnicianEscalationInput } from '@/modules/techniker/types';
 import { TermineInteractor } from '@/modules/termine/TermineInteractor';
@@ -48,12 +48,12 @@ export class CoreInteractor {
   // MARK: - modulübergreifendes Lesen
   /** Plan-Status je Anfrage mit Kurznamen der Person („Mo 23.11. · Nord“) */
   requestStatuses(plan: Plan): Map<string, RequestPlanStatus> {
-    return this.routen.requestStatuses(plan, (id) => this.techniker.getShortName(id), this.system.forecast.getState().data?.placements);
+    return this.routen.requestStatuses(plan, (id) => this.techniker.getShortName(id));
   }
 
-  /** Bilanz aller Anfragen (Summe der Töpfe = Gesamtzahl) – Basis für jede Zahl in Übersicht, Prognose, Planer und Liste */
+  /** Bilanz aller Anfragen (Summe der Töpfe = Gesamtzahl) – Basis für jede Zahl in Übersicht, Planer und Liste */
   balance(plan: Plan, include?: (requestId: string) => boolean): PlanBalance {
-    return this.routen.balance(plan, this.system.forecast.getState().data?.placements, include);
+    return this.routen.balance(plan, include);
   }
 
   // MARK: - Schreiben: ausführen, dann alles Sichtbare aktualisieren
@@ -97,23 +97,18 @@ export class CoreInteractor {
     return this.mutate(() => this.moduleFor(key).resetToOriginal(id));
   }
 
-  /** Demo auf den Ausgangsstand (Korrekturen, Freigaben, Eingriffe, Eskalationen, Protokoll) */
+  /** Demo auf den Ausgangsstand (Korrekturen, Freigaben, Eingriffe, Eskalationen) */
   resetDemo() {
     return this.mutate(() => this.system.resetDemo());
-  }
-
-  /** Protokoll mit Kurznamen der Personen */
-  logItems(entries: LogEntry[]): LogItem[] {
-    return this.system.logItems(entries, (id) => this.techniker.getShortName(id));
   }
 
   resetPlanning() {
     return this.mutate(() => this.system.resetPlanning());
   }
 
-  /** Heizma-Daten neu laden und neu planen */
-  reloadAll() {
-    return this.mutate(() => this.system.reloadSource());
+  /** „Neu planen“: Heizma-Daten frisch laden und neu optimieren; optional alle Eingriffe/Freigaben verwerfen */
+  replan(resetDecisions = false) {
+    return this.mutate(() => this.system.replan(resetDecisions));
   }
 
   // MARK: - intern

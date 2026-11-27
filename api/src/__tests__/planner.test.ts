@@ -11,7 +11,7 @@ import appointments from '../fixtures/appointments.json';
 import availability from '../fixtures/availability.json';
 import requests from '../fixtures/requests.json';
 import technicians from '../fixtures/technicians.json';
-import { buildPlan, forecast, rankOptions, swapOptions } from '../planner.js';
+import { baselinePlan, buildPlan, rankOptions } from '../planner.js';
 import { estimateLookup } from '../travelMatrix.js';
 import { normalizeTime } from '../time.js';
 import type { Appointment, AvailabilityEntry, Dataset, Decision, Plan, ServiceRequest, Technician } from '../types.js';
@@ -264,39 +264,6 @@ test('Regelbruch ohne Ausnahme bleibt rot, mit Ausnahme + Begründung gelb', () 
   assert.ok(v2.exceptions!.length > 0 && v2.exceptions!.every((e) => e.reason === 'Kunde besteht darauf'));
 });
 
-// REGEL-8: bewusster Bruch per prioritize
-test('Vorziehen: jüngere Anfrage schlägt ältere, als Ausnahme sichtbar', () => {
-  const older = req({ createdAt: '2026-11-01T09:00:00+01:00', visitationType: 'WP+PV', durationMinutes: 105 });
-  const younger = req({ createdAt: '2026-11-09T09:00:00+01:00', visitationType: 'WP+PV', durationMinutes: 105 });
-  const data = ds([older, younger], [day('07:00', '09:30')]); // Platz für genau eine
-  assert.ok(where(buildPlan(data, { travel }), older.id), 'ohne Eingriff: ältere zuerst');
-  const decisions = { [younger.id]: decide({ mode: 'prioritize', override: true, reason: 'Förderfrist' }) };
-  const plan = buildPlan(data, { travel, decisions });
-  assert.ok(where(plan, younger.id));
-  assert.ok(!where(plan, older.id));
-  assert.ok(check(data, plan, decisions).exceptions!.some((e) => e.rule === 'priority' && e.requestId === younger.id));
-});
-
-// REGEL-8: Tausch per swapOptions
-test('Tausch: wartende Anfrage verdrängt gezielt eine geplante, Regeln bleiben eingehalten', () => {
-  const older = req({ createdAt: '2026-11-01T09:00:00+01:00', visitationType: 'WP+PV', durationMinutes: 105 });
-  const younger = req({ createdAt: '2026-11-09T09:00:00+01:00', visitationType: 'WP+PV', durationMinutes: 105 });
-  const data = ds([older, younger], [day('07:00', '09:30')]);
-  const base = buildPlan(data, { travel });
-  const opts = swapOptions(data, base, younger.id, { travel });
-  assert.equal(opts.length, 1);
-  assert.equal(opts[0].displaced.id, older.id);
-  assert.ok(opts[0].displacesOlder && opts[0].recommended && opts[0].fallback === null);
-  const o = opts[0];
-  const decisions = { [younger.id]: decide({ mode: 'pin', technicianId: o.technicianId, date: o.date, override: true, reason: 'Förderfrist', replaces: older.id }) };
-  const plan = buildPlan(data, { travel, decisions });
-  assert.ok(where(plan, younger.id));
-  assert.ok(!where(plan, older.id));
-  const v = check(data, plan, decisions);
-  assert.equal(v.totalViolations, 0);
-  assert.ok(v.exceptions!.some((e) => e.requestId === younger.id && e.message.includes('getauscht')));
-});
-
 // DATEN: Uhrzeitformat („10.00“) · REGEL-4
 test('Uhrzeit-Formatfehler („10.00“) wird gelesen, geplant und als Warnung mit Korrektur gemeldet', () => {
   const r = req({ customerAvailableFrom: '10.00' });
@@ -377,23 +344,25 @@ test('Datenfehler sperren die Planung – auch fixiert; nach Korrektur wird gepl
   assert.ok(where(after, bad.id), 'nach Korrektur eingeplant');
 });
 
-// Prognose forecast()
-test('Prognose: Warteliste wird über Folgewochen abgearbeitet, ältere zuerst', () => {
-  const rs = Array.from({ length: 4 }, (_, i) => req({ createdAt: `2026-11-0${i + 1}T09:00:00+01:00`, visitationType: 'WP+PV', durationMinutes: 105 }));
-  const data = ds(rs, [day('07:00', '09:30')]); // 1 pro Woche
+// Vergleich Handplanung (baselinePlan) – Grundlage der Ersparnis-Anzeige
+test('Baseline: Handplanung hängt hinten an – Planer fährt weniger für dieselben Besuche', () => {
+  // Wohnort Wien; Reihenfolge nach Eingang springt hin und her (Ost, West, Ost, West)
+  const east = (d: string) => req({ createdAt: d, lat: 48.21, lng: 16.55, visitationType: 'PV', durationMinutes: 60 });
+  const west = (d: string) => req({ createdAt: d, lat: 48.21, lng: 16.2, visitationType: 'PV', durationMinutes: 60 });
+  const data = ds([east('2026-11-01T09:00:00+01:00'), west('2026-11-02T09:00:00+01:00'), east('2026-11-03T09:00:00+01:00'), west('2026-11-04T09:00:00+01:00')]);
   const plan = buildPlan(data, { travel });
-  const f = forecast(data, plan, { travel });
-  assert.equal(f.weeksNeeded, 4);
-  assert.deepEqual(f.weeks.map((w) => w.planned), [1, 1, 1, 1]);
-  assert.equal(f.weeks[1].from, '2026-11-30');
+  const base = baselinePlan(data, travel);
+  assert.equal(base.planned, 4);
+  assert.equal(plan.stats.planned, 4);
+  assert.ok(plan.stats.driveMinutes < base.driveMinutes, `Planer ${plan.stats.driveMinutes} min < Handplanung ${base.driveMinutes} min`);
+  assert.deepEqual(plan.stats.baseline, base);
 });
 
-// Prognose forecast() auf echten Daten
-test('Prognose auf dem Gesamtdatensatz läuft durch', () => {
+test('Baseline auf dem Gesamtdatensatz: Planer plant mindestens so viele Besuche', () => {
   const data = fixtureData();
-  const f = forecast(data, buildPlan(data, { travel }), { travel });
-  console.log('# forecast', JSON.stringify({ weeks: f.weeks.map((w) => [w.planned, w.remaining]), needed: f.weeksNeeded, stuck: f.stuck, na: f.needsAction }));
-  assert.ok(f.weeks.length >= 1);
+  const plan = buildPlan(data, { travel });
+  console.log('# baseline', JSON.stringify({ plan: [plan.stats.planned, plan.stats.driveMinutes], hand: plan.stats.baseline }));
+  assert.ok(plan.stats.planned >= plan.stats.baseline.planned);
 });
 
 // REGEL-2: Termin inkl. Anfahrt ganz im Fenster – nur die Heimfahrt darf bis 60 min darüber

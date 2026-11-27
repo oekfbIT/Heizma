@@ -290,7 +290,7 @@ export function listDecisions(): Record<string, Decision> {
   return load().decisions;
 }
 
-export function setDecision(requestId: string, input: { mode: DecisionMode; technicianId?: string; date?: string; reason: string; override: boolean; replaces?: string }) {
+export function setDecision(requestId: string, input: { mode: DecisionMode; technicianId?: string; date?: string; reason: string; override: boolean }) {
   const d = load();
   const before = d.decisions[requestId] ?? null;
   const decision: Decision = { ...input, reason: input.reason.trim(), at: new Date().toISOString() };
@@ -299,9 +299,9 @@ export function setDecision(requestId: string, input: { mode: DecisionMode; tech
     at: decision.at,
     entity: 'requests',
     id: requestId,
-    action: input.replaces ? 'getauscht' : input.mode === 'pin' ? 'fixiert' : input.mode === 'exclude' ? 'aus-plan' : 'vorgezogen',
+    action: input.mode === 'pin' ? 'fixiert' : 'aus-plan',
     reason: decision.reason || undefined,
-    changes: { before: before ? { mode: before.mode, technicianId: before.technicianId, date: before.date } : null, after: { mode: input.mode, technicianId: input.technicianId, date: input.date, replaces: input.replaces }, override: input.override },
+    changes: { before: before ? { mode: before.mode, technicianId: before.technicianId, date: before.date } : null, after: { mode: input.mode, technicianId: input.technicianId, date: input.date }, override: input.override },
   });
   persist();
   return decision;
@@ -314,11 +314,6 @@ export function clearDecision(requestId: string) {
   delete d.decisions[requestId];
   d.log.push({ at: new Date().toISOString(), entity: 'requests', id: requestId, action: 'zurueckgesetzt', changes: { before: { mode: before.mode, technicianId: before.technicianId, date: before.date } } });
   persist();
-}
-
-/** Gesamtes Protokoll, neueste zuerst */
-export function listLog(): AuditEntry[] {
-  return [...load().log].reverse();
 }
 
 export function auditFor(id: string): AuditEntry[] {

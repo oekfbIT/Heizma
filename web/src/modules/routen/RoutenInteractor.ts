@@ -1,5 +1,5 @@
 /**
- * @file      RoutenInteractor.ts – Modul Routen: Wochenplan, Geometrie, Freigaben, .ics-Export, Tagesstatus
+ * @file      RoutenInteractor.ts – Modul Routen: Wochenplan, Geometrie, Freigaben, Tagesstatus
  * @layer     Web · Modul-Interactor
  * @siehe     docs/02-architektur.md · docs/10-code-navigation.md
  */
@@ -29,11 +29,6 @@ export class RoutenInteractor {
 
   // MARK: - Lesen & Aufbereiten
   /** Straßengeometrie nur für die ausgewählte Route (spart API-Calls) */
-  /** Prognose-Woche (+1, +2 …): projizierter Plan, nur lesen */
-  projected(week: number) {
-    return this.api.get<Plan>(`/api/plan?week=${week}`);
-  }
-
   geometry(technicianId: string, date: string) {
     return this.api.get<RouteGeometry>(`/api/plan/${technicianId}/${date}/geometry`);
   }
@@ -75,13 +70,12 @@ export class RoutenInteractor {
   }
 
   /**
-   * Bilanz: jede Anfrage genau einmal (diese Woche · vorgeplant · Warteliste · nicht planbar · aus dem Plan).
+   * Bilanz: jede Anfrage genau einmal (diese Woche · Warteliste · nicht planbar · aus dem Plan).
    * Die Plan-Prüfung (Regel „unique“) stellt sicher, dass jede Anfrage entweder in einer Route oder in `unassigned` steht.
    * @param include optional nur Anfragen einer Region
    */
-  balance(plan: Plan, preplanned: Record<string, { date: string }> = {}, include: (requestId: string) => boolean = () => true): PlanBalance {
-    const b: PlanBalance = { total: 0, thisWeek: 0, approved: 0, preplanned: 0, preplannedByWeek: [], waitlist: 0, unplannable: 0, unplannableByReason: [], excluded: 0 };
-    const weeks = new Map<number, number>();
+  balance(plan: Plan, include: (requestId: string) => boolean = () => true): PlanBalance {
+    const b: PlanBalance = { total: 0, thisWeek: 0, approved: 0, waitlist: 0, unplannable: 0, unplannableByReason: [], excluded: 0 };
     const reasons = new Map<string, number>();
     for (const r of plan.routes)
       for (const s of r.stops) {
@@ -92,32 +86,21 @@ export class RoutenInteractor {
     for (const u of plan.unassigned) {
       if (!include(u.requestId)) continue;
       // ACHTUNG · GRUND-PRAEFIX: prüft den Anfang von `reason` – muss zu den Texten in planner.ts buildPlan() passen
-      if (u.reason.startsWith('Kapazität')) {
-        const pre = preplanned[u.requestId];
-        if (pre) {
-          b.preplanned++;
-          weeks.set(isoWeek(pre.date), (weeks.get(isoWeek(pre.date)) ?? 0) + 1);
-        } else b.waitlist++;
-      } else if (u.reason.startsWith('Aus dem Plan')) b.excluded++;
+      if (u.reason.startsWith('Kapazität')) b.waitlist++;
+      else if (u.reason.startsWith('Aus dem Plan')) b.excluded++;
       else {
         b.unplannable++;
         const key = reasonGroup(u.reason);
         reasons.set(key, (reasons.get(key) ?? 0) + 1);
       }
     }
-    b.total = b.thisWeek + b.preplanned + b.waitlist + b.unplannable + b.excluded;
-    b.preplannedByWeek = [...weeks.entries()].sort((x, y) => x[0] - y[0]).map(([week, count]) => ({ week, count }));
+    b.total = b.thisWeek + b.waitlist + b.unplannable + b.excluded;
     b.unplannableByReason = [...reasons.entries()].sort((x, y) => y[1] - x[1]).map(([reason, count]) => ({ reason, count }));
     return b;
   }
 
   /** Wo steht jede Anfrage? Eingeplant (Tag · Person), Warteliste, aus dem Plan genommen, nicht planbar. */
-  requestStatuses(
-    plan: Plan,
-    shortName: (technicianId: string) => string,
-    /** Vorplanung der Folgewochen: wartende Anfrage → vorläufiger Termin */
-    preplanned: Record<string, { date: string; technicianId: string; start: string; end: string }> = {},
-  ): Map<string, RequestPlanStatus> {
+  requestStatuses(plan: Plan, shortName: (technicianId: string) => string): Map<string, RequestPlanStatus> {
     const map = new Map<string, RequestPlanStatus>();
     for (const r of plan.routes)
       for (const s of r.stops) {
@@ -137,16 +120,6 @@ export class RoutenInteractor {
         : u.reason.startsWith('Aus dem Plan')
           ? ['Aus dem Plan genommen', 'excluded']
           : ['Nicht planbar', 'unplannable'];
-      const pre = tone === 'waitlist' ? preplanned[u.requestId] : undefined;
-      if (pre) {
-        map.set(u.requestId, {
-          planned: false,
-          label: `KW ${isoWeek(pre.date)} · ${formatDay(pre.date)} · ${shortName(pre.technicianId)}`,
-          tone: 'preplanned',
-          title: `Vorgeplant (vorläufig): ${pre.start}–${pre.end}. Diese Woche voll – wird mit der echten Verfügbarkeit der Woche bestätigt.`,
-        });
-        continue;
-      }
       map.set(u.requestId, { planned: false, label, tone, title: u.reason });
     }
     return map;
@@ -170,7 +143,4 @@ export class RoutenInteractor {
     return this.api.send(`/api/approvals?date=${date}`, 'POST', {});
   }
 
-  downloadIcs(technicianId: string, date: string) {
-    return this.api.download(`/api/plan/${technicianId}/${date}/ics`, `route-${technicianId}-${date}.ics`);
-  }
 }

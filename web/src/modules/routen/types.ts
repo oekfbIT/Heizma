@@ -10,7 +10,7 @@ export interface RouteGeometry {
   legs: TravelResult[];
 }
 
-export type PlanStatusTone = 'approved' | 'proposed' | 'waitlist' | 'preplanned' | 'excluded' | 'unplannable';
+export type PlanStatusTone = 'approved' | 'proposed' | 'waitlist' | 'excluded' | 'unplannable';
 
 /** Wo steht eine Anfrage im Plan – fertig für einen Chip in der Liste */
 export interface RequestPlanStatus {
@@ -22,7 +22,7 @@ export interface RequestPlanStatus {
 
 /**
  * Bilanz aller Anfragen: jede Anfrage steht in genau einem Topf, die Töpfe ergeben zusammen `total`.
- * Einzige Quelle für alle Zähler der Oberfläche (Übersicht, Prognose, Planer, Liste) – so passen die Zahlen überall zusammen.
+ * Einzige Quelle für alle Zähler der Oberfläche (Übersicht, Planer, Liste) – so passen die Zahlen überall zusammen.
  */
 export interface PlanBalance {
   total: number;
@@ -30,10 +30,7 @@ export interface PlanBalance {
   thisWeek: number;
   /** davon schon freigegeben */
   approved: number;
-  /** Warteliste mit vorläufigem Platz in einer Folgewoche */
-  preplanned: number;
-  preplannedByWeek: { week: number; count: number }[];
-  /** Warteliste ohne Platz in den nächsten Wochen */
+  /** Warteliste: gültige Daten, aber diese Woche kein Platz mehr („ältere zuerst“) */
   waitlist: number;
   /** Braucht Klärung (Datenfehler, nicht zuordenbar, niemand verfügbar, passt in keinen Tag) */
   unplannable: number;

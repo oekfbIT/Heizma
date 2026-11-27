@@ -36,10 +36,10 @@ Alles läuft auch in GitHub Actions (`.github/workflows/ci.yml`) bei jedem Push.
 - **Zahlen stimmen:** jede Lücke = Fahrt + Pause + Warten, Routen- und Wochensummen addieren sich; falsche Summen werden erkannt
 - Notiz blockiert nichts – Anfrage mit „nur vormittags erreichbar“ wird normal geplant (Notiz ist Information)
 - Uhrzeit-Formatfehler („10.00“) wird gelesen, geplant und als Warnung gemeldet
-- Fixieren, Herausnehmen, Vorziehen, Tausch, Regelbruch mit/ohne Ausnahme
+- Fixieren, Herausnehmen, Regelbruch mit/ohne Ausnahme
 - Optionen: regelkonforme Slots zuerst, freigegebene Routen am Ende
 - Datenfehler sperren die Planung – nach Korrektur wird geplant
-- Prognose: Warteliste wird über Folgewochen abgearbeitet
+- Handplanung (Baseline): gleiche Besuche, mehr Fahrzeit als der Planer · Planer plant nie weniger als die Handplanung
 
 ## Web: die Schichten
 

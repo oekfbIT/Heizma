@@ -204,18 +204,3 @@
     @apply h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent;
   }
 }
-
-/* ---------- Leaflet-Anpassungen (Fremdbibliothek, daher außerhalb der Komponenten) ---------- */
-.leaflet-div-icon.marker-reset {
-  background: transparent;
-  border: none;
-}
-.leaflet-tooltip.stop-tooltip {
-  @apply rounded-lg border border-gray-200 px-3 py-2 font-sans text-xs text-ink shadow-lg;
-}
-/* Ausgewählter Stopp: Popover mit etwas mehr Luft, Text darf umbrechen */
-.leaflet-tooltip.stop-popover {
-  @apply rounded-xl p-3 shadow-xl;
-  white-space: normal;
-  pointer-events: auto;
-}

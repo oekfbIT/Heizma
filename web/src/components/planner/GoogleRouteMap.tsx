@@ -6,10 +6,26 @@
 import polyline from '@mapbox/polyline';
 import { AdvancedMarker, APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { useEffect, useMemo, useRef } from 'react';
-import type { DayRoute } from '@/lib/types';
+import type { RouteGeometry } from '@/modules';
+import type { DayRoute, Technician } from '@/lib/types';
 import { mapColors } from '@/ui';
-import type { RouteMapProps } from './LeafletRouteMap';
 import StopPopover from './StopPopover';
+
+export interface RouteMapProps {
+  routes: DayRoute[]; // Routen des gewählten Tages
+  technicians: Technician[];
+  colors: Record<string, string>;
+  selectedId: string | null;
+  geometry: RouteGeometry | null; // Straßenverlauf der ausgewählten Route
+  office: { label: string; lat: number; lng: number } | null;
+  hoveredStopId: string | null;
+  onSelect: (technicianId: string) => void;
+  onHoverStop: (stopId: string | null) => void;
+  /** Ausgewählter Stopp: Karte zoomt hin, Popover bleibt offen */
+  selectedStopId: string | null;
+  onSelectStop: (technicianId: string, stopId: string | null) => void;
+  onOpenDetails: (stopId: string) => void;
+}
 
 /**
  * Kartenansicht mit Google Maps (Maps JavaScript API).

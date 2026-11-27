@@ -24,7 +24,7 @@ Jede Datei in `api/src`, `web/src` und `scripts` beginnt so:
 /**
  * @file      planner.ts – Kern der Einsatzplanung (Anfragen → Personen-Tage → Tagesrouten)
  * @layer     Backend · Domäne (reine Funktionen, kein I/O)
- * @einstieg  buildPlan() · rankOptions() · swapOptions() · forecast()
+ * @einstieg  buildPlan() · rankOptions() · baselinePlan()
  * @nutzt     travelMatrix, validation
  * @genutzt   index.ts, verify.ts
  * @siehe     docs/03-planung-und-regeln.md · docs/10-code-navigation.md
@@ -103,14 +103,14 @@ Jede Regel steht an drei Stellen: **umgesetzt** im Planer, **unabhängig nachger
 | Datei | Schicht | Zweck |
 |---|---|---|
 | `index.ts` | Schnittstelle | Alle `/api/*`-Endpunkte, Plan-Cache, Fehlerbehandlung |
-| `planner.ts` | Domäne | Planung: Simulation, Greedy, 2-opt/Relocate, Tausch, Vorschauen, Prognose |
+| `planner.ts` | Domäne | Planung: Simulation, Greedy, 2-opt/Relocate, „ältere zuerst“, Vorschau, Handplanung (Vergleich) |
 | `verify.ts` | Domäne | Unabhängige Regelprüfung + bewusste Ausnahmen |
 | `validation.ts` | Domäne | Datenbefunde (error/warning/info) + Zuständigkeit |
 | `geo.ts` · `time.ts` | Domäne | Distanz, Polygon, Fahrzeit-Schätzung · Uhrzeiten |
 | `types.ts` | Typen | Gemeinsames Modell für API und Web |
 | `heizmaClient.ts` | Infrastruktur | Heizma-API bzw. Fixtures (einzige Stelle mit Token) |
 | `travelMatrix.ts` | Infrastruktur | Fahrzeitmatrix aus `/travel/path`, Datei-Cache |
-| `localStore.ts` | Infrastruktur | Korrekturen, Freigaben, Entscheidungen, Protokoll (JSON) |
+| `localStore.ts` | Infrastruktur | Korrekturen, Freigaben, Entscheidungen, Änderungen je Anfrage (JSON) |
 | `geocode.ts` · `towns.ts` | Infrastruktur | Geocoding mit Offline-Fallback |
 | `config.ts` | Infrastruktur | `.env`-Konfiguration |
 | `mockauth/*` | Auth | Login, Token, `requireAuth` |
@@ -144,11 +144,11 @@ Lokal läuft dasselbe Gate in `npm run check`.
 
 ## 8 · Warteliste-Gründe
 
-`buildPlan()` begründet jede nicht eingeplante Anfrage mit einem Text, dessen **Anfang** maschinell ausgewertet wird (Status-Chip, Wartelisten-Gruppe, Prognose, Prüfung). Diese Stellen tragen den Tag `GRUND-PRAEFIX`.
+`buildPlan()` begründet jede nicht eingeplante Anfrage mit einem Text, dessen **Anfang** maschinell ausgewertet wird (Status-Chip, Wartelisten-Gruppe, Prüfung). Diese Stellen tragen den Tag `GRUND-PRAEFIX`.
 
 | Präfix | Bedeutung | Nächste Aktion |
 |---|---|---|
-| `Kapazität erschöpft` | Passt grundsätzlich, aber diese Woche ist kein Platz – zählt für „ältere zuerst“ (REGEL-8) | Kunde informieren / Prognose |
+| `Kapazität erschöpft` | Passt grundsätzlich, aber diese Woche ist kein Platz – zählt für „ältere zuerst“ (REGEL-8) | Kunde informieren |
 | `Passt in keinen Tag` | Passt selbst an einem leeren Tag nicht (z. B. Kunde erst ab 17 Uhr + weite Anfahrt) | Andere Zeit mit Kunde/Vertrieb klären |
 | `Aus dem Plan genommen` | Planer hat sie bewusst herausgenommen | – |
 | `Datenfehler` · `Keine Koordinaten` | Daten zuerst korrigieren | Stammdaten bearbeiten / geokodieren |

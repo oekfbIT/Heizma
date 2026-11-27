@@ -1,18 +1,17 @@
 /**
- * @file      SettingsMenu.tsx – Einstellungen: Protokoll, Demo zurücksetzen, Abmelden
+ * @file      SettingsMenu.tsx – Einstellungen: Demo zurücksetzen, Abmelden
  * @layer     Web · View-Komponente
  * @siehe     docs/09-setup.md · docs/10-code-navigation.md
  */
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useCore } from '@/core';
 import { useAuth } from '@/core/auth';
 import { Button, Icon, cx } from '@/ui';
 
 /**
- * Einstellungen (Zahnrad) statt „Abmelden“: Protokoll, Demo zurücksetzen und Abmelden.
- * „Demo zurücksetzen“ löscht alle lokalen Korrekturen, Freigaben, Eingriffe, Eskalationen
- * und das Protokoll – zurück auf den Ausgangsstand der Heizma-API, z. B. für einen neuen Testlauf.
+ * Einstellungen (Zahnrad) statt „Abmelden“: Demo zurücksetzen und Abmelden.
+ * „Demo zurücksetzen“ löscht alle lokalen Korrekturen, Freigaben, Eingriffe, Eskalationen –
+ * zurück auf den Ausgangsstand der Heizma-API, z. B. für einen neuen Testlauf.
  */
 export default function SettingsMenu({ variant = 'popover', onDone }: { variant?: 'popover' | 'inline'; onDone?: () => void }) {
   const { user, logout } = useAuth();
@@ -82,11 +81,6 @@ function MenuContent({ email, expiresAt, logout, onDone }: { email: string; expi
       </div>
       <div className="border-t border-gray-100" />
 
-      <Link to="/protokoll" className={item} onClick={onDone}>
-        <Icon name="list" className="h-4 w-4 text-gray-400" />
-        Aktivitätsprotokoll
-      </Link>
-
       {!confirm ? (
         <button type="button" className={item} onClick={() => { setConfirm(true); setState('idle'); }}>
           <Icon name="reset" className="h-4 w-4 text-gray-400" />
@@ -97,7 +91,7 @@ function MenuContent({ email, expiresAt, logout, onDone }: { email: string; expi
         <div className="rounded-lg bg-warning-50 p-3 text-sm">
           <p className="font-medium text-warning-800">Alles auf den Ausgangsstand?</p>
           <p className="mt-1 text-xs text-warning-800">
-            Löscht alle lokalen Korrekturen, Freigaben, Eingriffe, Eskalationen und das Protokoll. Die Routenplanung startet neu mit den Originaldaten der
+            Löscht alle lokalen Korrekturen, Freigaben, Eingriffe und Eskalationen. Die Routenplanung startet neu mit den Originaldaten der
             Heizma-API.
           </p>
           <div className="mt-3 flex justify-end gap-2">

@@ -11,4 +11,3 @@ export type * from './techniker/types';
 export { NO_REGION, cityOf } from './anfragen/AnfragenInteractor';
 export { ROUTE_LEVEL } from './routen/RoutenInteractor';
 export { inPolygon, parseRegion, regionName, regionPresets, serializeRegion, type RegionPreset } from './techniker/TechnikerInteractor';
-export { LOG_CATEGORY_LABEL } from './system/SystemInteractor';

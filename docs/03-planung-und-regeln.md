@@ -21,7 +21,7 @@ flowchart LR
 
 **Mittagspause:** wird in jede passende Lücke gelegt – vor der Weiterfahrt, in eine Wartezeit, vor Abfahrt oder nach Heimkehr. Passt sie nicht, entfällt sie (laut Regel) – aber nur, wenn schon die fixen Termine des Tages sie verhindern. **Für einen zusätzlichen Besuch wird sie nie geopfert.**
 
-**Vorgaben des Planers** gehen als harte Randbedingungen ein: freigegebene Routen (unverändert), fixierte Anfragen (Tag + Person), herausgenommene und vorgezogene Anfragen.
+**Vorgaben des Planers** gehen als harte Randbedingungen ein: freigegebene Routen (unverändert), fixierte Anfragen (Tag + Person) und herausgenommene Anfragen.
 
 ## Die Regeln – Umsetzung und Nachweis
 
@@ -41,7 +41,7 @@ Jede Regel ist im Planer umgesetzt **und** wird von `verify.ts` mit eigenem Code
 | + | Jede Anfrage genau einmal: eingeplant oder Warteliste | – | `unique` | ✓ |
 | + | Zahlen stimmen: Fahrt + vor Ort + Pause + Warten = Arbeitstag, Wochensummen = Summe der Routen | Jede Lücke vor einem Stopp wird als Fahrt + Pause + Wartezeit ausgewiesen | `totals` | ✓ |
 
-**Eine Bilanz für alle Zähler:** Jede Anfrage steht in genau einem Topf – *diese Woche*, *vorgeplant* (Folgewoche), *Warteliste*, *nicht planbar*, *aus dem Plan*. Übersicht, Prognose-Streifen, Planer-Kopf, Gebietstabelle und Anfragen-Liste lesen alle aus derselben Funktion (`core.balance()`), darum ergeben die Teile überall dieselbe Gesamtzahl.
+**Eine Bilanz für alle Zähler:** Jede Anfrage steht in genau einem Topf – *diese Woche*, *Warteliste*, *nicht planbar*, *aus dem Plan*. Übersicht, Planer-Kopf, Gebietstabelle und Anfragen-Liste lesen alle aus derselben Funktion (`core.balance()`), darum ergeben die Teile überall dieselbe Gesamtzahl.
 
 **Die Prüfung prüft sich selbst:** Ein Test schleust gezielt Fehler in einen gültigen Plan ein – Überlappung, doppelte Anfrage, verlorene Anfrage, falsche Pause – und erwartet, dass `verifyPlan()` jeden davon meldet.
 
@@ -65,9 +65,9 @@ Auf jeder Anfrage-Seite und im Stopp-Dialog des Planers gibt es dieselbe Karte �
 | **Planung ändern …** | Ein Button je Anfrage. Öffnet einen Dialog mit genau den Schritten, die im aktuellen Status möglich sind – jeder mit einem Satz, was danach passiert. |
 | **Verschieben / Manuell einplanen** | Sortierte Liste aller möglichen Tage: regelkonforme zuerst, mit Uhrzeit und Zusatz-Fahrzeit. Vorschau vor dem Übernehmen. |
 | **Fixieren** | Bleibt bei jeder Neuplanung an diesem Tag und bei dieser Person. |
-| **Vorziehen** | Tausch-Dialog: eine jüngere Anfrage macht Platz – nur regelkonforme Varianten, Begründung Pflicht. |
 | **Aus dem Plan nehmen** | Mit Grund, z. B. „Kunde ruft zurück“; jederzeit wieder aufnehmbar. |
-| **Kunde informieren / Intern eskalieren** | Für Wartende bzw. fachlich nicht Planbare: Entwurf wird gespeichert (nicht versendet). |
+| **Kunde informieren / Intern eskalieren** | Für Fälle ohne Lösung – Wartende bzw. fachlich nicht Planbare: Entwurf wird gespeichert (nicht versendet). |
+| **Neu planen** | Lädt die Heizma-Daten frisch und optimiert neu; optional alle Eingriffe und Freigaben verwerfen. |
 | **Änderungsprotokoll** | Was, wann, warum – je Anfrage. |
 
 Die Rückmeldung nach einer Aktion kommt aus dem **tatsächlichen Ergebnis der Neuplanung**, nicht aus der Vorschau.

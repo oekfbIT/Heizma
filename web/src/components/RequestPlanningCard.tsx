@@ -6,12 +6,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCore, useResource } from '@/core';
-import { formatDateTime, formatDay, isoWeek } from '@/lib/format';
+import { formatDateTime, formatDay } from '@/lib/format';
 import type { AuditEntry, RequestPlanning, SlotOption } from '@/lib/types';
 import type { DecisionInput } from '@/modules';
 import { ActionList, Alert, Badge, Button, Input, Modal, type ActionItem, type BadgeTone } from '@/ui';
 import EscalationDialog from './planner/EscalationDialog';
-import SwapModal from './SwapModal';
 
 /**
  * Planung einer einzelnen Anfrage: wo steht sie, und was kann der Planer tun.
@@ -32,8 +31,6 @@ const STATUS: Record<RequestPlanning['status'], { label: string; tone: BadgeTone
 const ACTION: Record<string, string> = {
   fixiert: 'Fixiert',
   'aus-plan': 'Aus dem Plan genommen',
-  vorgezogen: 'Vorgezogen',
-  getauscht: 'Getauscht',
   zurueckgesetzt: 'Entscheidung zurückgenommen',
   termin: 'Route freigegeben → Termin',
   'termin-zurueck': 'Freigabe zurückgenommen → wieder Anfrage',
@@ -42,13 +39,12 @@ const ACTION: Record<string, string> = {
   escalate: 'Eskaliert',
 };
 
-type Step = null | 'choose' | 'move' | 'pin' | 'exclude' | 'undo' | 'prioritize' | 'inform' | 'escalate';
+type Step = null | 'choose' | 'move' | 'pin' | 'exclude' | 'undo' | 'inform' | 'escalate';
 
 export default function RequestPlanningCard({ requestId, compact, onChanged }: { requestId: string; compact?: boolean; onChanged?: () => void }) {
   const core = useCore();
   const planning = core.anfragen.planning.get(requestId);
   const { data: info, error } = useResource(planning);
-  const placement = useResource(core.system.forecast).data?.placements[requestId];
   const anfragen = useResource(core.anfragen.data); // Kundenname, Eskalationen
   useResource(core.techniker.data); // Kurznamen der Personen
   const [step, setStep] = useState<Step>(null);
@@ -102,8 +98,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
   if (error && !info) return <section className="card p-4 text-sm text-danger-700">{error}</section>;
   if (!info) return <section className="card p-4 text-sm text-gray-400">Planung wird geladen …</section>;
 
-  const preplanned = info.status === 'waitlist' && placement;
-  const st = preplanned ? { label: `Vorgeplant KW ${isoWeek(placement.date)}`, tone: 'info-soft' as BadgeTone } : STATUS[info.status];
+  const st = STATUS[info.status];
   const d = info.decision;
   const locked = info.status === 'termin';
   const reasonOk = reason.trim().length >= 3;
@@ -121,8 +116,6 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
       actions.push({ key: 'move', icon: 'move', title: 'Verschieben', description: 'Anderer Tag oder andere Person – mit Uhrzeit und Zusatz-Fahrzeit als Vorschau.', onSelect: () => void openMove() });
       if (info.status === 'planned') actions.push({ key: 'pin', icon: 'pin', title: 'Fixieren', description: 'Bleibt bei jeder Neuplanung an diesem Tag und bei dieser Person.', onSelect: () => go('pin') });
     } else {
-      if (info.status === 'waitlist' && d?.mode !== 'prioritize')
-        actions.push({ key: 'prioritize', icon: 'arrow-up', title: 'Vorziehen', description: 'Eine jüngere Anfrage macht Platz – nur Tausche, die alle Regeln einhalten.', onSelect: () => go('prioritize') });
       actions.push({ key: 'move', icon: 'calendar', title: 'Manuell einplanen', description: 'Tag und Person selbst wählen. Ein Regelbruch geht nur mit Begründung.', tone: 'warning', onSelect: () => void openMove() });
     }
     if (d) actions.push({ key: 'undo', icon: 'reset', title: undoLabel(d.mode), description: 'Das System plant die Anfrage wieder automatisch ein.', onSelect: () => go('undo') });
@@ -144,11 +137,6 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         <Badge strong tone={st.tone}>
           {st.label}
         </Badge>
-        {d?.mode === 'prioritize' && (
-          <Badge strong tone="accent">
-            Vorgezogen
-          </Badge>
-        )}
         {info.exceptions.length > 0 && (
           <Badge strong tone="warning-soft">
             Bewusste Ausnahme
@@ -177,20 +165,6 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
               )}
             </p>
           </>
-        ) : preplanned ? (
-          <>
-            <p className="text-base font-semibold tabular-nums text-ink">
-              {formatDay(placement.date)} · ca. {placement.start}–{placement.end}
-            </p>
-            <p className="text-gray-600">
-              {core.techniker.getShortName(placement.technicianId)} · vorläufig, diese Woche ist voll
-              {!compact && (
-                <Link to={`/planer?week=${placement.week}`} className="ml-2 text-brand-600 hover:underline">
-                  KW {isoWeek(placement.date)} ansehen →
-                </Link>
-              )}
-            </p>
-          </>
         ) : (
           <p className="text-gray-700">{info.reason ?? 'Nicht eingeplant'}</p>
         )}
@@ -213,11 +187,6 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
           <p className="mt-1 text-xs text-gray-500">
             Begründung: „{d.reason}“ · {formatDateTime(d.at)}
           </p>
-        )}
-        {d?.mode === 'prioritize' && info.status === 'waitlist' && (
-          <Alert tone="warning" size="sm" className="mt-2">
-            Vorgezogen, aber es gibt keinen regelkonformen Platz. Über „Planung ändern … → Manuell einplanen“ geht es als bewusste Ausnahme.
-          </Alert>
         )}
         {info.violations.map((v) => (
           <p key={v} className="mt-1 text-xs font-medium text-danger-600">
@@ -431,7 +400,7 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
           request={request}
           reason={info.reason ?? ''}
           type={step === 'inform' ? 'customer_delay' : 'internal'}
-          suggestedDate={placement?.date ?? info.route?.date ?? ''}
+          suggestedDate={info.route?.date ?? ''}
           onClose={close}
           onDone={() => {
             close();
@@ -440,27 +409,11 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
         />
       )}
 
-      {step === 'prioritize' && (
-        <SwapModal
-          requestId={requestId}
-          olderWaiting={info.olderWaiting}
-          onClose={close}
-          onManual={() => void openMove()}
-          onPrioritize={(why) => send({ mode: 'prioritize', reason: why }, (f) => (f.route ? `Vorgezogen und eingeplant: ${formatDay(f.route.date)} ${f.route.start}.` : 'Vorgezogen – wartet, bis regelkonform Platz frei wird.'))}
-          onSwap={async (o, why) => {
-            await send({ mode: 'pin', technicianId: o.technicianId, date: o.date, reason: why, replaces: o.displaced.id }, (f) =>
-              f.route
-                ? `Getauscht: ${formatDay(f.route.date)} ${f.route.start}–${f.route.end} bei ${f.route.technicianName}. ${o.displaced.customer} wurde neu verteilt${o.fallback ? '' : ' (Warteliste)'}.`
-                : `Tausch nicht möglich: ${f.reason ?? 'unbekannt'}`,
-            );
-          }}
-        />
-      )}
     </section>
   );
 }
 
-const undoLabel = (mode: string) => (mode === 'pin' ? 'Fixierung lösen' : mode === 'prioritize' ? 'Vorziehen zurücknehmen' : 'Entscheidung zurücknehmen');
+const undoLabel = (mode: string) => (mode === 'pin' ? 'Fixierung lösen' : 'Entscheidung zurücknehmen');
 
 /** Bestätigungs-Dialog im Aktionen-Muster: was passiert, optional Pflicht-Begründung, Zurück / Bestätigen */
 function ConfirmDialog(p: {

@@ -77,17 +77,4 @@ describe('ApiService', () => {
     await expect(api.get('/api/plan')).rejects.toBeInstanceOf(ApiError);
     expect(onUnauthorized).toHaveBeenCalledOnce();
   });
-
-  it('lädt Dateien mit Auth-Header herunter', async () => {
-    const saveFile = vi.fn();
-    const fetch = vi.fn(async () => new Response('BEGIN:VCALENDAR')) as unknown as typeof globalThis.fetch;
-    const api = new ApiService({ fetch, saveFile, getToken: () => 't' });
-    await api.download('/api/plan/tech_01/2026-11-23/ics', 'route.ics');
-    expect(saveFile).toHaveBeenCalledWith(expect.any(Blob), 'route.ics');
-  });
-
-  it('meldet fehlgeschlagene Downloads', async () => {
-    const fetch = (async () => new Response('', { status: 404 })) as unknown as typeof globalThis.fetch;
-    await expect(new ApiService({ fetch }).download('/x', 'x')).rejects.toThrow('HTTP 404');
-  });
 });

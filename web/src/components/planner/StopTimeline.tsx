@@ -70,7 +70,6 @@ export default function StopTimeline({ route, technician, color, selectedStopId,
                   {(stop.appointmentType === 'Besichtigung' || stop.visitationType) && <Tag className="bg-gray-100 text-gray-600">{stop.visitationType ?? 'Typ unbekannt'}</Tag>}
                   {stop.fixed && <Tag className="border border-gray-300 text-gray-600">fix</Tag>}
                   {stop.manual?.mode === 'pin' && <Tag className="bg-info-100 text-info-800">📌 manuell</Tag>}
-                  {stop.manual?.mode === 'prioritize' && <Tag className="bg-accent-100 text-accent-800">⇡ vorgezogen</Tag>}
                   {exceptions?.has(stop.id) && <Tag className="bg-warning-100 text-warning-800" >Ausnahme</Tag>}
                 </span>
                 {note && (

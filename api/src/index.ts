@@ -15,13 +15,13 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { config } from './config.js';
 import { clearCache, HeizmaApiError, loadDataset, travelPath } from './heizmaClient.js';
 import { geocode, reverseGeocode } from './geocode.js';
-import { buildPlan, forecastWithPlans, rankOptions, requestErrors, swapOptions } from './planner.js';
-import { getTravelMatrix, resetTravelMatrix } from './travelMatrix.js';
+import { buildPlan, rankOptions, requestErrors } from './planner.js';
+import { getTravelMatrix } from './travelMatrix.js';
 import { applyExceptions, verifyPlan } from './verify.js';
 import type { Appointment, Dataset, Plan, RequestPlanning, ServiceRequest, SlotOption } from './types.js';
 import { eligibleTechnicians, validateDataset } from './validation.js';
 import { authRouter, requireAuth } from './mockauth/index.js';
-import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, listLog, resetAll, resetEntity, resetPlanning, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
+import { applyOverrides, auditFor, clearDecision, listDecisions, setDecision, approveRoutes, dumpDb, listApprovals, unapproveRoutes, editableFields, escalate, listEscalations, resetAll, resetEntity, resetPlanning, updateEntity, ValidationError, withdrawEscalation, type EntityKey } from './localStore.js';
 
 // MARK: - Hilfsfunktionen
 
@@ -128,7 +128,7 @@ app.get('/api/stammdaten', route(async (_req, res) => {
   res.json({ ...data, requests: view.requests, appointments: view.appointments, convertedRequests: view.converted, issues: validateDataset(data), responsibility, escalations: listEscalations() });
 }));
 
-// MARK: - Planer-Entscheidungen je Anfrage (Status, Optionen, fixieren / aus Plan nehmen / vorziehen)
+// MARK: - Planer-Entscheidungen je Anfrage (Status, Optionen, fixieren / verschieben / aus Plan nehmen)
 
 async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; info: RequestPlanning } | null> {
   const data = await loadWorkingDataset();
@@ -145,7 +145,6 @@ async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; inf
     .filter(Boolean)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const pos = waiting.findIndex((r) => r.id === id);
-  const olderWaiting = waiting.filter((r) => r.id !== id && r.createdAt < request.createdAt).length;
 
   let route: RequestPlanning['route'] = null;
   if (hit) {
@@ -173,7 +172,6 @@ async function planningFor(id: string): Promise<{ data: Dataset; plan: Plan; inf
     notes: request.notes,
     decision,
     waitlist: pos >= 0 ? { position: pos + 1, total: waiting.length } : null,
-    olderWaiting,
     violations: (plan.verification?.rules ?? []).flatMap((r) => r.violations).filter((v) => v.stopId === id).map((v) => v.message),
     exceptions: (plan.verification?.exceptions ?? []).filter((e) => e.requestId === id),
     log: auditFor(id),
@@ -197,18 +195,8 @@ app.get('/api/requests/:id/options', route(async (req, res) => {
   res.json({ options: rankOptions(r.data, r.plan, req.params.id, { travel: lookup }) });
 }));
 
-/** Tausch-Vorschläge für eine wartende Anfrage (Vorschau, ändert nichts) */
-app.get('/api/requests/:id/swap-options', route(async (req, res) => {
-  const r = await planningFor(req.params.id);
-  if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden' });
-  const errors = requestErrors(r.data, req.params.id);
-  if (errors.length) return res.json({ options: [], blockedReason: `Datenfehler – erst korrigieren: ${errors[0]}` });
-  const { lookup } = await getTravelMatrix(r.data);
-  res.json({ options: swapOptions(r.data, r.plan, req.params.id, { travel: lookup, decisions: listDecisions() }) });
-}));
-
 /**
- * Entscheidung des Planers. Body { mode: 'pin'|'exclude'|'prioritize', technicianId?, date?, reason?, override? }
+ * Entscheidung des Planers. Body { mode: 'pin'|'exclude', technicianId?, date?, reason?, override? }
  * Grundsatz: Der Planer darf alles – aber ein Regelbruch braucht override + Begründung und bleibt im Plan sichtbar.
  */
 /**
@@ -230,7 +218,7 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   const mode = String(body.mode ?? '');
   const reason = String(body.reason ?? '').trim();
   const override = body.override === true;
-  if (!['pin', 'exclude', 'prioritize'].includes(mode)) throw new ValidationError('mode muss pin, exclude oder prioritize sein');
+  if (!['pin', 'exclude'].includes(mode)) throw new ValidationError('mode muss pin oder exclude sein');
 
   if (mode === 'exclude') {
     if (reason.length < 3) throw new ValidationError('Bitte kurz begründen, warum die Anfrage aus dem Plan genommen wird');
@@ -239,23 +227,9 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   // DATEN: Fehlerhafte Daten können nicht eingeplant werden – auch nicht als Ausnahme. Erst korrigieren.
   const errors = requestErrors(r.data, id);
   if (errors.length) return res.status(409).json({ error: `Datenfehler – erst korrigieren: ${errors[0]}` });
-  if (mode === 'prioritize') {
-    // REGEL-8: Bricht "ältere zuerst" bewusst → immer mit Begründung
-    if (reason.length < 3) throw new ValidationError(r.info.olderWaiting ? `Bitte begründen – ${r.info.olderWaiting} ältere Anfragen warten noch` : 'Bitte kurz begründen, warum die Anfrage vorgezogen wird');
-    return respondDecision(res, id, setDecision(id, { mode, reason, override: true }));
-  }
-
   const technicianId = String(body.technicianId ?? '');
   const date = String(body.date ?? '');
   const { lookup } = await getTravelMatrix(r.data);
-  if (body.replaces) {
-    // Tausch: nur regelkonforme Vorschläge, nie fixe Termine – Begründung Pflicht
-    const replaces = String(body.replaces);
-    const swap = swapOptions(r.data, r.plan, id, { travel: lookup, decisions: listDecisions() }).find((o) => o.technicianId === technicianId && o.date === date && o.displaced.id === replaces);
-    if (!swap) return res.status(409).json({ error: 'Tausch nicht (mehr) regelkonform möglich – bitte Vorschläge neu laden' });
-    if (reason.length < 3) throw new ValidationError('Bitte den Tausch kurz begründen');
-    return respondDecision(res, id, setDecision(id, { mode: 'pin', technicianId, date, reason, override: swap.displacesOlder, replaces }));
-  }
   const option: SlotOption | undefined = rankOptions(r.data, r.plan, id, { travel: lookup }).find((o) => o.technicianId === technicianId && o.date === date);
   if (!option) return res.status(400).json({ error: `${technicianId} ist am ${date} nicht verfügbar` });
   if (option.blocked) return res.status(409).json({ error: option.blocked });
@@ -270,7 +244,7 @@ app.delete('/api/requests/:id/decision', route(async (req, res) => {
   await respondDecision(res, req.params.id, null);
 }));
 
-// MARK: - Plan, Übersicht & Prognose
+// MARK: - Plan & Übersicht
 
 /** Übersichtszahlen für die Kacheln */
 app.get('/api/overview', route(async (_req, res) => {
@@ -301,32 +275,9 @@ app.get('/api/overview', route(async (_req, res) => {
   });
 }));
 
-/** Prognose (zwischengespeichert je Planstand): Wochen bis die Warteliste leer ist + projizierte Wochenpläne */
-let forecastCache: { key: string; value: ReturnType<typeof forecastWithPlans> } | null = null;
-async function getForecast(data: Dataset) {
-  const plan = await getPlan(data);
-  if (forecastCache?.key === plan.generatedAt) return forecastCache.value;
-  const { lookup } = await getTravelMatrix(data);
-  const value = forecastWithPlans(data, plan, { travel: lookup, decisions: listDecisions() });
-  // Auch die Prognose-Wochen werden unabhängig geprüft
-  for (const w of value.plans) w.plan.verification = verifyPlan(w.plan, w.data, lookup, listDecisions());
-  forecastCache = { key: plan.generatedAt, value };
-  return value;
-}
-
-app.get('/api/forecast', route(async (_req, res) => {
-  res.json((await getForecast(await loadWorkingDataset())).forecast);
-}));
-
 /** Tourenplan (Entwurf) */
-app.get('/api/plan', route(async (req, res) => {
-  const data = await loadWorkingDataset();
-  const week = Number(req.query.week ?? 0);
-  if (!week) return res.json(await getPlan(data));
-  // Prognose-Woche: nur lesen, nicht freigebbar
-  const w = (await getForecast(data)).plans[week - 1];
-  if (!w) return res.status(404).json({ error: `Keine Prognose für Woche +${week} – die Warteliste ist vorher leer` });
-  res.json({ ...w.plan, projected: { week, from: w.data.range.from, to: w.data.range.to } });
+app.get('/api/plan', route(async (_req, res) => {
+  res.json(await getPlan(await loadWorkingDataset()));
 }));
 
 /** Straßengeometrie einer Tagesroute (Polylines aus /travel/path, gecacht) */
@@ -341,7 +292,7 @@ app.get('/api/plan/:technicianId/:date/geometry', route(async (req, res) => {
   res.json({ points, legs });
 }));
 
-// MARK: - Freigaben & Export
+// MARK: - Freigaben
 
 /**
  * Freigabe: Tagesrouten werden mit Reihenfolge und Startzeiten eingefroren.
@@ -365,29 +316,6 @@ app.delete('/api/approvals', route(async (req, res) => {
   const keys: string[] = Array.isArray(req.body?.keys) ? req.body.keys.map(String) : Object.keys(listApprovals());
   unapproveRoutes(keys);
   res.json({ ok: true, removed: keys.length });
-}));
-
-/** Export einer freigegebenen Tagesroute als Kalenderdatei (.ics) für die Techniker:in */
-app.get('/api/plan/:technicianId/:date/ics', route(async (req, res) => {
-  const data = await loadWorkingDataset();
-  const plan = await getPlan(data);
-  const r = plan.routes.find((x) => x.technicianId === req.params.technicianId && x.date === req.params.date);
-  if (!r) return res.status(404).json({ error: 'Route nicht gefunden' });
-  const dt = (hhmm: string) => `${r.date.replace(/-/g, '')}T${hhmm.replace(':', '')}00`;
-  const esc = (x: string) => x.replace(/[,;\\]/g, (m) => `\\${m}`);
-  const events = r.stops.map((s, i) => [
-    'BEGIN:VEVENT',
-    `UID:${s.id}-${r.date}@heizma-routenplanung`,
-    `DTSTART;TZID=Europe/Vienna:${dt(s.start)}`,
-    `DTEND;TZID=Europe/Vienna:${dt(s.end)}`,
-    `SUMMARY:${i + 1}. ${esc(s.customer)} (${s.visitationType ?? 'Termin'})`,
-    `LOCATION:${esc(s.address)}`,
-    `DESCRIPTION:Anfahrt ${s.travelMinutes} min · https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,
-    'END:VEVENT',
-  ].join('\r\n'));
-  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="route-${r.technicianId}-${r.date}.ics"`);
-  res.send(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Heizma Routenplanung//DE', ...events, 'END:VCALENDAR'].join('\r\n'));
 }));
 
 // MARK: - Lokale Korrekturen (simulierte Schreib-API – die Heizma-API ist read-only)
@@ -458,12 +386,7 @@ app.get('/api/geocode/reverse', route(async (req, res) => {
   res.json(result);
 }));
 
-// MARK: - Protokoll & lokale Datenbank (Debug/Demo)
-
-/** Internes Aktivitätsprotokoll (Freigaben, Eingriffe, Eskalationen, Korrekturen) – neueste zuerst */
-app.get('/api/log', (_req, res) => {
-  res.json({ entries: listLog() });
-});
+// MARK: - Lokale Datenbank (Debug/Demo)
 
 app.get('/api/local-db', (_req, res) => {
   res.json({ ...dumpDb(), editableFields: editableFields() });
@@ -484,13 +407,18 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   next(err);
 });
 
-/** Cache leeren und neu laden (Express ignoriert Error-Middleware für normale Requests – Position hier ist unkritisch) */
-app.post('/api/reload', (_req, res) => {
+/**
+ * „Neu planen“: Daten frisch von der Heizma-API laden und den Plan neu berechnen.
+ * ?reset=1 verwirft zusätzlich alle Planer-Entscheidungen und Freigaben (Datenkorrekturen bleiben).
+ * Die Fahrzeit-Matrix bleibt erhalten (gleiche Punkte = gleiche Fahrzeiten, spart API-Aufrufe).
+ */
+app.post('/api/reload', route(async (req, res) => {
+  if (req.query.reset === '1') resetPlanning();
   clearCache();
-  resetTravelMatrix();
   planCache = null;
-  res.json({ ok: true });
-});
+  const plan = await getPlan(await loadWorkingDataset());
+  res.json({ ok: true, generatedAt: plan.generatedAt, stats: plan.stats, violations: plan.verification?.totalViolations ?? null });
+}));
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof HeizmaApiError) {

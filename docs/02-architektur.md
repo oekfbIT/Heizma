@@ -14,7 +14,7 @@ flowchart LR
 
 | Entscheidung | Warum |
 |---|---|
-| **Planung im Backend** | Ein Plan, eine Wahrheit – Web, `.ics`-Export und Prüfung sehen dasselbe Ergebnis. Der Token bleibt auf dem Server. |
+| **Planung im Backend** | Ein Plan, eine Wahrheit – Web und Prüfung sehen dasselbe Ergebnis. Der Token bleibt auf dem Server. |
 | **Eigene API vor der Heizma-API** | Cache (Datenstand ist eingefroren), Fahrzeitmatrix, Validierung und lokale Korrekturen an einer Stelle. In Produktion würde nur der Speicher (CRM statt JSON) getauscht. |
 | **Ein Typ-Modell** | `api/src/types.ts` wird vom Frontend direkt importiert – keine doppelten Definitionen. |
 | **TypeScript durchgehend** | Passt zum Stack aus der Stellenausschreibung; Fehler fallen beim Bauen auf, nicht beim Planer. |
@@ -167,7 +167,7 @@ Die eigene API liefert Techniker, Anfragen und Termine in **einem** Endpunkt (`/
 │   │   ├── routen/         RoutenInteractor + Typen
 │   │   └── system/         SystemInteractor + Typen
 │   ├── ui/                 Design-System: styles/ (Tokens, Komponenten-CSS), components/, theme.ts
-│   ├── pages/              Stammdaten · Liste · Detail · Planer · Hilfe · Styleguide
+│   ├── pages/              Stammdaten · Liste · Detail · Planer · Hilfe
 │   ├── components/         Fach-Komponenten (planner/, stammdaten/, …)
 │   ├── lib/                reine Helfer (Formatierung, Bereichs-Definitionen)
 │   └── __tests__/          Unit-Tests (Vitest)

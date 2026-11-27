@@ -15,15 +15,14 @@ Im Frontend ist der zuständige **Interactor** angegeben – Views rufen keine E
 | GET | `/api/meta` | Zeitraum, Datenquelle, Firmensitz, nächster Werktag | `system.meta` |
 | GET | `/api/stammdaten` | Außendienst, Verfügbarkeiten, Anfragen, Termine + Prüfbefunde, Zuständigkeiten, Eskalationen | `techniker` · `termine` · `anfragen` · `system.stammdaten` |
 | GET | `/api/overview` | Kennzahlen der Startseite | `system.overview` |
-| POST | `/api/reload` | Cache leeren, Heizma-Daten neu laden | `core.reloadAll()` |
+| POST | `/api/reload` | „Neu planen“: Heizma-Daten frisch laden, neu optimieren; `?reset=1` verwirft vorher Eingriffe und Freigaben | `core.replan()` |
 
 ## Plan & Freigabe
 
 | Methode | Pfad | Beschreibung | Interactor |
 |---|---|---|---|
-| GET | `/api/plan` | Routen, Warteliste, Kennzahlen, Fahrzeitquelle, Plan-Prüfung | `routen.plan` |
+| GET | `/api/plan` | Routen, Warteliste, Kennzahlen inkl. Vergleich Handplanung (`stats.baseline`), Fahrzeitquelle, Plan-Prüfung | `routen.plan` |
 | GET | `/api/plan/:technicianId/:date/geometry` | Straßenverlauf einer Tagesroute (gecacht) | `routen.geometry()` |
-| GET | `/api/plan/:technicianId/:date/ics` | Tagesroute als Kalenderdatei | `routen.downloadIcs()` |
 | POST | `/api/approvals` | Freigeben: `{ keys: ["tech_01@2026-11-23"] }` oder `?date=` für einen Tag | `core.approveRoute()` · `core.approveDay()` |
 | DELETE | `/api/approvals` | Freigabe zurücknehmen | `core.approveRoute()` |
 
@@ -31,9 +30,9 @@ Im Frontend ist der zuständige **Interactor** angegeben – Views rufen keine E
 
 | Methode | Pfad | Beschreibung | Interactor |
 |---|---|---|---|
-| GET | `/api/requests/:id/planning` | Status, Route, Warteliste, Entscheidung, Verstöße/Ausnahmen, Protokoll | `anfragen.planning.get(id)` |
+| GET | `/api/requests/:id/planning` | Status, Route, Warteliste, Entscheidung, Verstöße/Ausnahmen, Änderungen | `anfragen.planning.get(id)` |
 | GET | `/api/requests/:id/options` | Mögliche Personen-Tage, sortiert (Vorschau, ändert nichts) | `anfragen.options()` |
-| POST | `/api/requests/:id/decision` | `{ mode: pin \| exclude \| prioritize, technicianId?, date?, reason, override? }` | `core.decideRequest()` |
+| POST | `/api/requests/:id/decision` | `{ mode: pin \| exclude, technicianId?, date?, reason, override? }` – Antwort enthält den neuen Planungsstand | `core.decideRequest()` |
 | DELETE | `/api/requests/:id/decision` | Entscheidung zurücknehmen → wieder automatisch geplant | `core.decideRequest(id, null)` |
 
 ## Datenkorrekturen & Eskalation

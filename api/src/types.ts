@@ -111,19 +111,19 @@ export interface PlannedStop {
   end: string; // HH:MM
   waitMinutes: number;
   fixed: boolean;
-  /** Vom Planer manuell gesetzt (fixiert / vorgezogen) */
+  /** Vom Planer manuell gesetzt (fixiert) */
   manual?: ManualMark | null;
 }
 
 export interface ManualMark {
-  mode: 'pin' | 'prioritize';
+  mode: 'pin';
   reason: string;
   /** true = Planer hat einen Regelbruch bewusst akzeptiert */
   override: boolean;
 }
 
 // MARK: - Planer-Entscheidungen (manuelle Eingriffe)
-export type DecisionMode = 'pin' | 'exclude' | 'prioritize';
+export type DecisionMode = 'pin' | 'exclude';
 
 export interface Decision {
   mode: DecisionMode;
@@ -132,8 +132,6 @@ export interface Decision {
   date?: string;
   reason: string;
   override: boolean;
-  /** nur bei pin: diese Anfrage wurde für den Platz bewusst aus dieser Tour genommen (Tausch) */
-  replaces?: string;
   at: string;
 }
 
@@ -156,32 +154,6 @@ export interface SlotOption {
   /** Ziel nicht möglich (z. B. Tour freigegeben, Termin hätte keinen Platz) */
   blocked: string | null;
   current: boolean;
-}
-
-/** Tausch-Kandidat: geplante Anfrage, die für eine vorgezogene Platz machen könnte */
-export interface SwapOption {
-  technicianId: string;
-  technicianName: string;
-  date: string;
-  /** Wer weichen müsste */
-  displaced: { id: string; customer: string; address: string; createdAt: string; start: string; end: string; notes: string | null };
-  /** true = die verdrängte Anfrage ist älter → „ältere zuerst“ wird übergangen */
-  displacesOlder: boolean;
-  /** Neue Uhrzeit der vorgezogenen Anfrage */
-  start: string;
-  end: string;
-  /** Fahrzeit der Tour: vorher → nachher (Differenz = Mehr-/Minderfahrzeit gegenüber der optimalen Tour) */
-  driveBefore: number;
-  driveAfter: number;
-  deltaDrive: number;
-  /** Passt die verdrängte Anfrage regelkonform in einen anderen Tag? (null = Warteliste) */
-  fallback: { technicianName: string; date: string; deltaDrive: number } | null;
-  recommended: boolean;
-  /** Vorschau der Tagesroute vorher/nachher */
-  before: RoutePreview;
-  after: RoutePreview;
-  /** Regelprüfung der neuen Tagesroute (aus der Vorschau berechnet) */
-  checks: { label: string; ok: boolean; detail?: string }[];
 }
 
 export interface RoutePreview {
@@ -218,8 +190,6 @@ export interface RequestPlanning {
   decision: Decision | null;
   /** Warteliste: Platz nach Eingang und ältere Wartende */
   waitlist: { position: number; total: number } | null;
-  /** Ältere Anfragen, die noch auf der Warteliste stehen (Hinweis beim Vorziehen) */
-  olderWaiting: number;
   /** Regelverstöße dieser Anfrage (rot) und bewusste Ausnahmen (gelb) laut Plan-Prüfung */
   violations: string[];
   exceptions: PlanException[];
@@ -257,8 +227,6 @@ export interface UnassignedRequest {
 }
 
 export interface Plan {
-  /** Nur bei Prognose-Wochen (GET /api/plan?week=N): Projektion, nicht freigebbar */
-  projected?: { week: number; from: string; to: string };
   generatedAt: string;
   travelSource: 'heizma' | 'estimate' | 'mixed';
   travel: {
@@ -278,6 +246,8 @@ export interface Plan {
     driveMinutes: number;
     /** Fahrzeit nach Phase 1 (Greedy), vor 2-opt/Relocate */
     greedyDriveMinutes: number;
+    /** Vergleich „Handplanung“ (baselinePlan): älteste zuerst, nächste Person, hinten anhängen, ohne Optimierung */
+    baseline: { planned: number; driveMinutes: number };
     improvements: number;
     /** Tausche „ältere zuerst“: wartende ältere Anfrage hat eine jüngere ersetzt */
     prioritySwaps?: number;

@@ -12,7 +12,7 @@
  *   duration, unique, totals → Zusatzprüfungen (Dauer passt zum Typ, jede Anfrage genau einmal, angezeigte Zahlen addieren sich)
  *
  * ACHTUNG (für Reviewer): Die Zeitregeln (REGEL-1…7) rechnen komplett mit eigenem Code. Nur die Prioritätsprüfung
- * (REGEL-8) nutzt swapOptions() aus planner.ts, um „hätte eine ältere eine jüngere ersetzen können?“ zu beantworten.
+ * (REGEL-8) nutzt olderCouldReplace() aus planner.ts, um „hätte eine ältere eine jüngere ersetzen können?“ zu beantworten.
  * Das ist die einzige Abhängigkeit zum Planer. AUSBLICK: eigene Tauschsuche hier, damit die Prüfung 100 % unabhängig ist.
  */
 import { hasCoords } from './geo.js';
@@ -20,7 +20,7 @@ import { normalizeTime, splitIso, toMinutes } from './time.js';
 import type { TravelLookup } from './travelMatrix.js';
 import type { Dataset, Decision, LatLng, Plan, PlanException, RuleCheck, Verification, Violation } from './types.js';
 import { eligibleTechnicians } from './validation.js';
-import { swapOptions } from './planner.js';
+import { olderCouldReplace } from './planner.js';
 
 /**
  * Unabhängige Prüfung des fertigen Plans gegen alle Case-Regeln.
@@ -187,12 +187,12 @@ export function verifyPlan(plan: Plan, data: Dataset, travel: TravelLookup, deci
   // regelkonform ersetzen könnte? Dann ist die Regel verletzt. Geprüft wird jeder mögliche Tausch in jeder offenen Route.
   const waitingCap = plan.unassigned.filter((u) => u.reason.startsWith('Kapazität')).map((u) => requests.get(u.requestId)!).filter(Boolean);
   for (const w of waitingCap) {
-    const swap = swapOptions(data, plan, w.id, { travel, decisions, withFallback: false, onlyYounger: true })[0];
+    const swap = olderCouldReplace(data, plan, w.id, { travel, decisions });
     check('priority', !swap, {
       technicianId: swap?.technicianId,
       date: swap?.date,
-      stopId: swap?.displaced.id,
-      message: swap ? `${w.customer} (älter) wartet, obwohl sie ${swap.displaced.customer} (jünger) am ${swap.date} ersetzen könnte` : '',
+      stopId: swap?.displacedId,
+      message: swap ? `${w.customer} (älter) wartet, obwohl sie ${swap.displacedCustomer} (jünger) am ${swap.date} ersetzen könnte` : '',
     });
   }
   if (waitingCap.length && !rules.get('priority')!.violations.length)
@@ -244,14 +244,6 @@ export function applyExceptions(v: Verification, plan: Plan, decisions: Record<s
     }
     return { ...rule, violations: keep };
   });
-
-  // Vorgezogen: bricht bewusst "ältere zuerst" – als Ausnahme sichtbar, sobald die Anfrage eingeplant ist
-  for (const r of plan.routes)
-    for (const s of r.stops) {
-      const d = decisions[s.id];
-      if (d?.mode === 'prioritize') exceptions.push({ requestId: s.id, rule: 'priority', technicianId: r.technicianId, date: r.date, message: `${s.customer} vorgezogen (vor älteren Anfragen)`, reason: d.reason });
-      if (d?.mode === 'pin' && d.replaces) exceptions.push({ requestId: s.id, rule: 'priority', technicianId: r.technicianId, date: r.date, message: `${s.customer} getauscht gegen ${d.replaces}${d.override ? ' (ältere Anfrage verdrängt)' : ''}`, reason: d.reason });
-    }
 
   const total = rules.reduce((n, r) => n + r.violations.length, 0);
   return { ...v, rules, ok: total === 0, totalViolations: total, exceptions };

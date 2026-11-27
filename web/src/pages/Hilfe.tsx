@@ -19,7 +19,7 @@ const SECTIONS = [
   { id: 'entscheidungen', title: 'Eingriffe des Planers' },
   { id: 'datenprobleme', title: 'Datenprobleme lösen' },
   { id: 'notizen', title: 'Notizen aus dem Vertrieb' },
-  { id: 'protokoll', title: 'Protokoll & Demo' },
+  { id: 'neuplanen', title: 'Neu planen & Demo' },
   { id: 'wichtig', title: 'Gut zu wissen' },
 ];
 
@@ -65,8 +65,6 @@ const STATUS: { label: string; cls: string; text: string }[] = [
   { label: 'Vorgeschlagen', cls: 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200', text: 'Vom System eingeplant, noch nicht freigegeben. Kann sich bei einer Neuplanung noch ändern.' },
   { label: 'Freigegeben', cls: 'bg-brand-500 text-white', text: 'Route ist bestätigt und gesperrt. Die Anfrage wird zum Termin.' },
   { label: '📌 Fixiert', cls: 'bg-info-100 text-info-800', text: 'Vom Planer an Tag und Person gebunden – bleibt bei jeder Neuplanung dort.' },
-  { label: '⇡ Vorgezogen', cls: 'bg-accent-100 text-accent-800', text: 'Wird vor älteren Anfragen eingeplant. Bewusste Ausnahme mit Begründung.' },
-  { label: 'Vorgeplant KW …', cls: 'bg-info-100 text-info-800', text: 'Diese Woche ist voll – die Anfrage ist in einer Folgewoche vorgeplant (vorläufig, bis die echte Verfügbarkeit vorliegt).' },
   { label: 'Warteliste', cls: 'bg-warning-100 text-warning-800', text: 'Daten sind in Ordnung, aber die Kapazität der Woche reicht nicht. Kunde über die Verschiebung informieren.' },
   { label: 'Aus dem Plan genommen', cls: 'bg-gray-200 text-gray-700', text: 'Bleibt offen, wird aber nicht automatisch eingeplant, bis du sie wieder aufnimmst.' },
   { label: 'Nicht planbar', cls: 'bg-danger-50 text-danger-700 ring-1 ring-inset ring-danger-200', text: 'Datenfehler oder nicht zuordenbar. Erst korrigieren bzw. intern klären.' },
@@ -86,7 +84,6 @@ const ACTIONS: [string, string][] = [
   ['Planung ändern …', 'Ein Button pro Anfrage. Er öffnet einen Dialog mit den Schritten, die gerade möglich sind – jeder mit einem Satz, was danach passiert.'],
   ['Verschieben / Manuell einplanen', 'Zeigt alle möglichen Tage und Personen, die besten zuerst – mit Uhrzeit und zusätzlicher Fahrzeit. Regelkonforme Optionen übernimmst du direkt; ein Regelbruch geht nur als bewusste Ausnahme mit Begründung.'],
   ['Fixieren', 'Hält einen Vorschlag an Tag und Person fest, z. B. wenn der Termin mit dem Kunden schon abgesprochen ist.'],
-  ['Vorziehen', 'Zeigt, welche geplante Anfrage Platz machen könnte (Empfehlung zuerst, frei wählbar) inkl. Mehrfahrzeit gegenüber der optimalen Route. Nur regelkonforme Tausche, fixe Termine bleiben. Begründung ist Pflicht.'],
   ['Aus dem Plan nehmen', 'Für Anfragen, die gerade nicht besichtigt werden sollen (z. B. „Kunde ruft zurück“). Mit „Wieder aufnehmen“ rückgängig.'],
   ['Freigabe zurücknehmen', 'Entsperrt eine Route wieder für die Neuplanung – nur solange sie noch nicht veröffentlicht ist.'],
 ];
@@ -133,19 +130,11 @@ const ASSUMPTIONS: { group: string; rows: [string, string][] }[] = [
     ],
   },
   {
-    group: 'Folgewochen (Vorplanung)',
-    rows: [
-      ['Verfügbarkeit Außendienst', 'Die Case-API liefert Verfügbarkeiten nur für diese Woche. In Produktion kämen die der Folgewochen ebenfalls aus der API; bis dahin wird angenommen, dass jede Person genauso verfügbar ist wie jetzt (gleiche Tage, Zeitfenster, Urlaube/Krankheit). Deshalb sind Folgewochen vorgeplant (vorläufig) und erst freigebbar, wenn die echte Verfügbarkeit vorliegt.'],
-      ['Ablauf', 'Diese Woche wird gefüllt (ältere zuerst). Was keinen Platz hat, wird in die nächste Woche vorgeplant, der Rest in die übernächste usw. Neue Anfragen und fixe Termine der Folgewochen ändern die Vorplanung – sie wird bei jeder Änderung neu berechnet.'],
-      ['Nicht enthalten', 'Anfragen mit Datenfehler, ohne zuständige Person oder aus dem Plan genommen – sie brauchen zuerst eine Entscheidung.'],
-    ],
-  },
-  {
     group: 'Fahrzeit & Priorität',
     rows: [
       ['Fahrzeitquelle', 'Heizma-API (/travel/path), ohne Puffer und ohne Berufsverkehr; Hin- und Rückweg gelten als gleich lang. Mit „≈“ markierte Werte sind Luftlinien-Schätzungen.'],
       ['„Ältere zuerst“', 'Reihenfolge nach Eingang (createdAt). Nach der Routenoptimierung wird nachgeprüft: Könnte eine wartende ältere Anfrage regelkonform den Platz einer jüngeren einnehmen, wird getauscht. Eine jüngere bekommt also nur Plätze, in die keine wartende ältere passt (Ort, Zeitfenster, Dauer).'],
-      ['Vorziehen / Tauschen', 'Nur mit Begründung; fixe Termine und freigegebene Routen werden nie verdrängt. Im Plan als bewusste Ausnahme sichtbar.'],
+      ['Warteliste', 'Reicht die Kapazität dieser Woche nicht, warten die jüngsten Anfragen. Für sie gibt es „Kunde informieren“; was gar nicht passt (Zuständigkeit, Verfügbarkeit), wird intern eskaliert.'],
     ],
   },
 ];
@@ -245,18 +234,19 @@ export default function Hilfe() {
             </p>
           </Section>
 
-          <Section id="protokoll" title="Protokoll & Demo" hint="Beides findest du im Zahnrad oben rechts.">
+          <Section id="neuplanen" title="Neu planen & Demo">
             <ul className="list-disc space-y-2 pl-5 text-sm text-gray-600">
               <li>
-                <strong className="text-ink">Aktivitätsprotokoll:</strong> zeigt, wann welche Route freigegeben, welche Anfrage verschoben, fixiert oder
-                vorgezogen, was eskaliert und welche Daten korrigiert wurden – mit Begründung. Filterbar nach Bereich und durchsuchbar.{' '}
-                <Link to="/protokoll" className="font-medium text-brand-600 hover:underline">
-                  Zum Protokoll →
-                </Link>
+                <strong className="text-ink">Neu planen</strong> (Routenplanung oben): lädt die Daten frisch von der Heizma-API und optimiert neu. Fixierte und
+                freigegebene Routen bleiben. Das Symbol daneben verwirft vorher alle Eingriffe und Freigaben.
               </li>
               <li>
-                <strong className="text-ink">Demo zurücksetzen:</strong> löscht alle lokalen Korrekturen, Freigaben, Eingriffe, Eskalationen und das
-                Protokoll. Die Planung startet wieder mit den Originaldaten der Heizma-API – ideal für einen neuen Testlauf.
+                <strong className="text-ink">Gegenüber Handplanung:</strong> derselbe Datenstand, von Hand geplant (älteste zuerst, nächste zuständige Person,
+                hinten an den ersten freien Tag) – zeigt, wie viel Fahrzeit die Optimierung spart.
+              </li>
+              <li>
+                <strong className="text-ink">Demo zurücksetzen</strong> (Zahnrad oben rechts): löscht alle lokalen Korrekturen, Freigaben, Eingriffe und
+                Eskalationen. Die Planung startet wieder mit den Originaldaten der Heizma-API.
               </li>
             </ul>
           </Section>

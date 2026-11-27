@@ -32,8 +32,6 @@ export interface ApiServiceOptions {
   fetch?: typeof fetch;
   getToken?: () => string | null;
   onUnauthorized?: () => void;
-  /** Datei speichern (Browser: Link-Klick); in Tests austauschbar */
-  saveFile?: (blob: Blob, filename: string) => void;
 }
 
 export class ApiService {
@@ -48,7 +46,6 @@ export class ApiService {
       fetch: options.fetch ?? ((...args) => fetch(...args)),
       getToken: options.getToken ?? (() => null),
       onUnauthorized: options.onUnauthorized ?? (() => {}),
-      saveFile: options.saveFile ?? browserSaveFile,
     };
   }
 
@@ -82,13 +79,6 @@ export class ApiService {
     return result;
   }
 
-  /** Datei mit Auth-Header laden und speichern (z. B. .ics) */
-  async download(path: string, filename: string): Promise<void> {
-    const res = await this.raw(path);
-    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status);
-    this.opts.saveFile(await res.blob(), filename);
-  }
-
   clear() {
     this.generation++;
     this.cache.clear();
@@ -113,13 +103,4 @@ export class ApiService {
     if (!res.ok) throw new ApiError((json as { error?: string }).error ?? `HTTP ${res.status}`, res.status);
     return json as T;
   }
-}
-
-function browserSaveFile(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }

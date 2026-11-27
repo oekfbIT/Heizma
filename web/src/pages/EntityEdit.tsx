@@ -37,7 +37,6 @@ export default function EntityEdit() {
   const { data, error, reload } = useResource(core.system.stammdaten);
   const localDb = useResource(core.system.localDb);
   const plan = useResource(core.routen.plan);
-  const forecast = useResource(core.system.forecast);
   const def = entityBySlug(slug);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);

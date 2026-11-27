@@ -37,16 +37,6 @@ export interface LocalDb {
   editableFields: Record<EntityKey, string[]>;
 }
 
-export interface Forecast {
-  weeks: { index: number; from: string; to: string; planned: number; remaining: number; driveMinutes: number }[];
-  weeksNeeded: number | null;
-  stuck: number;
-  needsAction: { dataErrors: number; excluded: number };
-  byTechnician: { technicianId: string; name: string; weeks: number; requests: number }[];
-  placements: Record<string, { week: number; date: string; technicianId: string; start: string; end: string }>;
-  assumptions: string[];
-}
-
 export interface Overview {
   requests: { total: number; planned: number; open: number };
   appointments: { fixed: number };
@@ -75,8 +65,6 @@ export interface Meta {
 export interface MapConfig {
   googleMapsApiKey: string;
   googleMapsMapId: string;
-  tileUrl: string;
-  attribution: string;
 }
 
 export interface AppConfig {
@@ -84,29 +72,3 @@ export interface AppConfig {
 }
 
 /** Rohdaten aus GET /api/log */
-export interface LogEntry {
-  at: string;
-  entity: string;
-  id: string;
-  action: string;
-  reason?: string;
-  changes?: Record<string, unknown>;
-}
-
-export type LogCategory = 'freigabe' | 'planung' | 'eskalation' | 'korrektur' | 'notiz' | 'system';
-
-/** Aufbereiteter Protokolleintrag für die Ansicht */
-export interface LogItem {
-  key: string;
-  at: string;
-  category: LogCategory;
-  /** „Route freigegeben“ */
-  action: string;
-  /** Worauf sich der Eintrag bezieht, z. B. „Nord · Mo 23.11.“ oder „req_1046“ */
-  target: { label: string; to: string | null };
-  /** Kurz: „5 Stopps“, „→ Süd · Di 24.11.“ */
-  detail: string;
-  reason?: string;
-  /** Bewusste Ausnahme (Regelbruch mit Begründung) */
-  exception?: boolean;
-}

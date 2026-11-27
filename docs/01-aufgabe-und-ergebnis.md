@@ -22,8 +22,8 @@ flowchart LR
   B --> C["Automatisch planen<br/><small>ältere zuerst, Fahrzeit minimal</small>"]
   C --> D["Unabhängig prüfen<br/><small>11 Regeln</small>"]
   D --> E{"Planer<br/>prüft"}
-  E -->|passt| F["Freigeben<br/><small>Route fix, .ics</small>"]
-  E -->|"anpassen"| G["Verschieben · Fixieren<br/>Vorziehen · Herausnehmen"]
+  E -->|passt| F["Freigeben<br/><small>Route fix</small>"]
+  E -->|"anpassen"| G["Verschieben · Fixieren<br/>Herausnehmen · Eskalieren"]
   G --> C
   B -->|"Datenfehler"| H["Korrigieren<br/>oder eskalieren"]
   H --> C
@@ -38,7 +38,7 @@ flowchart LR
 ## Screens
 
 ### Routenplanung – Tagesübersicht
-Plan-Prüfung oben („✓ 0 Regelverstöße · 11 Regeln“) und die Bilanz „Diese Woche 88 von 150 · 37 vorgeplant · 25 nicht planbar“, darunter alle Personen des Tages mit Auslastung.
+Plan-Prüfung oben („✓ 0 Regelverstöße · 11 Regeln“) und die Bilanz „Diese Woche X von 150 · Warteliste · nicht planbar“, darunter die Ersparnis gegenüber Handplanung und alle Personen des Tages mit Auslastung.
 
 ![Routenplanung Tagesübersicht](assets/planer.png)
 

@@ -1,14 +1,13 @@
 /**
  * @file      Planner.tsx – Hauptansicht „Routenplanung“: Tag wählen → Route prüfen → freigeben
  * @layer     Web · View (Seite) – spricht nur mit dem CoreInteractor (useCore), nie direkt mit fetch
- * @route     /planer (?week=N für Prognose-Wochen, nur lesen)
- * @nutzt     routen/techniker/anfragen/termine-Interactor · components/planner/* (Karte, Timeline, KPIs, Prüf-Badge)
+ * @route     /planer
+ * @nutzt     routen/techniker/anfragen/termine-Interactor · components/planner/* (Karte, Timeline, Ersparnis, Prüf-Badge)
  * @siehe     docs/01-aufgabe-und-ergebnis.md · docs/02-architektur.md · docs/10-code-navigation.md
  *
  * Aufbau dieser Datei: State → Laden → Abgeleitete Werte → Aktionen → Render (Sidebar | Karte | Mobil-Umschalter)
  */
-import { Link, useSearchParams } from 'react-router-dom';
-import WeekSwitcher from '@/components/WeekSwitcher';
+import { Link } from 'react-router-dom';
 import { CapacityLegend } from '@/components/planner/CapacityBar';
 import { useEffect, useMemo, useState } from 'react';
 import PlanKpis from '@/components/planner/PlanKpis';
@@ -20,7 +19,7 @@ import VerificationBadge from '@/components/planner/VerificationBadge';
 import RegionFilter from '@/components/stammdaten/RegionFilter';
 import { useResizableSidebar } from '@/hooks/useResizableSidebar';
 import { useCore, useResource } from '@/core';
-import { formatDay, formatMinutes, isoWeek } from '@/lib/format';
+import { formatDay, formatMinutes } from '@/lib/format';
 import { NO_REGION, regionLabel, useRegion } from '@/lib/regions';
 import { ROUTE_LEVEL, type RouteGeometry } from '@/modules';
 import type { Plan } from '@/lib/types';
@@ -39,12 +38,6 @@ export default function Planner() {
   const requests = useResource(anfragen.data);
   useResource(termine.data);
   const meta = useResource(core.system.meta);
-  const forecast = useResource(core.system.forecast);
-  // Woche: 0 = echte Planung, ab 1 = Prognose der Warteliste (nur lesen)
-  const [params, setParams] = useSearchParams();
-  const week = Math.max(0, Number(params.get('week') ?? 0) || 0);
-  const [projected, setProjected] = useState<{ week: number; plan: Plan } | null>(null);
-  const [projError, setProjError] = useState<string | null>(null);
 
   const [day, setDay] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -55,50 +48,31 @@ export default function Planner() {
   const [busy, setBusy] = useState(false);
   const sidebar = useResizableSidebar();
   const [actionError, setActionError] = useState<string | null>(null);
+  // „Neu planen“ mit Zurücksetzen: zweistufig bestätigen (verwirft Eingriffe und Freigaben)
+  const [confirmReset, setConfirmReset] = useState(false);
   const [region, setRegion] = useRegion();
   // Mobil: Liste und Karte im Wechsel (Karte bleibt gemountet, damit sie sauber rendert)
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
 
-  // MARK: - Laden (Prognose-Woche, Tage, Geometrie)
-  useEffect(() => {
-    setProjError(null);
-    if (!week) return;
-    routen
-      .projected(week)
-      .then((pl) => setProjected({ week, plan: pl }))
-      .catch((e: Error) => setProjError(e.message));
-  }, [routen, week, forecast.data]);
-  const isProjection = week > 0;
-  const activePlan = isProjection ? (projected?.week === week ? projected.plan : null) : plan.data;
-
-  // Tage der gewählten Woche (Prognose: aus den projizierten Routen)
-  const realDays = useMemo(() => techniker.days(), [techniker, team.data]);
-  const days = useMemo(
-    () => (isProjection ? [...new Set((activePlan?.routes ?? []).map((r) => r.date))].sort() : realDays),
-    [isProjection, activePlan, realDays],
-  );
+  // MARK: - Laden (Tage, Geometrie)
+  const days = useMemo(() => techniker.days(), [techniker, team.data]);
   useEffect(() => {
     if (days.length && (!day || !days.includes(day))) setDay(days[0]);
   }, [day, days]);
-  const changeWeek = (w: number) => {
-    setParams(w ? { week: String(w) } : {});
-    setSelectedId(null);
-    setSelectedStopId(null);
-  };
 
   // Straßengeometrie nur für die ausgewählte Route laden (spart API-Calls)
   useEffect(() => {
     setGeometry(null);
-    if (!selectedId || !day || isProjection) return;
+    if (!selectedId || !day) return;
     routen.geometry(selectedId, day).then(setGeometry).catch(() => setGeometry(null));
-  }, [routen, selectedId, day, isProjection]);
+  }, [routen, selectedId, day]);
 
-  const loadError = plan.error ?? team.error ?? requests.error ?? projError;
+  const loadError = plan.error ?? team.error ?? requests.error;
   if (loadError) return <ErrorBox message={loadError} onRetry={() => { plan.reload(); team.reload(); requests.reload(); }} />;
-  if (!activePlan || !team.data || !requests.data || !day) return <Loading label={isProjection ? 'Vorplanung wird berechnet …' : 'Routenplanung wird berechnet …'} />;
+  if (!plan.data || !team.data || !requests.data || !day) return <Loading label="Routenplanung wird berechnet …" />;
 
   // MARK: - Abgeleitete Werte (Region-Filter, Routen des Tages, Warteliste)
-  const p = activePlan;
+  const p = plan.data;
   const technicians = techniker.list();
   const colors = techniker.colors();
   const inRegion = (techId: string) => !region || (region !== NO_REGION && techId === region);
@@ -126,6 +100,10 @@ export default function Planner() {
   const toggleApproval = (techId: string, approved: boolean) => run(() => core.approveRoute(techId, day, approved));
   const openRoutes = dayRoutes.filter((r) => r.stops.length && !r.approved);
   const approveDay = () => run(() => core.approveDay(day));
+  const replan = (reset: boolean) => {
+    setConfirmReset(false);
+    return run(() => core.replan(reset));
+  };
 
   const selectTech = (techId: string | null) => {
     setSelectedId(techId);
@@ -155,31 +133,34 @@ export default function Planner() {
       >
         {/* Kopf: was ist der Stand? */}
         <div className="border-b border-gray-100 px-4 pb-3 pt-4 md:px-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h1 className="text-lg font-semibold">Routenplanung</h1>
-            <IconButton icon="refresh" label="Daten neu laden und neu planen" onClick={() => void run(() => core.reloadAll())} />
+            <div className="flex items-center gap-1">
+              <Button size="sm" icon="refresh" disabled={busy} onClick={() => void replan(false)} title="Daten frisch von der Heizma-API laden und neu optimieren. Fixierte und freigegebene Routen bleiben.">
+                {busy ? 'Plane …' : 'Neu planen'}
+              </Button>
+              <IconButton icon="reset" label="Alle Eingriffe und Freigaben verwerfen und neu planen" onClick={() => setConfirmReset(!confirmReset)} />
+            </div>
           </div>
-          {forecast.data && forecast.data.weeks.length > 1 && <WeekSwitcher className="mt-2" weeks={forecast.data.weeks} value={week} onChange={changeWeek} />}
-          {isProjection ? (
-            <>
-              <p className="mt-0.5 text-sm text-gray-600">
-                <strong>{p.stats.planned}</strong> von {p.stats.planned + p.stats.unassigned} übrigen Anfragen sind vorgeplant
-                {p.stats.unassigned > 0 && <>, {p.stats.unassigned} warten</>}.
-              </p>
-              <p className="mt-1.5 rounded-lg bg-info-50 px-2.5 py-1.5 text-xs text-info-800">
-                <strong>Vorläufig:</strong> Anfragen, die in den Wochen davor keinen Platz haben. Verfügbarkeit wie diese Woche angenommen – in Produktion
-                kommt sie aus der API. Freigabe, sobald die echte Verfügbarkeit vorliegt.
-              </p>
-            </>
-          ) : (
+          {confirmReset && (
+            <Alert tone="warning" size="sm" className="mt-2">
+              Alle Fixierungen, „aus dem Plan genommen“ und Freigaben verwerfen und komplett neu planen?{' '}
+              <button className="font-semibold underline" disabled={busy} onClick={() => void replan(true)}>
+                Ja, zurücksetzen
+              </button>{' '}
+              ·{' '}
+              <button className="underline" onClick={() => setConfirmReset(false)}>
+                Abbrechen
+              </button>
+            </Alert>
+          )}
           <p className="mt-0.5 text-sm text-gray-600">
             Diese Woche <strong>{bal.thisWeek}</strong> von {bal.total} Anfragen eingeplant
-            {bal.preplanned > 0 && <> · {bal.preplanned} vorgeplant</>}
             {bal.waitlist > 0 && <> · {bal.waitlist} Warteliste</>}
             {bal.unplannable > 0 && <> · <span className="text-danger-600">{bal.unplannable} nicht planbar</span></>}
             {bal.excluded > 0 && <> · {bal.excluded} aus dem Plan</>}
           </p>
-          )}
+          <PlanKpis plan={p} />
           <div className="mt-2">
             <VerificationBadge
               plan={p}
@@ -270,7 +251,7 @@ export default function Planner() {
                       key={t.id}
                       technician={t}
                       route={r}
-                      status={isProjection ? (r ? 'available' : 'none') : techniker.statusOn(t.id, day)}
+                      status={techniker.statusOn(t.id, day)}
                       color={colors[t.id]}
                       selected={false}
                       approved={!!r?.approved}
@@ -289,17 +270,13 @@ export default function Planner() {
                 <Link to="/stammdaten/anfragen" className="mt-5 flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
                   <span>
                     <b className="text-ink">{notThisWeek}</b> nicht in dieser Woche:{' '}
-                    {[bal.preplanned && `${bal.preplanned} vorgeplant`, bal.waitlist && `${bal.waitlist} Warteliste`, bal.unplannable && `${bal.unplannable} nicht planbar`, bal.excluded && `${bal.excluded} aus dem Plan`]
+                    {[bal.waitlist && `${bal.waitlist} Warteliste`, bal.unplannable && `${bal.unplannable} nicht planbar`, bal.excluded && `${bal.excluded} aus dem Plan`]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
                   <span className="text-brand-600">→</span>
                 </Link>
               )}
-              <details className="mt-4 rounded-xl border border-gray-200 px-3 py-2">
-                <summary className="cursor-pointer text-sm font-medium text-gray-700">Planqualität & Fahrzeiten</summary>
-                <PlanKpis plan={p} />
-              </details>
             </>
           )}
         </div>
@@ -311,14 +288,7 @@ export default function Planner() {
               {actionError}
             </Alert>
           )}
-          {isProjection ? (
-            <p className="text-center text-xs text-gray-500">
-              Vorgeplante Woche – freigeben, sobald die echte Verfügbarkeit dieser Woche vorliegt.{' '}
-              <button className="font-medium text-brand-600 hover:underline" onClick={() => changeWeek(0)}>
-                Zur aktuellen Woche
-              </button>
-            </p>
-          ) : selectedRoute && selectedTech ? (
+          {selectedRoute && selectedTech ? (
             (() => {
               const bad = violationsFor(selectedTech.id).size > 0;
               const approved = !!selectedRoute.approved;
@@ -333,21 +303,14 @@ export default function Planner() {
                           ? 'Enthält eine bewusste Ausnahme (gelb, mit Begründung) – Freigabe möglich.'
                           : 'Passt alles? Dann freigeben – die Route wird für die Neuplanung gesperrt.'}
                   </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={approved ? 'secondary' : 'primary'}
-                      className="flex-1"
-                      onClick={() => toggleApproval(selectedTech.id, approved)}
-                      disabled={busy || !selectedRoute.stops.length || (!approved && bad)}
-                    >
-                      {approved ? 'Freigabe zurücknehmen' : `3. Route von ${selectedTech.name} freigeben`}
-                    </Button>
-                    {approved && (
-                      <Button icon="calendar" title="Als Kalenderdatei (.ics) für den Außendienst herunterladen" onClick={() => void routen.downloadIcs(selectedTech.id, day)}>
-                        Kalender
-                      </Button>
-                    )}
-                  </div>
+                  <Button
+                    variant={approved ? 'secondary' : 'primary'}
+                    block
+                    onClick={() => toggleApproval(selectedTech.id, approved)}
+                    disabled={busy || !selectedRoute.stops.length || (!approved && bad)}
+                  >
+                    {approved ? 'Freigabe zurücknehmen' : `3. Route von ${selectedTech.name} freigeben`}
+                  </Button>
                 </>
               );
             })()
@@ -395,7 +358,6 @@ export default function Planner() {
           onOpenDetails={setDetailsStopId}
         />
         <div className="pointer-events-none absolute left-3 top-3 z-map-overlay max-w-[calc(100%-1.5rem)] truncate rounded-full bg-white/95 px-4 py-2 text-sm font-medium shadow-md md:left-4 md:top-4">
-          {isProjection && <span className="mr-1 rounded bg-info-100 px-1.5 py-0.5 text-[11px] font-semibold text-info-700">Vorgeplant · KW {p.routes[0] ? isoWeek(p.routes[0].date) : ''}</span>}
           {formatDay(day)} · {selectedTech ? selectedTech.name : `${dayRoutes.filter((r) => r.stops.length).length} Routen`}
           {region && !selectedTech && ` · ${region === NO_REGION ? 'Ohne Zuständigkeit' : `Region ${regionLabel(techniker.byId(region)!)}`}`}
         </div>
@@ -416,7 +378,7 @@ export default function Planner() {
         {mobileView === 'list' ? 'Karte' : 'Liste'}
       </button>
 
-      {!isProjection && detailsRoute && detailsTech && detailsIndex >= 0 && (
+      {detailsRoute && detailsTech && detailsIndex >= 0 && (
         <StopDetailsModal
           stop={detailsRoute.stops[detailsIndex]}
           index={detailsIndex}

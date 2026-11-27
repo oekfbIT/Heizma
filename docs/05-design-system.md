@@ -4,9 +4,6 @@
 
 Optik angelehnt an heizma.at: Grün `#4DA547`, Text `#20242D`, Schrift Inter. Alles, was das Aussehen bestimmt, liegt in `web/src/ui/` – Views setzen nur noch Bausteine und Layout zusammen.
 
-**Lebender Styleguide:** In der App unter **`/styleguide`** – alle Komponenten mit allen Varianten, direkt aus dem Code gerendert.
-
-![Styleguide](assets/styleguide.png)
 
 ## Drei Ebenen
 
@@ -17,7 +14,7 @@ flowchart LR
   TW --> C["components.css<br/><small>.btn · .badge · .alert …</small>"]
   C --> R["ui/components<br/><small>React</small>"]
   R --> V["Views"]
-  TH --> M["Google Maps / Leaflet"]
+  TH --> M["Google Maps"]
 ```
 
 | Ebene | Datei | Inhalt |
@@ -38,7 +35,7 @@ flowchart LR
 | `danger` | Fehler, Regelverstoß, nicht planbar |
 | `warning` | Warnung, Warteliste, bewusste Ausnahme |
 | `info` | Hinweis, lokal korrigiert, fixiert |
-| `accent` | Vorgezogen (Priorität) |
+| `accent` | Akzent (Hervorhebung) |
 | `gray` | Flächen, Rahmen, Sekundärtext |
 | `route-1 … route-8` | Feste Farbe je Außendienstler auf Karte und Liste |
 

@@ -63,9 +63,10 @@ describe('CoreInteractor', () => {
   it('setzt den Planungsstand zurück und lädt die Quelle neu', async () => {
     const { core, calls } = setup();
     await core.resetPlanning();
-    await core.reloadAll();
+    await core.replan();
+    await core.replan(true);
     await core.escalateRequest('req_1', { type: 'internal', recipient: 'V', message: 'm' });
-    expect(calls.map((c) => c.path)).toEqual(['/api/local-db/reset?scope=planning', '/api/reload', '/api/escalations/req_1']);
+    expect(calls.map((c) => c.path)).toEqual(['/api/local-db/reset?scope=planning', '/api/reload', '/api/reload?reset=1', '/api/escalations/req_1']);
   });
 
   it('gibt Fehler der Aktion an die View weiter', async () => {

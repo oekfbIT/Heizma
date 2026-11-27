@@ -41,17 +41,16 @@ describe('RoutenInteractor – reine Plan-Auswertung', () => {
         { requestId: 'req_9', reason: 'Keine Koordinaten – zuerst geokodieren' },
       ],
     });
-    const b = routen.balance(q, { req_4: { date: '2026-11-30' } });
-    expect(b).toMatchObject({ total: 8, thisWeek: 2, approved: 1, preplanned: 1, waitlist: 1, unplannable: 3, excluded: 1 });
-    expect(b.thisWeek + b.preplanned + b.waitlist + b.unplannable + b.excluded).toBe(b.total);
+    const b = routen.balance(q);
+    expect(b).toMatchObject({ total: 8, thisWeek: 2, approved: 1, waitlist: 2, unplannable: 3, excluded: 1 });
+    expect(b.thisWeek + b.waitlist + b.unplannable + b.excluded).toBe(b.total);
     expect(b.total).toBe(q.routes.flatMap((r) => r.stops).length + q.unassigned.length);
-    expect(b.preplannedByWeek).toEqual([{ week: 49, count: 1 }]);
     expect(b.unplannableByReason).toEqual([
       { reason: 'Keine Koordinaten', count: 2 },
       { reason: 'Nicht zuordenbar', count: 1 },
     ]);
     // Filter (z. B. Region) wirkt auf alle Töpfe gleich – die Summe bleibt stimmig
-    const only = routen.balance(q, {}, (id) => ['req_1', 'req_6'].includes(id));
+    const only = routen.balance(q, (id) => ['req_1', 'req_6'].includes(id));
     expect(only).toMatchObject({ total: 2, thisWeek: 1, unplannable: 1 });
   });
 

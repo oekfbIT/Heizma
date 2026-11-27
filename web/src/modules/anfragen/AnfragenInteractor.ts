@@ -5,7 +5,7 @@
  */
 import type { ApiService } from '@/core/ApiService';
 import { Resource, ResourceFamily } from '@/core/Resource';
-import type { RequestPlanning, ServiceRequest, SlotOption, SwapOption } from '@/lib/types';
+import type { RequestPlanning, ServiceRequest, SlotOption } from '@/lib/types';
 import type { Stammdaten } from '@/modules/system/types';
 import type { AnfragenData, DecisionInput, EscalationInput, GeoResult } from './types';
 
@@ -81,10 +81,6 @@ export class AnfragenInteractor {
   }
 
   // MARK: - Aktionen (Aktualisieren übernimmt der CoreInteractor)
-  async swapOptions(id: string): Promise<SwapOption[]> {
-    return (await this.api.get<{ options: SwapOption[] }>(`/api/requests/${encodeURIComponent(id)}/swap-options`)).options;
-  }
-
   async options(id: string): Promise<SlotOption[]> {
     return (await this.api.get<{ options: SlotOption[] }>(`/api/requests/${encodeURIComponent(id)}/options`)).options;
   }

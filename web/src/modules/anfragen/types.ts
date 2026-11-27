@@ -29,8 +29,6 @@ export interface DecisionInput {
   technicianId?: string;
   date?: string;
   override?: boolean;
-  /** Tausch: diese Anfrage macht Platz */
-  replaces?: string;
 }
 
 export interface EscalationInput {

@@ -5,7 +5,6 @@
  */
 import { Link } from 'react-router-dom';
 import RegionOverview from '@/components/RegionOverview';
-import ForecastStrip from '@/components/ForecastCard';
 import { useCore, useResource } from '@/core';
 import { ENTITIES } from '@/lib/entities';
 import { formatMinutes } from '@/lib/format';
@@ -18,7 +17,6 @@ export default function StammdatenIndex() {
   const overview = useResource(system.overview);
   const stamm = useResource(system.stammdaten);
   const plan = useResource(routen.plan);
-  useResource(system.forecast); // Bilanz braucht die Vorplanung („vorgeplant“ statt „Warteliste“)
   if (overview.error || stamm.error) return <ErrorBox message={(overview.error ?? stamm.error)!} onRetry={() => { overview.reload(); stamm.reload(); }} />;
   if (!overview.data || !stamm.data) return <Loading />;
 
@@ -26,7 +24,7 @@ export default function StammdatenIndex() {
   const d = stamm.data;
   const issuesFor = (kind: string) =>
     new Set(d.issues.filter((i) => i.entity === kind && i.severity !== 'info').map((i) => i.entityId)).size;
-  // Anfragen: Zahlen aus der Bilanz (gleiche Quelle wie Prognose, Planer und Liste – die Teile ergeben die Gesamtzahl)
+  // Anfragen: Zahlen aus der Bilanz (gleiche Quelle wie Planer und Liste – die Teile ergeben die Gesamtzahl)
   const b = plan.data ? core.balance(plan.data) : null;
   const fixed = d.appointments.filter((a) => !a.simulated).length;
   const fromApprovals = d.appointments.length - fixed;
@@ -39,7 +37,7 @@ export default function StammdatenIndex() {
   const blockedDays = d.availability.length - o.technicians.techDays;
   const hints: Record<string, string> = {
     anfragen: b
-      ? [`${b.thisWeek} diese Woche`, b.preplanned && `${b.preplanned} vorgeplant`, b.waitlist && `${b.waitlist} Warteliste`, b.unplannable && `${b.unplannable} nicht planbar`, b.excluded && `${b.excluded} aus dem Plan`]
+      ? [`${b.thisWeek} diese Woche`, b.waitlist && `${b.waitlist} Warteliste`, b.unplannable && `${b.unplannable} nicht planbar`, b.excluded && `${b.excluded} aus dem Plan`]
           .filter(Boolean)
           .join(' · ')
       : 'Plan wird berechnet …',
@@ -58,7 +56,6 @@ export default function StammdatenIndex() {
             <span className={cx('font-medium', d.source === 'live' ? 'text-brand-600' : 'text-warning-600')}>{system.sourceLabel(d.source)}</span>
           </>
         }
-        below={<ForecastStrip />}
       />
 
       {/* Eine Karte je Bereich – jede mit eigenem Prüfstatus */}

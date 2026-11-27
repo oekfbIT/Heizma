@@ -6,32 +6,30 @@
 import { Link } from 'react-router-dom';
 import { dayCapacity } from '@/components/planner/CapacityBar';
 import type { Stammdaten } from '@/modules';
-import { useCore, useResource } from '@/core';
+import { useCore } from '@/core';
 import { Card } from '@/ui';
 import { formatMinutes } from '@/lib/format';
 import { regionLabel } from '@/lib/regions';
 import type { Plan } from '@/lib/types';
 
 /**
- * Auslastung je Person über die Planungswoche. Gezählt wird, wo eine Anfrage tatsächlich eingeplant ist
- * (bzw. vorgeplant), nicht in welchen Gebieten sie liegt – Gebiete überlappen, so würde doppelt gezählt.
+ * Auslastung je Person über die Planungswoche. Gezählt wird, wo eine Anfrage tatsächlich eingeplant ist,
+ * nicht in welchen Gebieten sie liegt – Gebiete überlappen, so würde doppelt gezählt.
  * Darum ergeben die Spalten zusammen mit „Nicht planbar“ genau die Gesamtzahl.
  */
 export default function RegionOverview({ data, plan }: { data: Stammdaten; plan: Plan }) {
   const core = useCore();
-  const placements = useResource(core.system.forecast).data?.placements ?? {};
   const b = core.balance(plan);
   const colors = core.techniker.colors(data.technicians);
   const rows = data.technicians.map((t) => {
     const routes = plan.routes.filter((r) => r.technicianId === t.id);
     const planned = routes.reduce((n, r) => n + r.stops.filter((s) => s.kind === 'request').length, 0);
-    const later = plan.unassigned.filter((u) => placements[u.requestId]?.technicianId === t.id && u.reason.startsWith('Kapazität')).length;
     const cap = routes.map(dayCapacity);
     const window = cap.reduce((n, c) => n + c.window, 0);
     const busy = cap.reduce((n, c) => n + c.busy, 0);
-    return { t, planned, later, days: routes.length, window, busy, free: Math.max(0, window - busy) };
+    return { t, planned, days: routes.length, window, busy, free: Math.max(0, window - busy) };
   });
-  const sum = { planned: rows.reduce((n, r) => n + r.planned, 0), later: rows.reduce((n, r) => n + r.later, 0) };
+  const sum = { planned: rows.reduce((n, r) => n + r.planned, 0) };
   const th = 'px-4 py-3 font-medium';
   const sub = 'block text-[10px] font-normal normal-case tracking-normal text-gray-400';
 
@@ -49,7 +47,6 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
               <th className={th}>Einsatzgebiet<span className={sub}>Person · Wohnort</span></th>
               <th className={`hidden sm:table-cell ${th}`}>Arbeitstage<span className={sub}>diese Woche</span></th>
               <th className={`${th} text-right`}>Diese Woche<span className={sub}>eingeplant</span></th>
-              <th className={`${th} text-right`}>Folgewochen<span className={sub}>vorgeplant, vorläufig</span></th>
               <th className={`w-40 md:w-64 ${th}`}>Freie Arbeitszeit<span className={sub}>Rest dieser Woche</span></th>
             </tr>
           </thead>
@@ -72,7 +69,6 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
                   </td>
                   <td className="hidden px-4 py-3 text-gray-600 sm:table-cell">{r.days ? `${r.days} von 5` : <span className="text-warning-600">keine</span>}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-700">{r.planned}</td>
-                  <td className={`px-4 py-3 text-right tabular-nums ${r.later ? 'text-gray-700' : 'text-gray-300'}`}>{r.later}</td>
                   <td className="px-4 py-3">
                     {r.window ? (
                       <div className="flex items-center gap-3">
@@ -94,10 +90,9 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
               <td className="px-4 py-2.5">Summe eingeplant</td>
               <td className="hidden sm:table-cell" />
               <td className="px-4 py-2.5 text-right tabular-nums">{sum.planned}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums">{sum.later}</td>
-              <td className="px-4 py-2.5 text-xs font-normal text-gray-500">{sum.planned + sum.later} Anfragen</td>
+              <td className="px-4 py-2.5 text-xs font-normal text-gray-500">{sum.planned} Anfragen</td>
             </tr>
-            {b.waitlist > 0 && <Rest label="Warteliste" hint="auch in den Folgewochen kein Platz" count={b.waitlist} to="/stammdaten/anfragen?filter=waitlist" />}
+            {b.waitlist > 0 && <Rest label="Warteliste" hint="diese Woche kein Platz – ältere zuerst" count={b.waitlist} to="/stammdaten/anfragen?filter=waitlist" />}
             {b.unplannable > 0 && (
               <Rest
                 label="Nicht planbar"
@@ -111,7 +106,7 @@ export default function RegionOverview({ data, plan }: { data: Stammdaten; plan:
             <tr className="font-semibold">
               <td className="px-4 py-2.5">Anfragen gesamt</td>
               <td className="hidden sm:table-cell" />
-              <td colSpan={2} className="px-4 py-2.5 text-right tabular-nums">{b.total}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums">{b.total}</td>
               <td />
             </tr>
           </tfoot>
@@ -130,7 +125,7 @@ function Rest({ label, hint, count, to, danger }: { label: string; hint: string;
         </Link>
         <span className="block text-xs text-gray-500">{hint}</span>
       </td>
-      <td colSpan={2} className={`px-4 py-2.5 text-right tabular-nums font-medium ${danger ? 'text-danger-600' : 'text-gray-700'}`}>
+      <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${danger ? 'text-danger-600' : 'text-gray-700'}`}>
         {count}
       </td>
       <td />

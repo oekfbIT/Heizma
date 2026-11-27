@@ -64,17 +64,15 @@ Mock-Login ohne externe Dienste (`api/src/mockauth/`):
 | `PLAN_FROM`, `PLAN_TO` | Planungszeitraum (max. 31 Tage) | 2026-11-23 – 2026-11-27 |
 | `CACHE_TTL_SECONDS` | Cache für API-Antworten | 600 |
 | `API_PORT`, `WEB_PORT` | Ports | 4000 / 8080 |
-| `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_MAP_ID` | Google Maps; leer → Leaflet mit freien Kacheln | leer |
-| `MAP_TILE_URL`, `MAP_ATTRIBUTION` | Kacheln für Leaflet | Esri |
+| `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_MAP_ID` | Google Maps (ohne Key keine Karte, Routen und Zeiten bleiben sichtbar) | leer |
 | `OFFICE_LAT`, `OFFICE_LNG` | Firmensitz als Referenzpunkt | Wien |
 | `MOCK_AUTH_EMAIL`, `MOCK_AUTH_PASSWORD`, `MOCK_AUTH_TTL_HOURS`, `MOCK_AUTH_SECRET` | Mock-Login | siehe oben |
 | `LOCAL_DB_PATH`, `TRAVEL_CACHE_PATH`, `NOTES_CACHE_PATH` | Speicherorte | `api/data/…` |
 
 ## Zum Testen
 
-- **Planungsstand zurücksetzen:** In der Routenplanung „Test: Planungsstand zurücksetzen“ – löscht Freigaben, Entscheidungen und Eskalationen. Korrekturen bleiben.
+- **Planungsstand zurücksetzen:** In der Routenplanung das Symbol neben „Neu planen“ – verwirft Fixierungen, Herausnahmen und Freigaben. Korrekturen bleiben.
 - **Beispiel-Korrekturen laden:** `cp api/data/local-db.example.json api/data/local-db.json` ([Details](04-datenqualitaet.md#korrigieren-obwohl-die-api-read-only-ist))
-- **Styleguide:** http://localhost:5173/styleguide
 
 ## Deployment
 
