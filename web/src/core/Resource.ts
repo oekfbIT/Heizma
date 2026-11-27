@@ -55,6 +55,12 @@ export class Resource<T> {
     }
   }
 
+  /** Daten von außen setzen (z. B. Stand aus einer Schreib-Antwort) – verwirft laufende Ladeanfragen */
+  prime(data: T) {
+    this.seq++;
+    this.set({ data, error: null, loading: false });
+  }
+
   private set(patch: Partial<ResourceState<T>>) {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((l) => l());

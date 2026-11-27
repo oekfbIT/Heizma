@@ -86,10 +86,10 @@ export default function RequestPlanningCard({ requestId, compact, onChanged }: {
     setBusy(true);
     setMsg(null);
     try {
-      await core.decideRequest(requestId, body); // plant neu und lädt alles Sichtbare nach
+      const result = await core.decideRequest(requestId, body); // plant neu und lädt alles Sichtbare nach
       close();
-      // Meldung aus dem tatsächlichen Ergebnis der Neuplanung, nicht aus der Vorschau
-      const fresh = planning.getState().data ?? (await planning.load());
+      // Meldung aus dem tatsächlichen Ergebnis der Neuplanung (Antwort des Schreib-Requests), nicht aus der Vorschau
+      const fresh = result ?? planning.getState().data ?? (await planning.load());
       onChanged?.();
       if (fresh) setMsg({ tone: 'ok', text: typeof okText === 'function' ? okText(fresh) : okText });
     } catch (e) {

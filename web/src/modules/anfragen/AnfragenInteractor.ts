@@ -89,8 +89,10 @@ export class AnfragenInteractor {
     return (await this.api.get<{ options: SlotOption[] }>(`/api/requests/${encodeURIComponent(id)}/options`)).options;
   }
 
-  decide(id: string, input: DecisionInput | null) {
-    return this.api.send(`/api/requests/${encodeURIComponent(id)}/decision`, input ? 'POST' : 'DELETE', input ?? undefined);
+  /** Antwort enthält den neuen Planungsstand der Anfrage – direkt übernehmen (siehe respondDecision im API) */
+  async decide(id: string, input: DecisionInput | null): Promise<RequestPlanning | null> {
+    const res = await this.api.send<{ planning?: RequestPlanning | null }>(`/api/requests/${encodeURIComponent(id)}/decision`, input ? 'POST' : 'DELETE', input ?? undefined);
+    return res.planning ?? null;
   }
 
   escalate(id: string, input: EscalationInput) {

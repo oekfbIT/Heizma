@@ -211,6 +211,16 @@ app.get('/api/requests/:id/swap-options', route(async (req, res) => {
  * Entscheidung des Planers. Body { mode: 'pin'|'exclude'|'prioritize', technicianId?, date?, reason?, override? }
  * Grundsatz: Der Planer darf alles – aber ein Regelbruch braucht override + Begründung und bleibt im Plan sichtbar.
  */
+/**
+ * Antwort auf eine Planer-Entscheidung inkl. neuem Planungsstand dieser Anfrage.
+ * ACHTUNG · VERCEL: Der Speicher (/tmp + Memory) gilt je Serverless-Instanz. Ein späteres GET kann auf einer anderen
+ * Instanz landen, die die Entscheidung noch nicht kennt → das UI nimmt den Stand aus dieser Antwort (gleiche Instanz).
+ */
+async function respondDecision(res: Response, id: string, decision: unknown) {
+  const fresh = await planningFor(id);
+  res.json({ ok: true, decision, planning: fresh?.info ?? null });
+}
+
 app.post('/api/requests/:id/decision', route(async (req, res) => {
   const id = req.params.id;
   const r = await planningFor(id);
@@ -224,7 +234,7 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
 
   if (mode === 'exclude') {
     if (reason.length < 3) throw new ValidationError('Bitte kurz begründen, warum die Anfrage aus dem Plan genommen wird');
-    return res.json({ ok: true, decision: setDecision(id, { mode, reason, override: false }) });
+    return respondDecision(res, id, setDecision(id, { mode, reason, override: false }));
   }
   // DATEN: Fehlerhafte Daten können nicht eingeplant werden – auch nicht als Ausnahme. Erst korrigieren.
   const errors = requestErrors(r.data, id);
@@ -232,7 +242,7 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   if (mode === 'prioritize') {
     // REGEL-8: Bricht "ältere zuerst" bewusst → immer mit Begründung
     if (reason.length < 3) throw new ValidationError(r.info.olderWaiting ? `Bitte begründen – ${r.info.olderWaiting} ältere Anfragen warten noch` : 'Bitte kurz begründen, warum die Anfrage vorgezogen wird');
-    return res.json({ ok: true, decision: setDecision(id, { mode, reason, override: true }) });
+    return respondDecision(res, id, setDecision(id, { mode, reason, override: true }));
   }
 
   const technicianId = String(body.technicianId ?? '');
@@ -244,7 +254,7 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
     const swap = swapOptions(r.data, r.plan, id, { travel: lookup, decisions: listDecisions() }).find((o) => o.technicianId === technicianId && o.date === date && o.displaced.id === replaces);
     if (!swap) return res.status(409).json({ error: 'Tausch nicht (mehr) regelkonform möglich – bitte Vorschläge neu laden' });
     if (reason.length < 3) throw new ValidationError('Bitte den Tausch kurz begründen');
-    return res.json({ ok: true, decision: setDecision(id, { mode: 'pin', technicianId, date, reason, override: swap.displacesOlder, replaces }) });
+    return respondDecision(res, id, setDecision(id, { mode: 'pin', technicianId, date, reason, override: swap.displacesOlder, replaces }));
   }
   const option: SlotOption | undefined = rankOptions(r.data, r.plan, id, { travel: lookup }).find((o) => o.technicianId === technicianId && o.date === date);
   if (!option) return res.status(400).json({ error: `${technicianId} ist am ${date} nicht verfügbar` });
@@ -252,12 +262,12 @@ app.post('/api/requests/:id/decision', route(async (req, res) => {
   // Regelbruch nur mit override + Begründung → wird in verify.applyExceptions() gelb statt rot geführt
   if (option.warnings.length && !override) return res.status(409).json({ error: 'Regelbruch – nur als bewusste Ausnahme möglich', warnings: option.warnings, needsOverride: true });
   if (option.warnings.length && reason.length < 3) throw new ValidationError('Bitte die Ausnahme kurz begründen');
-  res.json({ ok: true, decision: setDecision(id, { mode: 'pin', technicianId, date, reason, override: option.warnings.length > 0 }) });
+  await respondDecision(res, id, setDecision(id, { mode: 'pin', technicianId, date, reason, override: option.warnings.length > 0 }));
 }));
 
 app.delete('/api/requests/:id/decision', route(async (req, res) => {
   clearDecision(req.params.id);
-  res.json({ ok: true });
+  await respondDecision(res, req.params.id, null);
 }));
 
 // MARK: - Plan, Übersicht & Prognose

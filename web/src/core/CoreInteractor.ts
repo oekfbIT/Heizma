@@ -65,8 +65,11 @@ export class CoreInteractor {
     return this.mutate(() => this.routen.approveDay(date));
   }
 
-  decideRequest(requestId: string, input: DecisionInput | null) {
-    return this.mutate(() => this.anfragen.decide(requestId, input));
+  async decideRequest(requestId: string, input: DecisionInput | null) {
+    const fresh = await this.mutate(() => this.anfragen.decide(requestId, input));
+    // Stand aus der Schreib-Antwort gewinnt über ein evtl. veraltetes Nachladen (andere Serverless-Instanz)
+    if (fresh) this.anfragen.planning.get(requestId).prime(fresh);
+    return fresh;
   }
 
   escalateRequest(requestId: string, input: EscalationInput) {
